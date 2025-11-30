@@ -22,6 +22,19 @@
 - `AttackType` - 攻击类型
 - `ArmorType` - 护甲类型
 - `DamageMatrix` - 伤害矩阵
+- `GameplayEffect` - 效果基类（抽象类）
+- `GameplayFilterData` - 过滤器基类（抽象类）
+
+### 效果实现（data/effects/）
+- `GE_ModifyHealth` - 修改生命值效果（伤害/治疗）
+- `GE_ModifyMana` - 修改法力值效果
+- `GE_AttributeModifier` - 属性修改器效果（状态型）
+- `GE_DamageModification` - 伤害修改效果（事件监听型）
+- `GE_ApplyStatus` - 应用状态效果（依赖StatusComponent）
+
+### 过滤器实现（data/filters/）
+- `FilterTargetIsAlive` - 检查目标是否存活
+- `FilterTargetHasComponent` - 检查目标是否有指定组件
 
 ### 组件（components/）
 - `AttributeComponent` - 属性组件（采用鸭子类型，不继承基类）
@@ -31,8 +44,9 @@
 
 ### 单例（singletons/）
 - `DamageCalculator` - 伤害计算中心
-- `CombatSystem` - 战斗系统管理器
+- `CombatSystem` - 战斗系统管理器（提供组件查询接口）
 - `CombatEventBus` - 战斗事件总线
+- `EffectExecutor` - 效果执行器
 
 ## 安装
 
@@ -61,6 +75,11 @@ health_comp._attribute_comp = attribute_comp  # 需要先有AttributeComponent
 var damage_info = DamageInfo.new()
 damage_info.base_damage = 10.0
 health_comp.apply_damage(damage_info)
+
+# 使用Effect系统
+var heal_effect = GE_ModifyHealth.new()
+heal_effect.amount = 50.0
+EffectExecutor.execute_effect(heal_effect, target, instigator)
 
 # 监听事件
 CombatEventBus.entity_died.connect(_on_entity_died)
@@ -91,16 +110,19 @@ CombatEventBus.emit_damage_dealt(instigator, target, damage_info, final_damage)
 ## 当前状态
 
 ✅ **已完成：**
-- 基础数据类（GameplayAttribute、DamageInfo等）
+- 基础数据类（GameplayAttribute、DamageInfo、AttackType、ArmorType、DamageMatrix等）
 - 核心组件（AttributeComponent、VitalComponent、HealthComponent、ManaComponent）
 - 伤害计算系统（DamageCalculator）
 - 战斗系统管理（CombatSystem）
 - 事件总线（CombatEventBus）
+- **Effect层抽象**（GameplayEffect基类、Effect执行器、常用Effect实现）
+- 过滤器系统（GameplayFilterData基类、常用过滤器）
 
 🚧 **开发中：**
-- GameplayAbility系统
-- GameplayAbilityStatus系统
-- Effect层抽象
+- GameplayAbility系统（技能系统）
+- GameplayAbilityStatus系统（状态系统）
+- StatusComponent组件
+- 更多Effect实现（位移、召唤、弹道等）
 
 ## 文档
 
