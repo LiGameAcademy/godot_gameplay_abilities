@@ -16,24 +16,36 @@
 ## 核心系统
 
 ### 数据类（data/）
+
+**属性相关（data/attributes/）：**
 - `GameplayAttribute` - 游戏属性定义
 - `GameplayAttributeModifier` - 属性修改器
+
+**战斗相关（data/combat/）：**
 - `DamageInfo` - 伤害信息
 - `AttackType` - 攻击类型
 - `ArmorType` - 护甲类型
 - `DamageMatrix` - 伤害矩阵
-- `GameplayEffect` - 效果基类（抽象类）
-- `GameplayFilterData` - 过滤器基类（抽象类）
+
+**状态相关（data/status/）：**
 - `GameplayStatusData` - 状态数据（Buff/Debuff定义）
 - `GameplayStatusInstance` - 状态实例（状态生命周期管理）
+
+**技能相关（data/abilities/）：**
 - `GameplayAbility` - 技能数据基类（抽象类）
 - `ActiveAbility` - 主动技能数据
 - `PassiveAbility` - 被动技能数据
 - `ToggleAbility` - 切换技能数据
+
+**目标相关（data/targeting/）：**
 - `TargetingScorer` - 目标评分器基类（抽象类）
 - `TargetIndicatorData` - 目标指示器数据
-- `GameplayStatusData` - 状态数据（Buff/Debuff定义）
-- `GameplayStatusInstance` - 状态实例（状态生命周期管理）
+
+**效果基类（data/effects/）：**
+- `GameplayEffect` - 效果基类（抽象类）
+
+**过滤器基类（data/filters/）：**
+- `GameplayFilterData` - 过滤器基类（抽象类）
 
 ### 效果实现（data/effects/）
 - `GE_ModifyHealth` - 修改生命值效果（伤害/治疗）
@@ -168,7 +180,50 @@ CombatEventBus.emit_damage_dealt(instigator, target, damage_info, final_damage)
 
 ## 文档
 
-详细文档请参考课程教程：`_tutorials/godot架构实战：即时战斗核心与技能系统篇.md`
+- [API文档](docs/API.md) - 完整的API参考
+- [使用示例](docs/Examples.md) - 详细的使用示例
+- [架构设计](docs/Architecture.md) - 系统架构和设计理念
+
+详细课程教程：`_tutorials/godot架构实战：即时战斗核心与技能系统篇.md`
+
+## 目录结构
+
+```
+godot_gameplay_abilities/
+├── scripts/                 # 所有脚本代码
+│   ├── components/          # 组件（采用鸭子类型设计）
+│   │   ├── attribute_component.gd
+│   │   ├── vital_component.gd
+│   │   ├── health_component.gd
+│   │   ├── mana_component.gd
+│   │   ├── gameplay_status_component.gd
+│   │   └── gameplay_ability_component.gd
+│   │
+│   ├── data/                # 数据类（Resource）
+│   │   ├── attributes/      # 属性相关
+│   │   ├── combat/          # 战斗相关
+│   │   ├── status/          # 状态相关
+│   │   ├── abilities/       # 技能相关
+│   │   ├── effects/         # 效果实现
+│   │   ├── filters/         # 过滤器实现
+│   │   └── targeting/       # 目标相关
+│   │
+│   └── singletons/          # 单例（AutoLoad）
+│       ├── combat_system.gd
+│       ├── damage_calculator.gd
+│       ├── combat_event_bus.gd
+│       └── effect_executor.gd
+│
+├── docs/                    # 文档
+│   ├── API.md
+│   ├── Examples.md
+│   ├── Architecture.md
+│   └── README.md
+│
+├── plugin.cfg
+├── plugin.gd
+└── README.md
+```
 
 ## 许可证
 
