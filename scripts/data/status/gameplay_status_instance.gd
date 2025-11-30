@@ -59,7 +59,7 @@ func apply(context: Dictionary = {}) -> void:
 	
 	# 3. 连接到统一游戏事件系统（如果状态配置了trigger_on_events）
 	if not status_data.trigger_on_events.is_empty() and not _is_connected_to_event_bus:
-		CombatEventBus.game_event_occurred.connect(_on_game_event_occurred)
+		AbilityEventBus.game_event_occurred.connect(_on_game_event_occurred)
 		_is_connected_to_event_bus = true
 
 ## 状态被移除时，移除所有效果
@@ -80,8 +80,8 @@ func remove() -> void:
 	
 	# 4. 断开统一游戏事件系统的连接
 	if _is_connected_to_event_bus:
-		if CombatEventBus.game_event_occurred.is_connected(_on_game_event_occurred):
-			CombatEventBus.game_event_occurred.disconnect(_on_game_event_occurred)
+		if AbilityEventBus.game_event_occurred.is_connected(_on_game_event_occurred):
+			AbilityEventBus.game_event_occurred.disconnect(_on_game_event_occurred)
 		_is_connected_to_event_bus = false
 	
 	# 5. 清理数组

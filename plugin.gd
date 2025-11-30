@@ -3,14 +3,14 @@ extends EditorPlugin
 
 func _enter_tree() -> void:
 	# 插件启用时的初始化
-	add_autoload_singleton("CombatSystem", "scripts/singletons/combat_system.gd")
+	add_autoload_singleton("GameplayAbilitySystem", "scripts/singletons/gameplay_ability_system.gd")
 	add_autoload_singleton("DamageCalculator", "scripts/singletons/damage_calculator.gd")
-	add_autoload_singleton("CombatEventBus", "scripts/singletons/combat_event_bus.gd")
-	add_autoload_singleton("EffectExecutor", "scripts/singletons/effect_executor.gd")
+	add_autoload_singleton("AbilityEventBus", "scripts/singletons/ability_event_bus.gd")
+	add_autoload_singleton("CombatUtils", "scripts/utils/combat_utils.gd")
 
 func _exit_tree() -> void:
 	# 插件禁用时的清理
-	remove_autoload_singleton("CombatSystem")
+	remove_autoload_singleton("GameplayAbilitySystem")
 	remove_autoload_singleton("DamageCalculator")
-	remove_autoload_singleton("CombatEventBus")
-	remove_autoload_singleton("EffectExecutor")
+	remove_autoload_singleton("AbilityEventBus")
+	remove_autoload_singleton("CombatUtils")

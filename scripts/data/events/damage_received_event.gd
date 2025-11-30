@@ -15,7 +15,7 @@ static func from_dict(context: Dictionary) -> DamageReceivedEvent:
 		context.get("damage_info")
 	))
 
-func emit_gameplay_signal(event_bus: CombatEventBus) -> void:
+func emit_gameplay_signal(event_bus: AbilityEventBus) -> void:
 	var ctx = get_context()
 	if validate_context(["target", "damage_info"]):
 		event_bus.damage_received.emit(ctx["target"], ctx["damage_info"])

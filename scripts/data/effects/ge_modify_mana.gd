@@ -13,7 +13,7 @@ enum Operation {
 
 func _apply(target: Node, _instigator: Node, _context: Dictionary) -> void:
 	# 使用鸭子类型查询组件
-	var mana_comp = CombatSystem.get_component_by_interface(target, "ManaComponent")
+	var mana_comp = GameplayAbilitySystem.get_component_by_interface(target, "ManaComponent")
 	if not mana_comp:
 		# 法力组件不存在时静默失败（某些单位可能没有法力）
 		return

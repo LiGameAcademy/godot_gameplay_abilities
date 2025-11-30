@@ -60,4 +60,3 @@ func _check_filters(target: Node, instigator: Node, context: Dictionary) -> bool
 ## [子类重写] 获取效果描述
 func _get_description() -> String:
 	return "No description available."
-

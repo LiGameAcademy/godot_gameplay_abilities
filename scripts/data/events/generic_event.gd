@@ -7,7 +7,7 @@ class_name GenericEvent
 func _init(p_event_type: StringName, p_context: Dictionary) -> void:
 	super(p_event_type, p_context)
 
-func emit_gameplay_signal(_event_bus: CombatEventBus) -> void:
+func emit_gameplay_signal(_event_bus: AbilityEventBus) -> void:
 	# 通用事件不发出细粒度信号，只通过统一事件系统处理
 	pass
 

@@ -1,79 +1,79 @@
 extends Node
 class_name VitalComponent
 
-## 资源组件基类（采用鸭子类型设计，不继承基类）
-## 管理一个由 AttributeComponent 驱动的"资源" (如HP, MP)
-## 子类：HealthComponent、ManaComponent
+## Vital 组件
+## 管理实体的所有 Vital 实例（生命值、法力值等）
+## 采用组合模式：VitalComponent 管理多个 Vital 实例
 
-@export var _attribute_comp: AttributeComponent
+@export var _attribute_comp: GameplayAttributeComponent
 
-@export_group("Attribute IDs")
-@export var max_value_id: StringName = &""         ## 属性ID: 最大值
-@export var regen_rate_id: StringName = &""         ## 属性ID: 恢复速率
+## Vital 实例字典
+var _vitals: Dictionary[StringName, Vital] = {}
 
-var _current_value: float = 0.0    ## 当前值
-var _max_value: float = 1.0:        ## 最大值
-	get:
-		if not is_instance_valid(_attribute_comp):
-			return 1.0
-		return _attribute_comp.get_value(max_value_id)
-	set(value):
-		if is_instance_valid(_attribute_comp):
-			_attribute_comp.set_value(max_value_id, value)
-var _regen_rate: float = 0.0:      ## 恢复速率
-	get:
-		if not is_instance_valid(_attribute_comp):
-			return 0.0
-		if not _attribute_comp.has_attribute(regen_rate_id):
-			return 0.0
-		return _attribute_comp.get_value(regen_rate_id)
-	set(value):
-		if not is_instance_valid(_attribute_comp):
-			return
-		if not _attribute_comp.has_attribute(regen_rate_id):
-			push_error("VitalComponent: Attribute %s not found!" % regen_rate_id)
-			return
-		_attribute_comp.set_value(regen_rate_id, value)
+## 注册 Vital 实例
+## [param] vital: Vital Vital 实例
+func register_vital(vital: Vital) -> void:
+	if not is_instance_valid(vital):
+		push_error("VitalComponent: Cannot register invalid vital!")
+		return
+	
+	if _vitals.has(vital.vital_id):
+		push_warning("VitalComponent: Vital %s already exists, replacing..." % vital.vital_id)
+	
+	_vitals[vital.vital_id] = vital
 
-signal value_changed(new_value: float, max_value: float) ## 值变化信号
-signal max_value_changed(new_max_value: float) ## 最大值变化信号
-signal regen_rate_changed(new_regen_rate: float) ## 恢复速率变化信号
+## 获取 Vital 实例
+## [param] vital_id: StringName Vital ID
+## [return] Vital Vital 实例，如果不存在则返回null
+func get_vital(vital_id: StringName) -> Vital:
+	return _vitals.get(vital_id, null)
+
+## 检查是否有指定的 Vital
+## [param] vital_id: StringName Vital ID
+## [return] bool 是否存在
+func has_vital(vital_id: StringName) -> bool:
+	return _vitals.has(vital_id)
+
+## 移除 Vital 实例
+## [param] vital_id: StringName Vital ID
+func remove_vital(vital_id: StringName) -> void:
+	if _vitals.has(vital_id):
+		_vitals.erase(vital_id)
+
+## 获取所有 Vital 实例
+## [return] Dictionary[StringName, Vital] Vital 实例字典
+func get_all_vitals() -> Dictionary[StringName, Vital]:
+	return _vitals.duplicate()
 
 func _ready() -> void:
 	if not is_instance_valid(_attribute_comp):
-		push_error("%s: AttributeComponent is not set!" % self.name)
-		return
-	_current_value = _max_value
-	if not _attribute_comp.attribute_value_changed.is_connected(_on_attribute_value_changed):
-		_attribute_comp.attribute_value_changed.connect(_on_attribute_value_changed)
+		push_error("%s: GameplayAttributeComponent is not set!" % self.name)
 
 func _process(delta: float) -> void:
-	# 处理自动回复
-	if _regen_rate == 0.0:
-		return
-	set_current_value(_current_value + _regen_rate * delta)
+	# 处理所有 Vital 的自动恢复
+	for vital in _vitals.values():
+		if is_instance_valid(vital):
+			vital.process_regen(delta)
 
-func set_current_value(value: float) -> void:
-	_current_value = clampf(value, 0.0, _max_value)
-	value_changed.emit(_current_value, _max_value)
+## ========== 向后兼容接口 ==========
+## 以下接口用于向后兼容，提供类似旧组件的访问方式
 
-## 获取当前值
-func get_current_value() -> float:
-	return _current_value
+## 获取生命值 Vital（向后兼容）
+## [return] HealthVital 生命值 Vital，如果不存在则返回null
+func get_health_vital() -> HealthVital:
+	return get_vital(&"health") as HealthVital
 
-## 获取最大值
-func get_max_value() -> float:
-	return _max_value
+## 获取法力值 Vital（向后兼容）
+## [return] ManaVital 法力值 Vital，如果不存在则返回null
+func get_mana_vital() -> ManaVital:
+	return get_vital(&"mana") as ManaVital
 
-## 获取比例 (0.0 - 1.0)
-func get_ratio() -> float:
-	if _max_value == 0: return 0.0
-	return clampf(_current_value / _max_value, 0.0, 1.0)
+## 检查是否有生命值 Vital（向后兼容）
+## [return] bool 是否存在
+func has_health() -> bool:
+	return has_vital(&"health")
 
-func _on_attribute_value_changed(attribute_id : StringName, value: float) -> void:
-	match attribute_id:
-		max_value_id:
-			max_value_changed.emit(value)
-		regen_rate_id:
-			regen_rate_changed.emit(value)
-
+## 检查是否有法力值 Vital（向后兼容）
+## [return] bool 是否存在
+func has_mana() -> bool:
+	return has_vital(&"mana")

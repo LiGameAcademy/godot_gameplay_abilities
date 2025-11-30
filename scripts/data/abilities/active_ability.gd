@@ -86,7 +86,7 @@ func _on_cast(ability_comp: Node, target: Node, _context: Dictionary = {}) -> vo
 		return
 	
 	# 使用鸭子类型查询GameplayStatusComponent
-	var target_status_comp = CombatSystem.get_component_by_interface(target, "GameplayStatusComponent")
+	var target_status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
 	if not is_instance_valid(target_status_comp): 
 		return
 	
@@ -100,7 +100,7 @@ func _clear_cast(_ability_comp: Node, target: Node) -> void:
 		return
 	
 	# 使用鸭子类型查询GameplayStatusComponent
-	var target_status_comp = CombatSystem.get_component_by_interface(target, "GameplayStatusComponent")
+	var target_status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
 	if not is_instance_valid(target_status_comp): 
 		return
 	
@@ -115,5 +115,5 @@ func _play_animation(owner_entity: Node) -> void:
 		return
 	
 	# 发送技能施放事件
-	CombatEventBus.emit_ability_activated(owner_entity, ability_id)
+	AbilityEventBus.emit_ability_activated(owner_entity, ability_id)
 

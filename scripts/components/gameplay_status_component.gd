@@ -13,7 +13,7 @@ signal status_stacked(status_id: StringName, new_stacks: int)
 
 func _ready() -> void:
 	# 使用鸭子类型查询HealthComponent
-	_health_comp = CombatSystem.get_component_by_interface(get_parent(), "HealthComponent")
+	_health_comp = GameplayAbilitySystem.get_component_by_interface(get_parent(), "HealthComponent")
 	
 	if is_instance_valid(_health_comp):
 		# 订阅 HealthComponent 的伤害事件（使用鸭子类型检查信号）
@@ -56,13 +56,13 @@ func apply_status(gsd: GameplayStatusData, instigator: Node, stacks: int = 1, co
 		status_applied.emit(status_id, instance)
 		
 		# 触发统一游戏事件：status_applied
-		CombatEventBus.trigger_game_event(&"status_applied", {
+		AbilityEventBus.trigger_game_event(&"status_applied", {
 			"entity": get_parent(),
 			"status_id": status_id
 		})
 		
 		# 同时发送细粒度事件（向后兼容）
-		CombatEventBus.emit_status_applied(get_parent(), status_id)
+		AbilityEventBus.emit_status_applied(get_parent(), status_id)
 
 ## 移除状态
 ## [param] status_id: StringName 状态ID
@@ -76,13 +76,13 @@ func remove_status(status_id: StringName) -> void:
 	status_removed.emit(status_id)
 	
 	# 触发统一游戏事件：status_removed
-	CombatEventBus.trigger_game_event(&"status_removed", {
+	AbilityEventBus.trigger_game_event(&"status_removed", {
 		"entity": get_parent(),
 		"status_id": status_id
 	})
 	
 	# 同时发送细粒度事件（向后兼容）
-	CombatEventBus.emit_status_removed(get_parent(), status_id)
+	AbilityEventBus.emit_status_removed(get_parent(), status_id)
 
 ## 移除所有匹配标签的状态
 ## [param] tags_to_remove: Array[StringName] 要移除的标签数组

@@ -14,5 +14,5 @@ func _check(target: Node, _instigator: Node, _context: Dictionary) -> bool:
 		return true
 	
 	# 使用鸭子类型查询组件
-	return CombatSystem.has_component(target, component_name)
+	return GameplayAbilitySystem.has_component(target, component_name)
 

@@ -9,7 +9,7 @@ class_name GE_ModifyHealth
 
 func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 	# 使用鸭子类型查询组件（不依赖具体类型）
-	var health_comp = CombatSystem.get_component_by_interface(target, "HealthComponent")
+	var health_comp = GameplayAbilitySystem.get_component_by_interface(target, "HealthComponent")
 	if not health_comp:
 		push_error("GE_ModifyHealth: Target %s has no HealthComponent!" % target.name)
 		return
@@ -17,7 +17,7 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 	if amount > 0:
 		# 治疗
 		health_comp.heal(amount)
-		CombatEventBus.emit_healing_applied(target, amount)
+		AbilityEventBus.emit_healing_applied(target, amount)
 	else:
 		# 伤害
 		var damage_info = DamageInfo.new(

@@ -6,7 +6,7 @@ class_name EntityDiedEvent
 func _init(p_context: Dictionary) -> void:
 	super(&"entity_died", p_context)
 
-func emit_gameplay_signal(event_bus: CombatEventBus) -> void:
+func emit_gameplay_signal(event_bus: AbilityEventBus) -> void:
 	if validate_context(["entity", "instigator"]):
 		event_bus.entity_died.emit(context["entity"], context["instigator"])
 

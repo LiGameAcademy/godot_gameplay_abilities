@@ -13,9 +13,9 @@ var _applied_modifier: GameplayAttributeModifier  ## 存储已应用的修改器
 
 func _apply(target: Node, _instigator: Node, context: Dictionary) -> void:
 	# 使用鸭子类型查询组件
-	var attr_comp = CombatSystem.get_component_by_interface(target, "AttributeComponent")
+	var attr_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayAttributeComponent")
 	if not attr_comp:
-		push_error("GE_AttributeModifier: Target %s has no AttributeComponent." % target.name)
+		push_error("GE_AttributeModifier: Target %s has no GameplayAttributeComponent." % target.name)
 		return
 
 	if not is_instance_valid(attribute_modifier):
@@ -39,7 +39,7 @@ func _apply(target: Node, _instigator: Node, context: Dictionary) -> void:
 
 func _remove(target: Node, _instigator: Node) -> void:
 	# 使用鸭子类型查询组件
-	var attr_comp = CombatSystem.get_component_by_interface(target, "AttributeComponent")
+	var attr_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayAttributeComponent")
 	if not attr_comp:
 		# 目标可能已经销毁，这很正常
 		return

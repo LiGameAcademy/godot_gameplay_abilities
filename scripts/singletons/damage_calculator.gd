@@ -13,20 +13,29 @@ func set_damage_matrix(p_damage_matrix: DamageMatrix) -> void:
 
 ## 计算最终伤害
 ## [param] damage_info: DamageInfo 伤害信息
-## [param] target_health_component: HealthComponent 目标生命组件
+## [param] target: Variant 目标（HealthComponent 或 HealthVital，采用鸭子类型）
 ## [returns] float 最终伤害值
-func calculate_final_damage(damage_info: DamageInfo, target_health_component: HealthComponent) -> float:
+func calculate_final_damage(damage_info: DamageInfo, target: HealthVital) -> float:
 	var base_damage = damage_info.base_damage
 
 	# 1. 计算类型克制
 	var attack_type_id = damage_info.attack_type.get_id() if damage_info.attack_type else &""
-	var armor_type_id = target_health_component.armor_type.get_id() if target_health_component.armor_type else &""
+	
+	# 使用鸭子类型获取护甲类型
+	var armor_type = null
+	if "armor_type" in target:
+		armor_type = target.armor_type
+	var armor_type_id = armor_type.get_id() if armor_type else &""
 
 	var matrix_factor = _get_damage_multiplier(attack_type_id, armor_type_id)
 	var damage_after_matrix = base_damage * matrix_factor
 
 	# 2. 计算护甲减免
-	var armor_value := target_health_component.armor_value
+	# 使用鸭子类型获取护甲值
+	var armor_value: float = 0.0
+	if "armor_value" in target:
+		armor_value = target.armor_value
+	
 	var reduction_factor := _get_armor_reduction_factor(armor_value)
 	var final_damage : float = damage_after_matrix * (1 - reduction_factor)
 	
@@ -48,4 +57,3 @@ func _get_armor_reduction_factor(armor_value: float) -> float:
 	else:
 		# 负甲增加伤害
 		return 1.0 - pow(0.95, -armor_value)
-

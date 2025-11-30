@@ -46,5 +46,5 @@ func validate_context(required_keys: Array[String]) -> bool:
 	return true
 
 ## 发出细粒度信号（子类必须实现）
-## [param] event_bus: CombatEventBus 事件总线实例
-@abstract func emit_gameplay_signal(_event_bus: CombatEventBus) -> void
+## [param] event_bus: AbilityEventBus 事件总线实例
+@abstract func emit_gameplay_signal(_event_bus: AbilityEventBus) -> void

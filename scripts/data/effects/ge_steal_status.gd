@@ -8,8 +8,8 @@ class_name GE_StealStatus
 
 func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 	# 使用鸭子类型查询GameplayStatusComponent
-	var target_status_comp = CombatSystem.get_component_by_interface(target, "GameplayStatusComponent")
-	var instigator_status_comp = CombatSystem.get_component_by_interface(instigator, "GameplayStatusComponent")
+	var target_status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
+	var instigator_status_comp = GameplayAbilitySystem.get_component_by_interface(instigator, "GameplayStatusComponent")
 	
 	if not target_status_comp:
 		push_error("GE_StealStatus: Target does not have a GameplayStatusComponent")

@@ -1,6 +1,6 @@
 extends Node
 
-## 战斗事件总线（单例）
+## 技能事件总线（单例）
 ## 提供全局事件通讯机制，实现组件间的解耦
 ## 支持统一的事件触发接口和细粒度的事件信号
 
@@ -113,10 +113,10 @@ func emit_status_removed(entity: Node, status_id: StringName) -> void:
 ## # 方式1：直接传入事件实例（推荐，类型安全）
 ## var ctx = DamageReceivedContext.new(source, target, damage_info)
 ## var event = DamageReceivedEvent.new(ctx)
-## CombatEventBus.trigger_game_event(event)
+## AbilityEventBus.trigger_game_event(event)
 ## 
 ## # 方式2：传入类型和字典（向后兼容）
-## CombatEventBus.trigger_game_event(&"damage_received", {
+## AbilityEventBus.trigger_game_event(&"damage_received", {
 ##     "source": source, 
 ##     "target": target, 
 ##     "damage_info": damage_info
@@ -167,13 +167,13 @@ func set_external_event_bus(event_bus: Node) -> void:
 ## [param] signal_name: StringName 信号名称（如果与事件名称不同）
 func subscribe_to_external_event(event_name: StringName, callback: Callable, signal_name: StringName = &"") -> bool:
 	if not external_event_bus:
-		push_warning("CombatEventBus: External event bus not set. Call set_external_event_bus() first.")
+		push_warning("AbilityEventBus: External event bus not set. Call set_external_event_bus() first.")
 		return false
 	
 	var sig_name = signal_name if not signal_name.is_empty() else event_name
 	
 	if not external_event_bus.has_signal(sig_name):
-		push_warning("CombatEventBus: External event bus does not have signal: " + sig_name)
+		push_warning("AbilityEventBus: External event bus does not have signal: " + sig_name)
 		return false
 	
 	var connection = external_event_bus.connect(sig_name, callback)
@@ -215,7 +215,9 @@ func _auto_discover_external_event_bus() -> void:
 	
 	for path in common_names:
 		var node = get_node_or_null(path)
-		if node and node.has_method("trigger_event") or node.has_signal("game_event"):
+		if not is_instance_valid(node) :
+			continue
+		if node.has_method("trigger_event") or node.has_signal("game_event"):
 			external_event_bus = node
-			print("CombatEventBus: Auto-discovered external event bus at: " + path)
+			print("AbilityEventBus: Auto-discovered external event bus at: " + path)
 			return

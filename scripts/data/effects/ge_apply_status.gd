@@ -13,7 +13,7 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 		return
 	
 	# 使用鸭子类型查询GameplayStatusComponent
-	var status_comp = CombatSystem.get_component_by_interface(target, "GameplayStatusComponent")
+	var status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
 	if not status_comp:
 		push_error("GE_ApplyStatus: Target %s has no GameplayStatusComponent!" % target.name)
 		return

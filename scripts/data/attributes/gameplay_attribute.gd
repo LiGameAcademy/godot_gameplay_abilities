@@ -14,4 +14,3 @@ class_name GameplayAttribute
 
 func get_id() -> StringName:
 	return attribute_id
-

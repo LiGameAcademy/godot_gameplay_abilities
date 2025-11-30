@@ -3,7 +3,7 @@ class_name CombatEventFactory
 
 ## 战斗事件工厂（实例类）
 ## 根据事件类型创建对应的事件对象，符合开闭原则
-## 作为CombatEventBus的成员变量使用，而非静态类
+## 作为AbilityEventBus的成员变量使用，而非静态类
 
 ## 事件类型到事件类的映射
 var _event_class_map: Dictionary[StringName, Callable] = {}

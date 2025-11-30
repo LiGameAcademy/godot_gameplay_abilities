@@ -36,7 +36,7 @@ func _on_cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> voi
 		return
 	
 	# 使用鸭子类型查询GameplayStatusComponent
-	var target_status_comp = CombatSystem.get_component_by_interface(target, "GameplayStatusComponent")
+	var target_status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
 	if not is_instance_valid(target_status_comp):
 		push_error("ToggleAbility: GameplayStatusComponent not found")
 		return

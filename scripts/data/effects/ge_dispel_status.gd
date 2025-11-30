@@ -8,7 +8,7 @@ class_name GE_DispelStatus
 
 func _apply(target: Node, _instigator: Node, context: Dictionary) -> void:
 	# 使用鸭子类型查询GameplayStatusComponent
-	var status_comp = CombatSystem.get_component_by_interface(target, "GameplayStatusComponent")
+	var status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
 	if not status_comp:
 		# 目标没有GameplayStatusComponent时静默失败
 		return
