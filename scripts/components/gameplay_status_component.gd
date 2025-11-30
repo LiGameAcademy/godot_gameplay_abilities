@@ -55,7 +55,13 @@ func apply_status(gsd: GameplayStatusData, instigator: Node, stacks: int = 1, co
 		instance.apply(context)
 		status_applied.emit(status_id, instance)
 		
-		# 发送事件
+		# 触发统一游戏事件：status_applied
+		CombatEventBus.trigger_game_event(&"status_applied", {
+			"entity": get_parent(),
+			"status_id": status_id
+		})
+		
+		# 同时发送细粒度事件（向后兼容）
 		CombatEventBus.emit_status_applied(get_parent(), status_id)
 
 ## 移除状态
@@ -69,7 +75,13 @@ func remove_status(status_id: StringName) -> void:
 	instance.remove()
 	status_removed.emit(status_id)
 	
-	# 发送事件
+	# 触发统一游戏事件：status_removed
+	CombatEventBus.trigger_game_event(&"status_removed", {
+		"entity": get_parent(),
+		"status_id": status_id
+	})
+	
+	# 同时发送细粒度事件（向后兼容）
 	CombatEventBus.emit_status_removed(get_parent(), status_id)
 
 ## 移除所有匹配标签的状态
@@ -128,6 +140,7 @@ func handle_event(event_id: StringName, context: Dictionary) -> void:
 			instance.handle_event(event_id, context)
 
 ## 订阅 HealthComponent 的伤害事件
+## 注意：此方法仍然保留用于向后兼容，但状态现在主要通过统一事件系统响应
 func _on_damage_received(damage_info: DamageInfo) -> void:
 	var context = {"damage_info": damage_info}
 	handle_event(&"damage_received", context)

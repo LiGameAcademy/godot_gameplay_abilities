@@ -5,6 +5,7 @@
 ## 目录
 
 - [基础设置](#基础设置)
+- [统一游戏事件系统](#统一游戏事件系统)
 - [属性系统](#属性系统)
 - [生命值和法力值](#生命值和法力值)
 - [状态系统](#状态系统)
@@ -25,6 +26,89 @@ CombatSystem="*res://addons/godot_gameplay_abilities/scripts/singletons/combat_s
 CombatEventBus="*res://addons/godot_gameplay_abilities/scripts/singletons/combat_event_bus.gd"
 EffectExecutor="*res://addons/godot_gameplay_abilities/scripts/singletons/effect_executor.gd"
 ```
+
+## 统一游戏事件系统
+
+插件提供了统一的事件触发接口，状态系统可以配置监听多个事件类型。这是推荐的事件处理方式。
+
+### 触发游戏事件
+
+```gdscript
+# 触发伤害事件
+CombatEventBus.trigger_game_event(&"damage_received", {
+    "source": attacker,
+    "target": target,
+    "damage_info": damage_info
+})
+
+# 触发技能激活事件
+CombatEventBus.trigger_game_event(&"ability_activated", {
+    "entity": caster,
+    "ability_id": &"fireball"
+})
+
+# 触发状态应用事件
+CombatEventBus.trigger_game_event(&"status_applied", {
+    "entity": target,
+    "status_id": &"burning"
+})
+```
+
+### 监听统一游戏事件
+
+```gdscript
+extends Node
+
+func _ready():
+    # 连接统一游戏事件
+    CombatEventBus.game_event_occurred.connect(_on_game_event)
+
+func _on_game_event(event_type: StringName, context: Dictionary) -> void:
+    match event_type:
+        &"damage_received":
+            var target = context.get("target")
+            var damage_info = context.get("damage_info")
+            if target == self:
+                print("Received damage: ", damage_info.base_damage)
+        
+        &"ability_activated":
+            var entity = context.get("entity")
+            var ability_id = context.get("ability_id")
+            print(entity.name, " activated ", ability_id)
+        
+        &"status_applied":
+            var entity = context.get("entity")
+            var status_id = context.get("status_id")
+            if entity == self:
+                print("Applied status: ", status_id)
+```
+
+### 状态配置事件监听
+
+状态可以在配置中指定要监听的事件类型：
+
+```gdscript
+# 在GameplayStatusData资源中配置
+@export var trigger_on_events: Array[StringName] = [
+    &"damage_received",  # 受到伤害时触发
+    &"turn_start"        # 回合开始时触发（回合制游戏）
+]
+
+# 状态会自动监听这些事件，并在事件发生时触发对应的效果
+# 效果需要设置 event_to_listen 字段才能被触发
+```
+
+### 常用事件类型
+
+- `"damage_received"`: 受到伤害时触发
+- `"damage_dealt"`: 造成伤害时触发
+- `"entity_died"`: 实体死亡时触发
+- `"healing_applied"`: 受到治疗时触发
+- `"ability_activated"`: 技能激活时触发
+- `"status_applied"`: 状态应用时触发
+- `"status_removed"`: 状态移除时触发
+- `"turn_start"`: 回合开始时触发（回合制游戏）
+- `"turn_end"`: 回合结束时触发（回合制游戏）
 
 ### 2. 创建实体节点结构
 
@@ -323,7 +407,10 @@ func _ready():
     var fireball = preload("res://data/abilities/fireball.tres")
     ability_comp.learn_ability(fireball)
     
-    # 连接事件
+    # 连接事件（使用统一游戏事件系统）
+    CombatEventBus.game_event_occurred.connect(_on_game_event)
+    
+    # 或者使用细粒度信号（向后兼容）
     health_comp.health_depleted.connect(_on_died)
     CombatEventBus.status_applied.connect(_on_status_applied)
     CombatEventBus.ability_activated.connect(_on_ability_activated)
@@ -343,6 +430,26 @@ func cast_ability(ability_id: StringName, target: Node):
         if ability_comp.commit_cast(ability_id):
             ability_comp.apply_ability_effect(ability_id, target)
 
+# 统一游戏事件处理（推荐）
+func _on_game_event(event_type: StringName, context: Dictionary) -> void:
+    match event_type:
+        &"entity_died":
+            var entity = context.get("entity")
+            if entity == self:
+                print(name, " died!")
+                queue_free()
+        &"status_applied":
+            var entity = context.get("entity")
+            var status_id = context.get("status_id")
+            if entity == self:
+                print(name, " received status: ", status_id)
+        &"ability_activated":
+            var entity = context.get("entity")
+            var ability_id = context.get("ability_id")
+            if entity == self:
+                print(name, " activated ability: ", ability_id)
+
+# 细粒度事件处理（向后兼容）
 func _on_died(instigator: Node):
     print(name, " died!")
     queue_free()

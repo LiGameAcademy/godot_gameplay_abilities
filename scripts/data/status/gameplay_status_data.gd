@@ -24,9 +24,20 @@ enum StackingPolicy {
 ## 这个状态所包含的所有效果
 @export var effects: Array[GameplayEffect] = []
 
+@export_group("Event Triggers")
+## 此状态可以响应的游戏事件类型
+## 例如: [&"damage_received", &"turn_start", &"ability_activated"]
+## 当这些事件发生时，状态会触发对应的效果
+## 注意：效果需要设置 event_to_listen 字段才能被触发
+@export var trigger_on_events: Array[StringName] = []
+
 @export_group("Stacking")
 @export var stacking_policy: StackingPolicy = StackingPolicy.REFRESH_DURATION
 @export var max_stacks: int = 1
+
+## 检查此状态是否可以被指定事件触发
+func can_trigger_on_event(event_type: StringName) -> bool:
+	return trigger_on_events.has(event_type)
 
 func get_effects_description() -> String:
 	var descriptions = []

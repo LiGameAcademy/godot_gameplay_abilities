@@ -15,6 +15,7 @@ var periodic_timers: Array[Timer] = []  # 追踪所有 Timer
 var stateful_effects: Array[GameplayEffect] = []  # 追踪需要在 remove 时调用的效果
 
 var _duration_timer: Timer = null  # 用于自动移除的计时器
+var _is_connected_to_event_bus: bool = false  # 是否已连接到统一事件系统
 
 func _init(
 		p_data: GameplayStatusData = null, 
@@ -55,6 +56,11 @@ func apply(context: Dictionary = {}) -> void:
 			_create_timer(effect_template)
 		elif effect_template.event_to_listen != &"":
 			_add_event_listener(effect_template)
+	
+	# 3. 连接到统一游戏事件系统（如果状态配置了trigger_on_events）
+	if not status_data.trigger_on_events.is_empty() and not _is_connected_to_event_bus:
+		CombatEventBus.game_event_occurred.connect(_on_game_event_occurred)
+		_is_connected_to_event_bus = true
 
 ## 状态被移除时，移除所有效果
 func remove() -> void:
@@ -72,21 +78,58 @@ func remove() -> void:
 		if is_instance_valid(timer):
 			timer.queue_free()
 	
-	# 4. 清理数组
+	# 4. 断开统一游戏事件系统的连接
+	if _is_connected_to_event_bus:
+		if CombatEventBus.game_event_occurred.is_connected(_on_game_event_occurred):
+			CombatEventBus.game_event_occurred.disconnect(_on_game_event_occurred)
+		_is_connected_to_event_bus = false
+	
+	# 5. 清理数组
 	periodic_timers.clear()
 	event_listeners.clear()
 
 ## 处理事件（用于事件监听型效果）
+## 此方法用于处理通过统一事件系统触发的事件
 func handle_event(event_id: StringName, context: Dictionary) -> void:
 	var target = get_target_entity()
 	if not is_instance_valid(target):
 		return
 	
+	# 检查状态是否应该响应这个事件
+	if not status_data.can_trigger_on_event(event_id):
+		return
+	
+	# 处理所有监听此事件的效果
 	for effect in event_listeners.get(event_id, []):
 		if is_instance_valid(effect):
 			# 在context中添加stacks信息，供Effect使用
 			context["stacks"] = stacks
 			effect.apply(target, instigator, context)
+
+## 统一游戏事件系统的回调
+## 当任何游戏事件发生时，此方法会被调用
+func _on_game_event_occurred(event_type: StringName, context: Dictionary) -> void:
+	# 检查事件是否与当前状态相关
+	var target = get_target_entity()
+	if not is_instance_valid(target):
+		return
+	
+	# 检查事件上下文中的目标是否为当前实体
+	var is_related_to_entity = false
+	if context.has("target") and context["target"] == target:
+		is_related_to_entity = true
+	elif context.has("entity") and context["entity"] == target:
+		is_related_to_entity = true
+	elif context.has("source") and context["source"] == target:
+		is_related_to_entity = true
+	
+	# 如果事件与当前实体无关，则返回
+	if not is_related_to_entity:
+		return
+	
+	# 检查状态是否应该响应这个事件类型
+	if status_data.can_trigger_on_event(event_type):
+		handle_event(event_type, context)
 
 ## 刷新持续时间
 func refresh_duration() -> void:

@@ -43,6 +43,13 @@ godot_gameplay_abilities/
 │   │   │   ├── gameplay_filter_data.gd
 │   │   │   ├── filter_target_is_alive.gd
 │   │   │   └── filter_target_has_component.gd
+│   │   ├── events/          # 事件系统（采用多态和策略模式）
+│   │   │   ├── combat_event.gd
+│   │   │   ├── combat_event_factory.gd
+│   │   │   ├── damage_received_event.gd
+│   │   │   ├── damage_dealt_event.gd
+│   │   │   ├── entity_died_event.gd
+│   │   │   └── ... (其他事件类)
 │   │   └── targeting/       # 目标相关
 │   │       ├── targeting_scorer.gd
 │   │       └── target_indicator_data.gd
@@ -244,9 +251,41 @@ func _clear_cast(ability_comp: Node, target: Node) -> void:
 # 不推荐：直接调用
 health_comp.health_depleted.emit(instigator)
 
-# 推荐：通过事件总线
-CombatEventBus.emit_entity_died(entity, instigator)
+# 推荐：通过统一事件系统
+CombatEventBus.trigger_game_event(&"entity_died", {
+    "entity": entity,
+    "instigator": instigator
+})
 ```
+
+### 3. 扩展新事件类型（符合开闭原则）
+
+事件系统采用**多态和策略模式**，符合开闭原则。添加新事件类型只需：
+
+1. **创建新的事件类**（继承`CombatEvent`）：
+```gdscript
+extends CombatEvent
+class_name MyCustomEvent
+
+func _init(p_context: Dictionary) -> void:
+    super._init(&"my_custom_event", p_context)
+
+func emit_signal(event_bus: CombatEventBus) -> void:
+    if validate_context(["required_key"]):
+        event_bus.my_custom_signal.emit(context["required_key"])
+```
+
+2. **在CombatEventFactory中注册**：
+```gdscript
+# 在CombatEventFactory._initialize_event_map()中添加
+_register_event(&"my_custom_event", _create_my_custom_event)
+
+# 添加创建函数
+static func _create_my_custom_event(context: Dictionary) -> CombatEvent:
+    return MyCustomEvent.new(context)
+```
+
+3. **无需修改`CombatEventBus.trigger_game_event()`方法**，符合开闭原则！
 
 ### 3. 资源管理
 

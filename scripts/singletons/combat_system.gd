@@ -45,4 +45,3 @@ static func get_component_by_interface(entity: Node, component_name: String) -> 
 ## [returns] bool 是否存在
 static func has_component(entity: Node, component_name: String) -> bool:
 	return get_component_by_interface(entity, component_name) != null
-

@@ -48,7 +48,14 @@ func learn_ability(ability_data: GameplayAbility) -> void:
 		ability_data.on_learned(self, _status_comp)
 	
 	ability_learned.emit(ability_id)
-	CombatEventBus.emit_ability_learned(get_parent(), ability_id)
+		# 触发统一游戏事件：ability_learned
+		CombatEventBus.trigger_game_event(&"ability_learned", {
+			"entity": get_parent(),
+			"ability_id": ability_id
+		})
+		
+		# 同时发送细粒度事件（向后兼容）
+		CombatEventBus.emit_ability_learned(get_parent(), ability_id)
 
 ## 遗忘技能
 ## [param] ability_id: StringName 技能ID
@@ -71,7 +78,14 @@ func forget_ability(ability_id: StringName) -> void:
 		ability_data.on_forgotten(self, _status_comp)
 	
 	ability_forgotten.emit(ability_id)
-	CombatEventBus.emit_ability_forgotten(get_parent(), ability_id)
+		# 触发统一游戏事件：ability_forgotten
+		CombatEventBus.trigger_game_event(&"ability_forgotten", {
+			"entity": get_parent(),
+			"ability_id": ability_id
+		})
+		
+		# 同时发送细粒度事件（向后兼容）
+		CombatEventBus.emit_ability_forgotten(get_parent(), ability_id)
 
 ## 检查冷却是否就绪
 ## [param] ability_id: StringName 技能ID
@@ -206,7 +220,14 @@ func apply_ability_effect(ability_id: StringName, target: Node, context: Diction
 	
 	ability_data.cast(self, target, context)
 	ability_cast.emit(ability_id, target)
-	CombatEventBus.emit_ability_activated(get_parent(), ability_id)
+		# 触发统一游戏事件：ability_activated
+		CombatEventBus.trigger_game_event(&"ability_activated", {
+			"entity": get_parent(),
+			"ability_id": ability_id
+		})
+		
+		# 同时发送细粒度事件（向后兼容）
+		CombatEventBus.emit_ability_activated(get_parent(), ability_id)
 
 ## 清除技能效果
 ## [param] ability_id: StringName 技能ID
@@ -240,5 +261,12 @@ func _create_cooldown_timer(ability_id: StringName) -> Timer:
 ## 冷却时间到期
 func _on_cooldown_timeout(ability_id: StringName) -> void:
 	cooldown_ready.emit(ability_id)
-	CombatEventBus.emit_ability_cooldown_ready(get_parent(), ability_id)
+		# 触发统一游戏事件：ability_cooldown_ready
+		CombatEventBus.trigger_game_event(&"ability_cooldown_ready", {
+			"entity": get_parent(),
+			"ability_id": ability_id
+		})
+		
+		# 同时发送细粒度事件（向后兼容）
+		CombatEventBus.emit_ability_cooldown_ready(get_parent(), ability_id)
 

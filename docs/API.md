@@ -45,7 +45,7 @@ Godot Gameplay Abilities Plugin 是一个高内聚、低耦合的插件化战斗
 
 ### 事件驱动
 
-通过`CombatEventBus`单例进行系统间通讯，实现解耦。
+通过`CombatEventBus`单例进行系统间通讯，实现解耦。事件系统采用**多态和策略模式**，符合开闭原则：添加新事件类型只需创建新的事件类并注册，无需修改核心代码。
 
 ## 组件API
 
@@ -339,6 +339,40 @@ CombatSystem.unregister_entity(entity)
 
 战斗事件总线。
 
+#### 统一游戏事件系统（推荐）
+
+插件提供了统一的事件触发接口，状态系统可以配置监听多个事件类型：
+
+```gdscript
+# 触发统一游戏事件
+CombatEventBus.trigger_game_event(&"damage_received", {
+    "source": attacker,
+    "target": target,
+    "damage_info": damage_info
+})
+
+CombatEventBus.trigger_game_event(&"ability_activated", {
+    "entity": caster,
+    "ability_id": &"fireball"
+})
+
+# 监听统一游戏事件
+CombatEventBus.game_event_occurred.connect(_on_game_event)
+
+func _on_game_event(event_type: StringName, context: Dictionary) -> void:
+    match event_type:
+        &"damage_received":
+            var target = context.get("target")
+            var damage_info = context.get("damage_info")
+            # 处理伤害事件
+        &"ability_activated":
+            var entity = context.get("entity")
+            var ability_id = context.get("ability_id")
+            # 处理技能激活事件
+```
+
+#### 细粒度事件信号（向后兼容）
+
 ```gdscript
 # 监听事件
 CombatEventBus.damage_dealt.connect(_on_damage_dealt)
@@ -352,6 +386,16 @@ CombatEventBus.emit_entity_died(entity, instigator)
 CombatEventBus.emit_status_applied(entity, status_id)
 CombatEventBus.emit_ability_activated(entity, ability_id)
 ```
+
+#### 常用事件类型
+
+- `"damage_received"`: 受到伤害时触发，context包含 `{source: Node, target: Node, damage_info: DamageInfo}`
+- `"damage_dealt"`: 造成伤害时触发，context包含 `{instigator: Node, target: Node, damage_info: DamageInfo, final_damage: float}`
+- `"entity_died"`: 实体死亡时触发，context包含 `{entity: Node, instigator: Node}`
+- `"healing_applied"`: 受到治疗时触发，context包含 `{target: Node, amount: float}`
+- `"ability_activated"`: 技能激活时触发，context包含 `{entity: Node, ability_id: StringName}`
+- `"status_applied"`: 状态应用时触发，context包含 `{entity: Node, status_id: StringName}`
+- `"status_removed"`: 状态移除时触发，context包含 `{entity: Node, status_id: StringName}`
 
 ### EffectExecutor
 

@@ -183,6 +183,7 @@ CombatEventBus.emit_damage_dealt(instigator, target, damage_info, final_damage)
 - [API文档](docs/API.md) - 完整的API参考
 - [使用示例](docs/Examples.md) - 详细的使用示例
 - [架构设计](docs/Architecture.md) - 系统架构和设计理念
+- [事件系统设计](docs/EventSystem.md) - 事件系统完整文档（优势、缺点、最佳实践、外部通信）
 
 详细课程教程：`_tutorials/godot架构实战：即时战斗核心与技能系统篇.md`
 

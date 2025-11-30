@@ -40,7 +40,16 @@ func apply_damage(damage_info: DamageInfo) -> void:
 	if not is_alive or is_invincible:
 		return
 	
-	# 即将造成伤害广播
+	var target_entity = get_parent()
+	
+	# 触发统一游戏事件：damage_received（在计算减免之前）
+	CombatEventBus.trigger_game_event(&"damage_received", {
+		"source": damage_info.instigator,
+		"target": target_entity,
+		"damage_info": damage_info
+	})
+	
+	# 同时发出细粒度信号（向后兼容）
 	damage_received.emit(damage_info)
 
 	# 在应用伤害前被BUFF修改为0或更少
@@ -49,6 +58,14 @@ func apply_damage(damage_info: DamageInfo) -> void:
 
 	var final_damage = DamageCalculator.calculate_final_damage(damage_info, self)
 
+	# 触发统一游戏事件：damage_dealt（在计算减免之后）
+	CombatEventBus.trigger_game_event(&"damage_dealt", {
+		"instigator": damage_info.instigator,
+		"target": target_entity,
+		"damage_info": damage_info,
+		"final_damage": final_damage
+	})
+	
 	# UI系统可以监听这个信号来显示伤害飘字
 	damage_applied.emit(damage_info, final_damage)
 
@@ -66,7 +83,17 @@ func heal(amount: float) -> void:
 	if not is_alive:
 		return
 	
+	var target_entity = get_parent()
+	
 	add_health(amount)
+	
+	# 触发统一游戏事件：healing_applied
+	CombatEventBus.trigger_game_event(&"healing_applied", {
+		"target": target_entity,
+		"amount": amount
+	})
+	
+	# 同时发出细粒度信号（向后兼容）
 	health_restored.emit()
 
 ## 增加生命值（用于治疗、建造等）
@@ -88,5 +115,13 @@ func _die(instigator: Node) -> void:
 	var owner_node = get_parent()
 	if owner_node:
 		owner_node.add_to_group(DEATH_GROUP_NAME)
+	
+	# 触发统一游戏事件：entity_died
+	CombatEventBus.trigger_game_event(&"entity_died", {
+		"entity": owner_node,
+		"instigator": instigator
+	})
+	
+	# 同时发出细粒度信号（向后兼容）
 	health_depleted.emit(instigator)
 
