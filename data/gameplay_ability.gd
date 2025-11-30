@@ -1,0 +1,97 @@
+@abstract
+extends Resource
+class_name GameplayAbility
+
+## 技能数据基类（抽象类）
+## 定义技能的所有属性和行为
+
+## 定义技能的目标类型
+enum TargetingType {
+	SELF_ONLY,      ## 只能对施法者自己 (e.g., 持盾)
+	UNIT_TARGET,    ## 需要一个单位 (友军或敌军) (e.g., 治疗, 减速)
+	GROUND_TARGET,  ## 需要一个地面位置 (e.g., 暴风雪, 驱散)
+	NO_TARGET       ## 不需要目标 (e.g., 战吼)
+}
+
+@export var ability_id: StringName                  ## 技能的唯一ID
+@export var ability_name: String                    ## 技能名称
+@export_multiline var description: String           ## 技能描述
+@export var icon: Texture2D                         ## 技能图标
+@export var tags: Array[StringName] = []            ## 技能标签
+@export var disabled: bool = false                  ## 技能是否禁用
+
+@export var targeting_scorer: TargetingScorer = null   ## 目标评分器
+
+@export_group("Effect")
+@export var status_to_apply: GameplayStatusData = null     ## 技能应用的状态
+
+## 技能学习时调用
+func on_learned(ability_comp: Node, status_comp: Node) -> void:
+	_on_learned(ability_comp, status_comp)
+
+## 技能遗忘时调用
+func on_forgotten(ability_comp: Node, status_comp: Node) -> void:
+	_on_forgotten(ability_comp, status_comp)
+
+## 检查是否可以施法
+func can_cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> bool:
+	return _can_cast(ability_comp, target, context)
+
+## 提交施法（消耗资源、开始冷却等）
+func commit_cast(ability_comp: Node) -> bool:
+	return _commit_cast(ability_comp)
+
+## 施放技能（应用效果）
+func cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> void:
+	_on_cast(ability_comp, target, context)
+
+## 清除施法效果
+func clear_cast(ability_comp: Node, target: Node) -> void:
+	_clear_cast(ability_comp, target)
+
+## 是否可以自动施法
+func can_autocast() -> bool:
+	return false
+
+## 是否正在自动施法
+func is_autocast() -> bool:
+	return false
+
+## 切换自动施法状态
+func toggle_autocast() -> void:
+	pass
+
+## 获取施法持续时间
+func get_cast_duration() -> float:
+	return 0.0
+
+## 获取施法前摇时间
+func get_cast_point() -> float:
+	return 0.0
+
+## 获取施法距离
+func get_cast_range() -> float:
+	return 0.0
+
+## 获取引导持续时间
+func get_channel_duration() -> float:
+	return 0.0
+
+## [子类重写] 技能学习时的处理
+@abstract func _on_learned(ability_comp: Node, status_comp: Node) -> void
+
+## [子类重写] 技能遗忘时的处理
+@abstract func _on_forgotten(ability_comp: Node, status_comp: Node) -> void
+
+## [子类重写] 检查是否可以施法
+@abstract func _can_cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> bool
+
+## [子类重写] 提交施法
+@abstract func _commit_cast(ability_comp: Node) -> bool
+
+## [子类重写] 施放技能
+@abstract func _on_cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> void
+
+## [子类重写] 清除施法效果
+@abstract func _clear_cast(ability_comp: Node, target: Node) -> void
+

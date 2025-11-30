@@ -18,6 +18,9 @@ signal attribute_changed(entity: Node, attribute_id: StringName, new_value: floa
 # 技能相关事件
 signal ability_activated(entity: Node, ability_id: StringName)
 signal ability_failed(entity: Node, ability_id: StringName, reason: String)
+signal ability_learned(entity: Node, ability_id: StringName)
+signal ability_forgotten(entity: Node, ability_id: StringName)
+signal ability_cooldown_ready(entity: Node, ability_id: StringName)
 
 # 状态相关事件
 signal status_applied(entity: Node, status_id: StringName)
@@ -46,6 +49,18 @@ func emit_ability_activated(entity: Node, ability_id: StringName) -> void:
 ## 发送技能失败事件
 func emit_ability_failed(entity: Node, ability_id: StringName, reason: String) -> void:
 	ability_failed.emit(entity, ability_id, reason)
+
+## 发送技能学习事件
+func emit_ability_learned(entity: Node, ability_id: StringName) -> void:
+	ability_learned.emit(entity, ability_id)
+
+## 发送技能遗忘事件
+func emit_ability_forgotten(entity: Node, ability_id: StringName) -> void:
+	ability_forgotten.emit(entity, ability_id)
+
+## 发送技能冷却就绪事件
+func emit_ability_cooldown_ready(entity: Node, ability_id: StringName) -> void:
+	ability_cooldown_ready.emit(entity, ability_id)
 
 ## 发送状态应用事件
 func emit_status_applied(entity: Node, status_id: StringName) -> void:
