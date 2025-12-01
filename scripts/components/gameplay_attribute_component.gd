@@ -7,11 +7,12 @@ class_name GameplayAttributeComponent
 const ModifierType := GameplayAttributeModifier.ModifierType
 
 ## 已注册的属性集
-## 属性实例由属性集管理，属性组件通过属性集访问
 var _attribute_sets: Array[GameplayAttributeSet] = []
 
-## 属性ID到属性集的映射（用于快速查找）
-## 注意：属性实例实际存储在属性集中，这里只是属性集索引
+## 属性实例字典（由属性组件直接管理）
+var _instances: Dictionary[StringName, GameplayAttributeInstance] = {}
+
+## 属性ID到属性集的映射（用于快速查找属性集）
 var _attribute_set_index: Dictionary[StringName, GameplayAttributeSet] = {}
 
 signal attribute_value_changed(attribute_id: StringName, value: float)
@@ -23,29 +24,66 @@ func initialize_with_attribute_sets(attribute_sets: Array[GameplayAttributeSet])
 	# 注册属性集
 	_attribute_sets = attribute_sets.duplicate()
 	
-	# 初始化每个属性集（属性集会创建和注册属性实例）
+	# 从每个属性集创建实例并注册
+	for attribute_set in _attribute_sets:
+		if not is_instance_valid(attribute_set):
+			continue
+		
+		# 从属性集获取实例集合
+		var instances = attribute_set.create_instances(self)
+		
+		# 注册所有实例
+		for attribute_id in instances:
+			var atr_instance = instances[attribute_id]
+			if not is_instance_valid(atr_instance):
+				continue
+			register_attribute_instance(attribute_id, atr_instance, attribute_set)
+
+	# 解析初始值依赖关系（在所有实例创建完成后）
 	for attribute_set in _attribute_sets:
 		if is_instance_valid(attribute_set):
-			attribute_set.initialize(self)
+			# 解析初始值依赖关系
+			attribute_set.resolve_initial_value_dependencies(self)
+			# 注册属性变化监听，用于处理依赖关系
+			if not attribute_value_changed.is_connected(attribute_set.post_attribute_value_changed):
+				attribute_value_changed.connect(attribute_set.post_attribute_value_changed.bind(self))
 
-## 注册属性集索引（内部使用，由属性集调用）
-## 用于快速查找属性所在的属性集
-func register_attribute_instance(attribute_id: StringName, attribute_set: GameplayAttributeSet) -> void:
-	if _attribute_set_index.has(attribute_id):
-		push_warning("GameplayAttributeComponent: Attribute %s already exists in another set, replacing..." % attribute_id)
+## 注册属性实例（内部使用）
+## [param] attribute_id: StringName 属性ID
+## [param] instance: GameplayAttributeInstance 属性实例
+## [param] attribute_set: GameplayAttributeSet 所属属性集
+func register_attribute_instance(attribute_id: StringName, instance: GameplayAttributeInstance, attribute_set: GameplayAttributeSet) -> void:
+	if _instances.has(attribute_id):
+		push_warning("GameplayAttributeComponent: Attribute %s already exists, replacing..." % attribute_id)
+	_instances[attribute_id] = instance
 	_attribute_set_index[attribute_id] = attribute_set
+	
+	# 连接属性实例值变化信号
+	if not instance.value_changed.is_connected(_on_instance_value_changed):
+		instance.value_changed.connect(_on_instance_value_changed.bind(attribute_id))
+
+## 属性实例值变化回调（内部使用）
+func _on_instance_value_changed(old_value: float, new_value: float, attribute_id: StringName) -> void:
+	# 触发属性值变化事件
+	attribute_value_changed.emit(attribute_id, new_value)
 
 func has_attribute(attribute_id: StringName) -> bool:
-	return _attribute_set_index.has(attribute_id)
+	return _instances.has(attribute_id)
 
-## 获取属性实例（通过属性集）
+## 获取属性实例
 ## [param] attribute_id: StringName 属性ID
 ## [return] GameplayAttributeInstance 属性实例，如果不存在则返回null
 func get_attribute_instance(attribute_id: StringName) -> GameplayAttributeInstance:
-	var attribute_set = _attribute_set_index.get(attribute_id, null)
-	if attribute_set:
-		return attribute_set.get_attribute_instance(attribute_id)
-	return null
+	return _instances.get(attribute_id, null)
+
+## 获取属性实例所属的属性集（内部使用）
+## [param] instance: GameplayAttributeInstance 属性实例
+## [return] GameplayAttributeSet 属性集，如果不存在则返回null
+func get_attribute_set_for_instance(instance: GameplayAttributeInstance) -> GameplayAttributeSet:
+	if not is_instance_valid(instance):
+		return null
+	var attribute_id = instance.attribute_id
+	return _attribute_set_index.get(attribute_id, null)
 
 ## 获取属性值（向后兼容API）
 func get_value(attribute_id: StringName, default_value: float = 0.0) -> float:

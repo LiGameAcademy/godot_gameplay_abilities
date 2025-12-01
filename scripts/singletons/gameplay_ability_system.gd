@@ -3,6 +3,7 @@ extends Node
 ## 游戏技能系统管理器（单例）
 ## 管理所有战斗相关的实体和组件
 
+var attribute_manager: GameplayAttributeManager = GameplayAttributeManager.new()
 var _entities: Array[Node] = []
 
 ## 注册战斗实体
@@ -45,4 +46,3 @@ static func get_component_by_interface(entity: Node, component_name: String) -> 
 ## [returns] bool 是否存在
 static func has_component(entity: Node, component_name: String) -> bool:
 	return get_component_by_interface(entity, component_name) != null
-

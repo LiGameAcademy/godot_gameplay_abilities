@@ -8,11 +8,11 @@ class_name VitalComponent
 @export var _attribute_comp: GameplayAttributeComponent
 
 ## Vital 实例字典
-var _vitals: Dictionary[StringName, Vital] = {}
+var _vitals: Dictionary[StringName, VitalBaseResource] = {}
 
 ## 注册 Vital 实例
 ## [param] vital: Vital Vital 实例
-func register_vital(vital: Vital) -> void:
+func register_vital(vital: VitalBaseResource) -> void:
 	if not is_instance_valid(vital):
 		push_error("VitalComponent: Cannot register invalid vital!")
 		return
@@ -25,7 +25,7 @@ func register_vital(vital: Vital) -> void:
 ## 获取 Vital 实例
 ## [param] vital_id: StringName Vital ID
 ## [return] Vital Vital 实例，如果不存在则返回null
-func get_vital(vital_id: StringName) -> Vital:
+func get_vital(vital_id: StringName) -> VitalBaseResource:
 	return _vitals.get(vital_id, null)
 
 ## 检查是否有指定的 Vital
@@ -42,7 +42,7 @@ func remove_vital(vital_id: StringName) -> void:
 
 ## 获取所有 Vital 实例
 ## [return] Dictionary[StringName, Vital] Vital 实例字典
-func get_all_vitals() -> Dictionary[StringName, Vital]:
+func get_all_vitals() -> Dictionary[StringName, VitalBaseResource]:
 	return _vitals.duplicate()
 
 func _ready() -> void:

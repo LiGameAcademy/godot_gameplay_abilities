@@ -119,4 +119,3 @@ func _die(instigator: Node, owner_entity: Node) -> void:
 	
 	# 同时发出细粒度信号（向后兼容）
 	health_depleted.emit(instigator)
-

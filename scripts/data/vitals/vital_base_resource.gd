@@ -101,4 +101,3 @@ func _on_attribute_value_changed(attribute_id: StringName, value: float) -> void
 			max_value_changed.emit(value)
 		regen_rate_id:
 			regen_rate_changed.emit(value)
-
