@@ -1,157 +1,95 @@
 extends RefCounted
 class_name GameplayAttributeInstance
 
-## 属性实例
-## 封装属性在某个实体上的实例，包含属性数据、当前值、修改器等
+## 属性运行时实例
+## 核心职责：维护 BaseValue，管理 Modifiers，计算 FinalValue
 
-const ModifierType := GameplayAttributeModifier.ModifierType
+const ModifierType = GameplayAttributeModifier.ModifierType
 
-## 属性数据（定义）
-var attribute_data: GameplayAttribute = null
+# --- 数据 ---
+var attribute_def: GameplayAttribute
+var base_value: float = 0.0 : set = set_base_value
+var _modifiers: Array[GameplayAttributeModifier] = []
 
-## 基础值
-var base_value: float = 0.0
-
-## 当前值（经过修改器计算后的最终值）
-## 注意：这是计算后的值，通过 get_final_value() 获取
+# --- 缓存与脏标记 (性能优化) ---
+var _dirty: bool = true
 var _cached_final_value: float = 0.0
 
-## 修改器列表
-var modifiers: Array[GameplayAttributeModifier] = []
+# --- 信号 ---
+# 仅在最终值实际改变时发出
+signal value_changed(old_val: float, new_val: float)
 
-## 所属的属性组件
-var owner: GameplayAttributeComponent = null
+func _init(definition: GameplayAttribute, initial_value: float):
+    attribute_def = definition
+    base_value = initial_value
 
-## 属性ID（快捷访问）
-var attribute_id: StringName:
-	get:
-		if is_instance_valid(attribute_data):
-			return attribute_data.attribute_id
-		return &""
+func get_value() -> float:
+    if _dirty:
+        _recalculate_value()
+    return _cached_final_value
 
-signal value_changed(old_value: float, new_value: float) ## 当前值变化信号
-signal base_value_changed(old_value: float, new_value: float) ## 基础值变化信号
+# --- 修改器管理 ---
+func add_modifier(mod: GameplayAttributeModifier) -> void:
+    _modifiers.append(mod)
+    _on_data_changed()
 
-func _init(p_attribute_data: GameplayAttribute = null, p_base_value: float = 0.0, p_owner: GameplayAttributeComponent = null) -> void:
-	attribute_data = p_attribute_data
-	base_value = p_base_value
-	owner = p_owner
+func remove_modifier(mod: GameplayAttributeModifier) -> void:
+    _modifiers.erase(mod)
+    _on_data_changed()
 
-## 获取最终值（经过所有修改器计算）
-func get_final_value() -> float:
-	return _calculate_final_value()
+# --- Setter ---
+func set_base_value(val: float) -> void:
+    if base_value == val: return
+    base_value = val
+    _on_data_changed()
 
-func _calculate_final_value() -> float:
-	var value = base_value
-	if modifiers.is_empty():
-		return value
-	
-	# 属性修改器按照类型依次计算
-	var modifier_type_map: Dictionary[ModifierType, float] = {
-		ModifierType.ADDITIVE: 0.0,
-		ModifierType.MULTIPLICATIVE: 1.0,
-		ModifierType.PERCENTAGE: 1.0,
-	}
-	
-	for modifier in modifiers:
-		modifier_type_map[modifier.modifier_type] += modifier.value
-	
-	# 先计算乘法，再计算加法，最后计算百分比
-	value = value * modifier_type_map[ModifierType.MULTIPLICATIVE] + modifier_type_map[ModifierType.ADDITIVE]
-	value = value * (1.0 + modifier_type_map[ModifierType.PERCENTAGE])
-	
-	# 应用最小值和最大值限制
-	if attribute_data:
-		if attribute_data.min_value != -INF:
-			value = max(value, attribute_data.min_value)
-		if attribute_data.max_value != INF:
-			value = min(value, attribute_data.max_value)
-	
-	_cached_final_value = value
-	return value
+# --- 核心计算逻辑 (Lazy Evaluation) ---
+func _recalculate_value() -> void:
+    var final = base_value
+    
+    # 1. 预计算：先归类，避免多次遍历 (如果 Modifier 很多，这里可以进一步优化)
+    var sum_add = 0.0
+    var product_mult = 1.0
+    var has_override = false
+    var override_val = 0.0
+    
+    for mod in _modifiers:
+        match mod.type:
+            ModifierType.OVERRIDE:
+                has_override = true
+                override_val = mod.value
+                break # 覆盖优先级最高，直接停止计算（或者根据需求决定优先级）
+            ModifierType.ADD:
+                sum_add += mod.value
+            ModifierType.MULTIPLY:
+                product_mult += mod.value # 注意：通常配置 0.5 代表 +50%
+                # 如果你的配置是 1.5 代表 x1.5，则这里应该是 product_mult *= mod.value
+                # 建议使用：Base * (1 + Sum(Mult_Mods)) 的累加乘逻辑，防止指数爆炸
+                # 或者：Base * Product(Mult_Mods) 的连乘逻辑
+                # 这里采用 RPG 常用的累加乘：Base * (1 + 0.1 + 0.2)
+    
+    if has_override:
+        final = override_val
+    else:
+        # 标准公式：(基础值 + 加法修正) * (1 + 乘法修正总和)
+        # 假设 Modifier 的 Multiply 填 0.1 代表增加 10%
+        final = (base_value + sum_add) * (1.0 + product_mult)
+        
+        # 另一种常见公式（连乘）：(Base + Add) * Mult1 * Mult2
+        # final = (base_value + sum_add) * product_mult
+    
+    # 限制范围
+    if attribute_def:
+        final = clampf(final, attribute_def.min_value, attribute_def.max_value)
+    
+    _cached_final_value = final
+    _dirty = false
 
-## 设置基础值
-func set_base_value(new_base_value: float, source: Variant = null) -> void:
-	var old_base_value = base_value
-	var old_final_value = _cached_final_value
-	
-	# 调用属性集的变化前钩子（如果存在）
-	var actual_new_base_value = new_base_value
-	if is_instance_valid(owner):
-		var attribute_set = owner.get_attribute_set_for_instance(self)
-		if is_instance_valid(attribute_set):
-			var hook_result = attribute_set.pre_base_value_change(self, old_base_value, new_base_value, source)
-			if hook_result is float:
-				actual_new_base_value = hook_result
-			elif hook_result != null:
-				# 如果返回非float值，使用原值
-				actual_new_base_value = new_base_value
-	
-	base_value = actual_new_base_value
-	
-	# 重新计算最终值
-	var new_final_value = _calculate_final_value()
-	
-	# 调用属性集的变化后钩子（如果存在）
-	if is_instance_valid(owner):
-		var attribute_set = owner.get_attribute_set_for_instance(self)
-		if is_instance_valid(attribute_set):
-			attribute_set.post_final_value_changed(self, old_final_value, new_final_value, source)
-	
-	if old_final_value != new_final_value:
-		value_changed.emit(old_final_value, new_final_value)
-	
-	base_value_changed.emit(old_base_value, actual_new_base_value)
-
-## 添加修改器
-func add_modifier(modifier: GameplayAttributeModifier) -> void:
-	if modifier.attribute_id != attribute_id:
-		push_error("GameplayAttributeInstance: Modifier attribute_id mismatch!")
-		return
-	
-	modifiers.append(modifier)
-	
-	# 重新计算最终值
-	var old_final_value = _cached_final_value
-	var new_final_value = _calculate_final_value()
-	if old_final_value != new_final_value:
-		value_changed.emit(old_final_value, new_final_value)
-
-## 移除修改器
-func remove_modifier(modifier: GameplayAttributeModifier) -> void:
-	var index = modifiers.find(modifier)
-	if index == -1:
-		push_error("GameplayAttributeInstance: Modifier not found!")
-		return
-	
-	modifiers.remove_at(index)
-	
-	# 重新计算最终值
-	var old_final_value = _cached_final_value
-	var new_final_value = _calculate_final_value()
-	if old_final_value != new_final_value:
-		value_changed.emit(old_final_value, new_final_value)
-
-## 获取最小值
-func get_min_value() -> float:
-	if is_instance_valid(attribute_data):
-		return attribute_data.min_value
-	return -INF
-
-## 获取最大值
-func get_max_value() -> float:
-	if is_instance_valid(attribute_data):
-		return attribute_data.max_value
-	return INF
-
-## 获取显示名称
-func get_display_name() -> String:
-	if is_instance_valid(attribute_data):
-		return attribute_data.attribute_display_name
-	return str(attribute_id)
-
-## 获取描述
-func get_description() -> String:
-	if is_instance_valid(attribute_data):
-		return attribute_data.attribute_description
-	return ""
+# --- 内部通知 ---
+func _on_data_changed() -> void:
+    var old_val = _cached_final_value
+    _dirty = true # 标记为脏，下次获取时重算
+    var new_val = get_value() # 立即重算以触发信号（也可以选择延迟触发）
+    
+    if not is_equal_approx(old_val, new_val):
+        value_changed.emit(old_val, new_val)
