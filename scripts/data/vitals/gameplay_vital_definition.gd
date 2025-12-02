@@ -10,6 +10,6 @@ class_name GameplayVitalDefinition
 
 @export_group("Attribute Dependencies")
 ## 决定最大值的属性 ID (如 max_health)
-@export var max_value_attribute: StringName = &"max_health"
+@export var max_value_attribute: StringName = &"health"
 ## 决定恢复速度的属性 ID (如 health_regen)，留空则不自动恢复
 @export var regen_rate_attribute: StringName = &""

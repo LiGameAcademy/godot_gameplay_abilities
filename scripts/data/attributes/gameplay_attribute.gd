@@ -11,6 +11,7 @@ class_name GameplayAttribute
 @export var min_value: float = -INF 					## 属性最小值
 @export var max_value: float = INF 						## 属性最大值
 @export var is_hidden: bool = false 					## 属性是否隐藏
+@export var is_percentage: bool = false 				## 是否百分比显示
 
 func get_id() -> StringName:
 	return attribute_id
