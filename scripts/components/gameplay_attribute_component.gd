@@ -30,9 +30,10 @@ func initialize(sets: Array[GameplayAttributeSet] = []) -> void:
 # --- Public API ---
 
 func get_value(id: StringName, default: float = 0.0) -> float:
-	if _attributes.has(id):
-		return _attributes[id].get_value()
-	return default
+	if not _attributes.has(id):
+		push_warning("GameplayAttributeComponent: Attribute with id %s not found" % id)
+		return default
+	return _attributes[id].get_value()
 
 func get_attribute(id: StringName) -> GameplayAttributeInstance:
 	return _attributes.get(id, null)
