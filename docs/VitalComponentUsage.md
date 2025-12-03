@@ -188,12 +188,11 @@ func heal(amount: float):
 
 ```gdscript
 func add_stamina_vital():
-	var stamina_def = GameplayVitalDefinition.new()
-	stamina_def.vital_id = &"stamina"
-	stamina_def.max_value_attribute = &"max_stamina"
-	stamina_def.regen_rate_attribute = &"stamina_regen"
-	
-	var stamina_vital = GameplayVital.new(stamina_def, vital_attr_comp)
+	var stamina_vital = GameplayVital.new(vital_attr_comp)
+	stamina_vital.vital_id = &"stamina"
+	stamina_vital.display_name = "体力"
+	stamina_vital.max_value_attribute = &"stamina"
+	stamina_vital.regen_rate_attribute = &"stamina_regen"
 	vital_attr_comp.register_vital(stamina_vital)
 ```
 

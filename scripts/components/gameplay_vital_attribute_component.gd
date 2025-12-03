@@ -47,13 +47,14 @@ func _initialize_vitals(vitals: Array[GameplayVital]) -> void:
 		if not is_instance_valid(vital_template):
 			continue
 		
-		var def = vital_template.definition
-		if not def:
+		# 检查 vital_id 是否设置
+		if vital_template.vital_id == &"":
+			push_warning("GameplayVitalAttributeComponent: Vital skipped: vital_id is empty")
 			continue
 		
 		# 检查依赖的属性是否存在
-		if not has_attribute(def.max_value_attribute):
-			push_warning("GameplayVitalAttributeComponent: Vital [%s] skipped: Missing max attribute [%s]" % [def.vital_id, def.max_value_attribute])
+		if not has_attribute(vital_template.max_value_attribute):
+			push_warning("GameplayVitalAttributeComponent: Vital [%s] skipped: Missing max attribute [%s]" % [vital_template.vital_id, vital_template.max_value_attribute])
 			continue
 		
 		# 创建运行时实例 (Template -> Instance)
@@ -70,11 +71,11 @@ func _initialize_vitals(vitals: Array[GameplayVital]) -> void:
 		attribute_value_changed.connect(vital_instance._on_attribute_changed)
 		
 		# 注册实例
-		_active_vitals[def.vital_id] = vital_instance
+		_active_vitals[vital_instance.vital_id] = vital_instance
 		
 		# 转发信号
-		vital_instance.value_changed.connect(_on_vital_value_changed.bind(def.vital_id))
-		vital_instance.depleted.connect(_on_vital_depleted.bind(def.vital_id))
+		vital_instance.value_changed.connect(_on_vital_value_changed.bind(vital_instance.vital_id))
+		vital_instance.depleted.connect(_on_vital_depleted.bind(vital_instance.vital_id))
 
 # --- API: 操作 Vital ---
 
@@ -135,14 +136,14 @@ func register_vital(vital: GameplayVital) -> bool:
 		push_warning("GameplayVitalAttributeComponent: Invalid vital instance")
 		return false
 	
-	var def = vital.definition
-	if not def:
-		push_warning("GameplayVitalAttributeComponent: Vital missing definition")
+	# 检查 vital_id 是否设置
+	if vital.vital_id == &"":
+		push_warning("GameplayVitalAttributeComponent: Vital missing vital_id")
 		return false
 	
 	# 检查依赖的属性是否存在
-	if not has_attribute(def.max_value_attribute):
-		push_warning("GameplayVitalAttributeComponent: Vital [%s] skipped: Missing max attribute [%s]" % [def.vital_id, def.max_value_attribute])
+	if not has_attribute(vital.max_value_attribute):
+		push_warning("GameplayVitalAttributeComponent: Vital [%s] skipped: Missing max attribute [%s]" % [vital.vital_id, vital.max_value_attribute])
 		return false
 	
 	# 设置属性组件引用
@@ -158,11 +159,11 @@ func register_vital(vital: GameplayVital) -> bool:
 	attribute_value_changed.connect(vital._on_attribute_changed)
 	
 	# 注册实例
-	_active_vitals[def.vital_id] = vital
+	_active_vitals[vital.vital_id] = vital
 	
 	# 转发信号
-	vital.value_changed.connect(_on_vital_value_changed.bind(def.vital_id))
-	vital.depleted.connect(_on_vital_depleted.bind(def.vital_id))
+	vital.value_changed.connect(_on_vital_value_changed.bind(vital.vital_id))
+	vital.depleted.connect(_on_vital_depleted.bind(vital.vital_id))
 	
 	return true
 

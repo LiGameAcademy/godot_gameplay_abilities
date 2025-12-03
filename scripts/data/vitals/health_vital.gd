@@ -6,6 +6,16 @@ class_name HealthVital
 
 const DEATH_GROUP_NAME: String = "death"
 
+func _init(p_comp: GameplayAttributeComponent = null) -> void:
+	# 设置 HealthVital 的默认值（在调用 super 之前设置）
+	vital_id = &"health"
+	display_name = "生命值"
+	max_value_attribute = &"health"
+	# regen_rate_attribute = &"health_regen"
+	
+	# 调用父类初始化
+	super(p_comp)
+
 ## 是否存活
 var is_alive: bool:
 	get:
