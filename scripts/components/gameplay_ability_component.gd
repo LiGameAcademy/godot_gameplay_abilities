@@ -22,6 +22,16 @@ func _ready() -> void:
 	# 学习初始技能
 	for ability_data in initial_abilities:
 		learn_ability(ability_data)
+	# 启用 process 以更新连击计时器
+	set_process(true)
+
+## 每帧更新（更新所有技能的内部状态）
+func _process(delta: float) -> void:
+	# 统一调用所有技能的 update 方法（符合开闭原则）
+	for ability_id in _learned_abilities:
+		var ability_data = _learned_abilities[ability_id]
+		if is_instance_valid(ability_data):
+			ability_data.update(delta)
 
 ## 学习技能
 ## [param] ability_data: GameplayAbility 技能数据
@@ -218,7 +228,15 @@ func commit_cast(ability_id: StringName) -> bool:
 	if not is_cooldown_ready(ability_id):
 		return false
 	
-	start_cooldown(ability_id, ability_data.cooldown_duration)
+	# 获取冷却时间（使用方法，支持 CombatAbility 重写）
+	var cooldown = 0.0
+	if ability_data is ActiveAbility:
+		cooldown = ability_data.get_cooldown_duration()
+	else:
+		cooldown = ability_data.get_cooldown_duration()
+	
+	if cooldown > 0.0:
+		start_cooldown(ability_id, cooldown)
 
 	ability_cast.emit(ability_id)
 	# 触发统一游戏事件：ability_cast

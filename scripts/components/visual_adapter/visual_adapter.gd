@@ -74,10 +74,9 @@ func _on_animation_event(event_name: StringName, data: Dictionary = {}) -> void:
 	var context: Dictionary = data
 	context["facing_angle"] = _get_facing_angle()
 	
+	# 应用技能效果（技能系统内部会处理完成回调）
 	_ability_component.apply_ability_effect(_current_ability_id, null, context)
-
-	#TODO 如果你的连招系统（Animation State Machine）允许快速切换，_current_ability_id 可能会在动画还没结束时就被覆盖。
-	#TODO 建议在 commit_cast 时将 ID 存入一个队列，或者确保动画状态机锁定（不可打断）直到生效点结束。
+	
 	_current_ability_id = &""
 	print("VisualAdapter: Ability effect applied: %s on animation event: %s" % [_current_ability_id, event_name])
 
@@ -114,12 +113,12 @@ func _on_ability_cast(ability_id: StringName) -> void:
 		push_error("VisualAdapter: Ability data is not valid for ability_id: %s" % ability_id)
 		return
 	
-	if ability_data is ActiveAbility:
-		var active_ability = ability_data as ActiveAbility
-		_play_animation(active_ability.animation_name)
+	# 统一处理：获取动画名称并播放（由技能自己决定动画名称）
+	var anim_name: StringName = ability_data.get_animation_name()
+	if anim_name != &"":
+		_play_animation(anim_name)
 		_current_ability_id = ability_id
-	
-	print("VisualAdapter: Ability casted: ", ability_id)
+		print("VisualAdapter: Ability casted: %s (animation: %s)" % [ability_id, anim_name])
 
 ## 能力激活时的回调（由能力组件信号触发）
 func _on_ability_activated(_ability_id: StringName) -> void:

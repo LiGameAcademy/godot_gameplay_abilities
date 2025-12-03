@@ -45,6 +45,9 @@ func get_cast_range() -> float:
 func get_channel_duration() -> float:
 	return channel_duration
 
+func get_animation_name() -> StringName:
+	return animation_name
+
 func _on_learned(_ability_comp: Node, _status_comp: Node) -> void:
 	pass
 

@@ -51,6 +51,13 @@ func commit_cast(ability_comp: Node) -> bool:
 ## 施放技能（应用效果）
 func cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> void:
 	_on_cast(ability_comp, target, context)
+	# 通知技能完成（由技能自己决定如何处理，如连击推进）
+	_on_ability_complete()
+
+## [子类可重写] 技能完成回调（在效果应用后调用）
+## 用于处理技能完成后的逻辑，如连击推进
+func _on_ability_complete() -> void:
+	pass
 
 ## 清除施法效果
 func clear_cast(ability_comp: Node, target: Node) -> void:
@@ -84,6 +91,9 @@ func get_cast_range() -> float:
 func get_channel_duration() -> float:
 	return 0.0
 
+func get_animation_name() -> StringName:
+	return &""
+
 ## [子类重写] 技能学习时的处理
 @abstract func _on_learned(ability_comp: Node, status_comp: Node) -> void
 
@@ -101,6 +111,10 @@ func get_channel_duration() -> float:
 
 ## [子类重写] 清除施法效果
 @abstract func _clear_cast(ability_comp: Node, target: Node) -> void
+
+## [子类可重写] 每帧更新（用于需要持续更新的技能，如连击计时器）
+## [param] delta: float 帧时间
+func update(_delta: float) -> void: pass
 
 ## 获取效果描述
 func get_effects_description() -> String:
