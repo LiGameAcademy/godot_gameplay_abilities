@@ -11,6 +11,10 @@ class_name GameplayAbilityComponent
 
 var _cooldown_timers: Dictionary[StringName, Timer] = {}  ## 冷却计时器
 var _learned_abilities: Dictionary[StringName, GameplayAbility] = {}  ## 已学会的技能
+## 当前正在执行的技能ID（用于后摇可取消机制）
+var _current_casting_ability_id: StringName = &""
+## 是否允许中断当前攻击（用于后摇取消机制）
+var can_interrupt_current: bool = false
 
 signal ability_learned(ability_id: StringName)				## 技能学会信号
 signal ability_forgotten(ability_id: StringName)			## 技能遗忘信号
@@ -233,6 +237,10 @@ func commit_cast(ability_id: StringName) -> bool:
 	if cooldown > 0.0:
 		start_cooldown(ability_id, cooldown)
 
+	# 设置当前正在执行的技能
+	_current_casting_ability_id = ability_id
+	can_interrupt_current = false  # 技能刚开始，不可中断（前摇锁死）
+	
 	ability_cast.emit(ability_id)
 	# 触发统一游戏事件：ability_cast
 	AbilityEventBus.trigger_game_event(&"ability_cast", {
@@ -253,6 +261,11 @@ func apply_ability_effect(ability_id: StringName, target: Node = null, context: 
 		return
 	
 	ability_data.cast(self, target, context)
+	
+	# 技能效果已应用，进入后摇阶段，允许中断
+	if _current_casting_ability_id == ability_id:
+		can_interrupt_current = true
+	
 	ability_activated.emit(ability_id)
 	# 触发统一游戏事件：ability_activated
 	AbilityEventBus.trigger_game_event(&"ability_activated", {
@@ -296,3 +309,28 @@ func _on_cooldown_timeout(ability_id: StringName) -> void:
 		"entity": get_parent(),
 		"ability_id": ability_id
 	})
+
+## 设置是否允许中断当前攻击（由 VisualAdapter 调用）
+## [param] can_interrupt: bool 是否允许中断
+func set_can_interrupt(can_interrupt: bool) -> void:
+	can_interrupt_current = can_interrupt
+
+## 检查是否可以中断当前攻击
+## [return] bool 是否可以中断
+func can_interrupt() -> bool:
+	return can_interrupt_current
+
+## 获取当前正在执行的技能ID
+## [return] StringName 当前执行的技能ID，如果为空则表示没有正在执行的技能
+func get_current_casting_ability_id() -> StringName:
+	return _current_casting_ability_id
+
+## 检查是否有正在执行的技能
+## [return] bool 是否有正在执行的技能
+func has_casting_ability() -> bool:
+	return not _current_casting_ability_id.is_empty()
+
+## 清除当前正在执行的技能（在技能完全结束时调用）
+func clear_current_casting_ability() -> void:
+	_current_casting_ability_id = &""
+	can_interrupt_current = false

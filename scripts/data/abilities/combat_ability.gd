@@ -144,7 +144,7 @@ func _can_cast(ability_comp: Node, target: Node = null, context: Dictionary = {}
 		push_warning("CombatAbility: Current combo ability is not valid")
 		return false
 	
-	# 检查当前连击能力是否可以施放
+	# 检查当前连击能力是否可以施放（包括冷却检查等）
 	return current_ability.can_cast(ability_comp, target, context)
 
 ## 重写：提交施法
