@@ -10,11 +10,13 @@ class_name ToggleAbility
 
 var is_toggled_on: bool = false  ## 技能是否处于激活状态
 
-func _can_cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> bool:
+func _can_cast(ability_comp: Node, target: Node = null, context: Dictionary = {}) -> bool:
 	# 如果已经开启，可以关闭
 	if is_toggled_on:
 		return true
 	# 否则检查正常施法条件
+	if target == null:
+		return super._can_cast(ability_comp, target, context)
 	return super._can_cast(ability_comp, target, context)
 
 func _commit_cast(ability_comp: Node) -> bool:

@@ -31,9 +31,12 @@ signal damage_received(damage_info: DamageInfo)
 signal damage_applied(damage_info: DamageInfo, final_damage: float) 
 
 ## 核心伤害应用接口
-func apply_damage(damage_info: DamageInfo, owner_entity: Node) -> void:
+## [param] damage_info: DamageInfo 伤害信息
+## [param] owner_entity: Node 拥有此 Vital 的实体
+## [return] float 最终伤害值（用于 Cue 系统）
+func apply_damage(damage_info: DamageInfo, owner_entity: Node) -> float:
 	if not is_alive:
-		return
+		return 0.0
 	
 	# 触发统一游戏事件：damage_received（在计算减免之前）
 	AbilityEventBus.trigger_game_event(&"damage_received", {
@@ -47,7 +50,7 @@ func apply_damage(damage_info: DamageInfo, owner_entity: Node) -> void:
 	
 	# 在应用伤害前被BUFF修改为0或更少
 	if damage_info.base_damage <= 0:
-		return
+		return 0.0
 	
 	# 计算最终伤害（HealthVital 本身可以作为目标）
 	var final_damage = DamageCalculator.calculate_final_damage(damage_info, _owner_comp)
@@ -70,6 +73,9 @@ func apply_damage(damage_info: DamageInfo, owner_entity: Node) -> void:
 	# 处理死亡
 	if not is_alive:
 		_die(damage_info.instigator, owner_entity)
+	
+	# 返回最终伤害值（供 Cue 系统使用）
+	return final_damage
 
 ## 受到治疗
 ## [param] amount: float 要增加的生命值数量

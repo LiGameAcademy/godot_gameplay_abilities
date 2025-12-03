@@ -32,9 +32,15 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 		return
 
 	var base_damage = attribute_comp.get_value(base_damage_attribute)
-	var final_damage = base_damage * damage_multiplier
-	var damage_info = DamageInfo.new(instigator, ability_comp, final_damage)
-	health_vital.apply_damage(damage_info, target)
+	var base_final_damage = base_damage * damage_multiplier
+	var damage_info = DamageInfo.new(instigator, ability_comp, base_final_damage)
+	
+	# 应用伤害（HealthVital 内部会计算最终伤害并返回）
+	var final_damage = health_vital.apply_damage(damage_info, target)
+	
+	# 将最终伤害值添加到上下文，供 Cue 使用
+	context["final_damage"] = final_damage
+	
 	AbilityEventBus.trigger_game_event(&"damage_applied", {
 		"target": target,
 		"instigator": instigator,

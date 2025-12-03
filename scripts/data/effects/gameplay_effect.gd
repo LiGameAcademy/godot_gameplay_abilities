@@ -11,6 +11,11 @@ class_name GameplayEffect
 
 @export var effects : Array[GameplayEffect] = [] 	## 子效果，支持效果组合
 
+@export_group("Visual Feedback")
+## 游戏提示（Cue），用于逻辑与表现分离
+## 当效果应用成功时，会执行此 Cue 来播放表现（特效、音效、飘字等）
+@export var cue: GameplayCue = null
+
 ## 应用效果
 ## [param] target: Node 目标节点
 ## [param] instigator: Node 施法者节点
@@ -18,7 +23,13 @@ class_name GameplayEffect
 func apply(target: Node, instigator: Node, context: Dictionary = {}) -> void:
 	if not _check_filters(target, instigator, context):
 		return
+	
+	# 应用效果
 	_apply(target, instigator, context)
+	
+	# 执行 Cue（逻辑与表现分离）
+	_execute_cue(target, context)
+	
 	# 递归应用子效果
 	for effect in effects:
 		effect.apply(target, instigator, context)
@@ -60,3 +71,13 @@ func _check_filters(target: Node, instigator: Node, context: Dictionary) -> bool
 ## [子类重写] 获取效果描述
 func _get_description() -> String:
 	return "No description available."
+
+## 执行 Cue（逻辑与表现分离）
+## [param] target: Node 目标节点
+## [param] context: Dictionary 上下文信息
+func _execute_cue(target: Node, context: Dictionary = {}) -> void:
+	if not is_instance_valid(cue):
+		return
+	
+	# 执行 Cue（Manager 会处理挂点计算）
+	GameplayCueManager.execute_cue(cue, target, context)
