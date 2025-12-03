@@ -48,10 +48,15 @@ func reset_combo() -> void:
 ## 推进到下一段连击
 func advance_combo() -> void:
 	_current_combo_index += 1
+	# 打印调试信息
+	print("Combo Debug: Index advanced to ", _current_combo_index, " | Array Size: ", combo_abilities.size())
+	
 	if _current_combo_index >= combo_abilities.size():
-		_current_combo_index = 0  # 循环回到第一段
-	_combo_reset_timer = 0.0
-	_is_combo_cooldown = false
+		_current_combo_index = 0
+		print("Combo Debug: Reset to 0")
+
+	var next_ability = get_current_combo_ability()
+	print("Combo Debug: Next Ability ID is: ", next_ability.ability_id)
 
 ## 重写：每帧更新（更新连击计时器）
 func update(delta: float) -> void:

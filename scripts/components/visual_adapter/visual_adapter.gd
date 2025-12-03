@@ -54,13 +54,7 @@ func play_animation(anim_name: StringName, speed: float = 1.0) -> void:
 ## [param] anim_name: StringName 动画名称
 @abstract func _play_animation(anim_name: StringName, speed: float = 1.0) -> void
 
-## 动画事件回调（内部实现）
-## [param] event_name: String 事件名称
-## [param] _data: Variant 事件数据
-func _on_animation_event(event_name: StringName, data: Dictionary = {}) -> void:
-	# 如果事件名是技能生效点，则执行技能效果
-	if event_name != _ability_event_name:
-		return
+func _on_animation_ability_activated(data: Dictionary = {}) -> void:
 	
 	if _current_ability_id.is_empty():
 		return
@@ -78,7 +72,17 @@ func _on_animation_event(event_name: StringName, data: Dictionary = {}) -> void:
 	_ability_component.apply_ability_effect(_current_ability_id, null, context)
 	
 	_current_ability_id = &""
-	print("VisualAdapter: Ability effect applied: %s on animation event: %s" % [_current_ability_id, event_name])
+	print("VisualAdapter: Ability effect applied: %s on animation event: ability_activated" % [_current_ability_id])
+
+## 动画事件回调（内部实现）
+## [param] event_name: String 事件名称
+## [param] _data: Variant 事件数据
+func _on_animation_event(event_name: StringName, data: Dictionary = {}) -> void:
+	# 如果事件名是技能生效点，则执行技能效果
+	if event_name != _ability_event_name:
+		return
+
+	_on_animation_ability_activated(data)
 
 ## 获取角色面朝角度（子类可重写）
 ## [return] float 面朝角度（弧度）
