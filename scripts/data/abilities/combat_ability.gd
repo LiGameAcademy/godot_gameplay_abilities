@@ -18,6 +18,8 @@ var _current_combo_index: int = 0
 var _combo_reset_timer: float = 0.0
 ## 是否正在连击冷却中
 var _is_combo_cooldown: bool = false
+## 兜底计时器（防止动画事件丢失导致卡死）
+var _fail_safe_timer: SceneTreeTimer = null
 
 func _init() -> void:
 	# 连击技能默认不需要目标
@@ -48,15 +50,10 @@ func reset_combo() -> void:
 ## 推进到下一段连击
 func advance_combo() -> void:
 	_current_combo_index += 1
-	# 打印调试信息
-	print("Combo Debug: Index advanced to ", _current_combo_index, " | Array Size: ", combo_abilities.size())
-	
 	if _current_combo_index >= combo_abilities.size():
-		_current_combo_index = 0
-		print("Combo Debug: Reset to 0")
-
-	var next_ability = get_current_combo_ability()
-	print("Combo Debug: Next Ability ID is: ", next_ability.ability_id)
+		_current_combo_index = 0  # 循环回到第一段
+	_combo_reset_timer = 0.0
+	_is_combo_cooldown = false
 
 ## 重写：每帧更新（更新连击计时器）
 func update(delta: float) -> void:
@@ -180,10 +177,36 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 	# 执行当前连击能力
 	current_ability.cast(ability_comp, input_target, context)
 	
+	# 【兜底机制】防止动画事件丢失导致卡死
+	# 计算最大等待时间：动画时长 + 0.5秒容错
+	var max_wait_time = current_ability.get_cast_duration() + 0.5
+	if max_wait_time > 0.0:
+		# 取消之前的兜底计时器（如果存在）
+		if is_instance_valid(_fail_safe_timer):
+			_fail_safe_timer.timeout.disconnect(_on_fail_safe_timeout)
+		
+		# 创建新的兜底计时器
+		if is_instance_valid(ability_comp) and ability_comp.get_tree():
+			_fail_safe_timer = ability_comp.get_tree().create_timer(max_wait_time)
+			_fail_safe_timer.timeout.connect(_on_fail_safe_timeout)
+	
 	# 推进到下一段（在动画事件触发后，由外部调用 advance_combo）
 	# 这里不自动推进，等待动画事件或超时
 
 ## 重写：技能完成回调（在效果应用后调用）
 ## 用于推进到下一段连击
 func _on_ability_complete() -> void:
+	# 取消兜底计时器（动画事件正常触发了）
+	if is_instance_valid(_fail_safe_timer):
+		_fail_safe_timer.timeout.disconnect(_on_fail_safe_timeout)
+		_fail_safe_timer = null
+	
 	advance_combo()
+
+## 兜底机制：动画事件丢失时的强制处理
+func _on_fail_safe_timeout() -> void:
+	if _is_combo_cooldown:
+		push_warning("CombatAbility: Animation event missed! Forcing combo advance. Current index: %d" % _current_combo_index)
+		# 强制推进连击（或重置）
+		advance_combo()
+	_fail_safe_timer = null
