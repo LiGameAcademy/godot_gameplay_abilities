@@ -91,6 +91,10 @@ func get_cast_range() -> float:
 func get_channel_duration() -> float:
 	return 0.0
 
+## 获取冷却时间
+func get_cooldown_duration() -> float:
+	return 0.0
+
 func get_animation_name() -> StringName:
 	return &""
 

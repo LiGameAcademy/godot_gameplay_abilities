@@ -45,6 +45,9 @@ func get_cast_range() -> float:
 func get_channel_duration() -> float:
 	return channel_duration
 
+func get_cooldown_duration() -> float:
+	return cooldown_duration
+
 func get_animation_name() -> StringName:
 	return animation_name
 

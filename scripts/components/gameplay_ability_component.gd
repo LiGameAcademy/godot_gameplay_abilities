@@ -229,12 +229,7 @@ func commit_cast(ability_id: StringName) -> bool:
 		return false
 	
 	# 获取冷却时间（使用方法，支持 CombatAbility 重写）
-	var cooldown = 0.0
-	if ability_data is ActiveAbility:
-		cooldown = ability_data.get_cooldown_duration()
-	else:
-		cooldown = ability_data.get_cooldown_duration()
-	
+	var cooldown = ability_data.get_cooldown_duration()
 	if cooldown > 0.0:
 		start_cooldown(ability_id, cooldown)
 
@@ -281,11 +276,10 @@ func _create_cooldown_timer(ability_id: StringName) -> Timer:
 	if not is_instance_valid(ability_data):
 		return null
 	
-	# 对于主动技能，检查冷却时间
-	if ability_data is ActiveAbility:
-		var active_ability = ability_data as ActiveAbility
-		if active_ability.cooldown_duration <= 0.0:
-			return null
+	# 使用 get_cooldown_duration() 方法获取冷却时间（支持 CombatAbility 重写）
+	var cooldown = ability_data.get_cooldown_duration()
+	if cooldown <= 0.0:
+		return null
 	
 	var timer = Timer.new()
 	timer.name = "CooldownTimer_%s" % ability_id
