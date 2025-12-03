@@ -11,7 +11,11 @@ class_name GameplayAttributeComponent
 var _attributes: Dictionary[StringName, GameplayAttributeInstance] = {}
 # 记录活跃的 Set，用于触发依赖逻辑
 
+## 当前等级（用于计算 ScalableValue）
+var current_level: int = 1 : set = _set_current_level
+
 signal attribute_value_changed(id: StringName, new_val: float)
+signal level_changed(old_level: int, new_level: int)
 
 ## 初始化属性组件
 ## [param] sets: Array[GameplayAttributeSet] 属性集数组
@@ -60,11 +64,27 @@ func _register_instance(id: StringName, instance: GameplayAttributeInstance) -> 
 	if has_attribute(id):
 		push_warning("Attribute with id %s already registered" % id)
 	_attributes[id] = instance
+	
+	# 设置实例的等级（用于 ScalableValue 计算）
+	instance.current_level = current_level
+	
 	# 转发信号
 	instance.value_changed.connect(func(old, new): 
 		attribute_value_changed.emit(id, new)
 		_handle_dependency(id, new)
 	)
+
+## 获取当前等级
+func get_level() -> int:
+	return current_level
+
+## 设置等级（公共接口）
+func set_level(level: int) -> void:
+	_set_current_level(level)
+
+## 提升等级
+func level_up(level: int = 1) -> void:
+	_set_current_level(current_level + level)
 
 # --- 依赖处理 ---
 func _handle_dependency(attr_id: StringName, new_val: float):
@@ -75,3 +95,16 @@ func _handle_dependency(attr_id: StringName, new_val: float):
 	# 通知所有 Set，看看有没有人关心这个属性的变化
 	for set in _active_sets:
 		set.on_attribute_changed(self, attr_id, new_val)
+
+## 设置等级（会更新所有使用 ScalableValue 的属性）
+func _set_current_level(level: int) -> void:
+	if current_level == level: return
+	var old_level = current_level
+	current_level = max(1, level)
+	
+	# 更新所有使用 ScalableValue 的属性实例
+	for instance in _attributes.values():
+		if is_instance_valid(instance):
+			instance.current_level = current_level
+	
+	level_changed.emit(old_level, current_level)

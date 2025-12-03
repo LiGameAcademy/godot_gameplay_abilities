@@ -11,6 +11,12 @@ var attribute_def: GameplayAttribute
 var base_value: float = 0.0 : set = _set_base_value
 var _modifiers: Array[GameplayAttributeModifier] = []
 
+# --- 等级成长支持 ---
+## 可扩展数值（如果设置，会基于等级计算 base_value）
+var scalable_value: ScalableValue = null
+## 当前等级（用于计算 scalable_value）
+var current_level: int = 1 : set = _set_current_level
+
 # --- 缓存与脏标记 (性能优化) ---
 var _dirty: bool = true
 var _cached_final_value: float = 0.0
@@ -19,14 +25,27 @@ var _cached_final_value: float = 0.0
 # 仅在最终值实际改变时发出
 signal value_changed(old_val: float, new_val: float)
 
-func _init(definition: GameplayAttribute, initial_value: float):
+func _init(definition: GameplayAttribute, initial_value: float, p_scalable_value: ScalableValue = null) -> void:
 	attribute_def = definition
-	base_value = initial_value
+	scalable_value = p_scalable_value
+	
+	# 如果设置了 scalable_value，使用它计算初始值
+	if is_instance_valid(scalable_value):
+		base_value = scalable_value.get_value_at_level(current_level)
+	else:
+		base_value = initial_value
 
 func get_value() -> float:
 	if _dirty:
 		_recalculate_value()
 	return _cached_final_value
+
+## 设置可扩展数值（会重新计算 base_value）
+func set_scalable_value(value: ScalableValue) -> void:
+	scalable_value = value
+	if is_instance_valid(scalable_value):
+		base_value = scalable_value.get_value_at_level(current_level)
+		_on_data_changed()
 
 # --- 修改器管理 ---
 func add_modifier(mod: GameplayAttributeModifier) -> void:
@@ -42,6 +61,22 @@ func _set_base_value(val: float) -> void:
 	if base_value == val: return
 	base_value = val
 	_on_data_changed()
+
+## 设置等级（会重新计算 base_value）
+func _set_current_level(level: int) -> void:
+	if current_level == level: return
+	current_level = max(1, level)  # 等级至少为 1
+	
+	# 如果设置了 scalable_value，重新计算 base_value
+	if is_instance_valid(scalable_value):
+		var old_base = base_value
+		base_value = scalable_value.get_value_at_level(current_level)
+		# 如果 base_value 变化，触发重新计算
+		if not is_equal_approx(old_base, base_value):
+			_on_data_changed()
+	else:
+		# 没有 scalable_value，只更新等级标记
+		_on_data_changed()
 
 # --- 核心计算逻辑 (Lazy Evaluation) ---
 func _recalculate_value() -> void:
