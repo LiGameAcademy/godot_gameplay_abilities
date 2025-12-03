@@ -16,6 +16,12 @@ class_name ActiveAbility
 @export var target_filters: Array[GameplayFilterData] = []  ## 技能目标过滤器
 @export var indicator_data: TargetIndicatorData = null  ## 目标指示器数据
 
+@export_group("Hit Detection")
+## 命中检测器（用于动画关键帧触发时的目标检测）
+## 如果设置了此检测器，能力系统会在动画关键帧时主动调用它来获取目标
+## 适用于：普通攻击、需要精确时机检测的技能
+@export var hit_detector: HitDetectorBase = null
+
 var _is_autocast: bool = false  ## 技能是否自动施法
 
 func can_autocast() -> bool:
@@ -45,68 +51,69 @@ func _on_learned(_ability_comp: Node, _status_comp: Node) -> void:
 func _on_forgotten(_ability_comp: Node, _status_comp: Node) -> void:
 	pass
 
-func _can_cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> bool:
-	if not is_instance_valid(ability_comp) or not is_instance_valid(target): 
+## 检查是否可以施法
+func _can_cast(ability_comp: Node, target: Node = null, context: Dictionary = {}) -> bool:
+	if not is_instance_valid(ability_comp): 
+		push_error("ActiveAbility: Ability %s can not cast." % ability_id)
 		return false
 	
-	# 检查魔法值（使用鸭子类型）
-	if ability_comp.has_method("get_mana"):
-		if ability_comp.get_mana() < mana_cost: 
-			return false
-	
-	# 检查技能冷却（使用鸭子类型）
-	if ability_comp.has_method("is_cooldown_ready"):
-		if not ability_comp.is_cooldown_ready(ability_id): 
-			return false
-	
-	# 检查目标过滤器
-	for filter in target_filters:
-		if not filter.check(target, ability_comp.get_parent() if ability_comp.has_method("get_parent") else null, context): 
-			return false
-	
+	#TODO 消耗资源
+
+	#TODO 开始冷却
+
+	#TODO 检查目标过滤器
+
 	return true
 
 func _commit_cast(ability_comp: Node) -> bool:
-	# 消耗资源（使用鸭子类型）
-	if ability_comp.has_method("try_spend_mana"):
-		if not ability_comp.try_spend_mana(mana_cost):
-			return false
-	
-	# 开始冷却（使用鸭子类型）
-	if ability_comp.has_method("start_cooldown"):
-		ability_comp.start_cooldown(ability_id, cooldown_duration)
-	
-	# 播放动画（可选，由业务层实现）
-	_play_animation(ability_comp.get_parent() if ability_comp.has_method("get_parent") else null)
+	#TODO 消耗资源
+
+	#TODO 开始冷却
 	
 	return true
 
-func _on_cast(ability_comp: Node, target: Node, _context: Dictionary = {}) -> void:
-	if not is_instance_valid(target):
-		return
+func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
+	var instigator = ability_comp.get_parent()
 	
-	# 使用鸭子类型查询GameplayStatusComponent
-	var target_status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
-	if not is_instance_valid(target_status_comp): 
-		return
+	# 1. 定义最终受击目标列表
+	var final_targets: Array[Node] = []
 	
-	# 应用状态
-	if is_instance_valid(status_to_apply) and target_status_comp.has_method("apply_status"):
-		var instigator = ability_comp.get_parent() if ability_comp.has_method("get_parent") else null
-		target_status_comp.apply_status(status_to_apply, instigator)
+	# 2. 如果有检测器（普攻/AOE），优先使用检测器结果
+	if hit_detector:
+		final_targets = hit_detector.get_targets(instigator, context)
+
+	# 3. 如果没有检测器，但有指定目标（指向性技能），则使用指定目标
+	elif is_instance_valid(input_target):
+		final_targets.append(input_target)
+		
+	# 4. 遍历所有受害者应用效果
+	for victim in final_targets:
+		if not is_instance_valid(victim): continue
+		
+		# 可以在这里做阵营筛选 (Team Check)
+		# if not is_enemy(instigator, victim): continue
+		
+		for effect in effects:
+			if is_instance_valid(effect):
+				# 注意：这里是对 victim 应用效果
+				effect.apply(victim, instigator, context)
 
 func _clear_cast(_ability_comp: Node, target: Node) -> void:
 	if not is_instance_valid(target):
 		return
 	
-	# 使用鸭子类型查询GameplayStatusComponent
-	var target_status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
-	if not is_instance_valid(target_status_comp): 
-		return
+	var instigator = _ability_comp.get_parent() if _ability_comp.has_method("get_parent") else null
 	
-	# 移除状态
-	if is_instance_valid(status_to_apply) and target_status_comp.has_method("remove_status"):
-		target_status_comp.remove_status(status_to_apply.status_id)
+	# 1. 移除直接应用的效果（如果有需要移除的效果）
+	for effect in effects:
+		if is_instance_valid(effect):
+			effect.remove(target, instigator)
+	
+	# 2. 移除状态（可选，向后兼容）
+	if is_instance_valid(status_to_apply):
+		var target_status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
+		if is_instance_valid(target_status_comp) and target_status_comp.has_method("remove_status"):
+			target_status_comp.remove_status(status_to_apply.status_id)
 
 func _play_animation(owner_entity: Node) -> void:
 	# 动画播放由业务层实现，这里只提供接口
@@ -116,4 +123,3 @@ func _play_animation(owner_entity: Node) -> void:
 	
 	# 发送技能施放事件
 	AbilityEventBus.emit_ability_activated(owner_entity, ability_id)
-

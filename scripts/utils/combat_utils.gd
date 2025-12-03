@@ -7,7 +7,7 @@ extends Node
 ## 解决物理检测返回collider，但需要找到拥有组件的实体根节点的问题
 ## [param] collider: Node 碰撞体节点（可能是CollisionShape3D、Area3D等）
 ## [return] Node 实体根节点（拥有战斗组件的节点），如果找不到则返回null
-static func get_entity_from_collider(collider: Node) -> Node:
+func get_entity_from_collider(collider: Node) -> Node:
 	if not is_instance_valid(collider):
 		return null
 	
@@ -51,7 +51,7 @@ static func get_entity_from_collider(collider: Node) -> Node:
 ## 从节点获取实体根节点
 ## [param] node: Node 任意节点
 ## [return] Node 实体根节点
-static func get_entity_from_node(node: Node) -> Node:
+func get_entity_from_node(node: Node) -> Node:
 	if not is_instance_valid(node):
 		return null
 	
@@ -74,7 +74,7 @@ static func get_entity_from_node(node: Node) -> Node:
 	return node
 
 ## 检查节点是否有战斗组件（使用鸭子类型）
-static func _has_combat_component(node: Node) -> bool:
+func _has_combat_component(node: Node) -> bool:
 	if not is_instance_valid(node):
 		return false
 	
@@ -83,7 +83,8 @@ static func _has_combat_component(node: Node) -> bool:
 		"HealthComponent",
 		"GameplayAttributeComponent",
 		"GameplayStatusComponent",
-		"GameplayAbilityComponent"
+		"GameplayAbilityComponent",
+		"GameplayVitalAbilityComponent"
 	]
 	
 	for comp_name in components:
@@ -95,7 +96,7 @@ static func _has_combat_component(node: Node) -> bool:
 ## 获取节点的3D位置
 ## [param] node: Node 节点
 ## [return] Vector3 3D位置，如果节点不是Node3D则返回Vector3.ZERO
-static func get_node_3d_position(node: Node) -> Vector3:
+func get_node_3d_position(node: Node) -> Vector3:
 	if node is Node3D:
 		return (node as Node3D).global_position
 	
@@ -111,7 +112,7 @@ static func get_node_3d_position(node: Node) -> Vector3:
 ## [param] to_node: Node 目标节点
 ## [param] layer_mask: int 碰撞遮罩
 ## [return] bool 是否有视线
-static func has_line_of_sight(from_node: Node, to_node: Node, layer_mask: int = 1) -> bool:
+func has_line_of_sight(from_node: Node, to_node: Node, layer_mask: int = 1) -> bool:
 	var from_pos = get_node_3d_position(from_node)
 	var to_pos = get_node_3d_position(to_node)
 	

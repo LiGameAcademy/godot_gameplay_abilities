@@ -22,8 +22,15 @@ enum TargetingType {
 
 @export var targeting_scorer: TargetingScorer = null   ## 目标评分器
 
-@export_group("Effect")
-@export var status_to_apply: GameplayStatusData = null     ## 技能应用的状态
+@export_group("Effects")
+## 技能直接应用的效果（组合模式）
+## 这些效果会立即应用到目标，不需要通过状态
+@export var effects: Array[GameplayEffect] = []
+
+@export_group("Status (Optional)")
+## 技能应用的状态（可选，用于需要持续时间的 Buff/Debuff）
+## 如果同时设置了 effects 和 status_to_apply，两者都会生效
+@export var status_to_apply: GameplayStatusData = null
 
 ## 技能学习时调用
 func on_learned(ability_comp: Node, status_comp: Node) -> void:
@@ -95,3 +102,12 @@ func get_channel_duration() -> float:
 ## [子类重写] 清除施法效果
 @abstract func _clear_cast(ability_comp: Node, target: Node) -> void
 
+## 获取效果描述
+func get_effects_description() -> String:
+	var descriptions: Array[String] = []
+	for effect in effects:
+		if is_instance_valid(effect):
+			descriptions.append(effect.get_description())
+	if is_instance_valid(status_to_apply):
+		descriptions.append("Apply status: %s" % status_to_apply.status_display_name)
+	return "\n".join(descriptions)

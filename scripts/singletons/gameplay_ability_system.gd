@@ -32,7 +32,7 @@ func get_component_by_interface(entity: Node, component_name: String) -> Node:
 	var method_name : String = "get_" + component_name.to_snake_case()
 	if entity.has_method(method_name):
 		return entity.call(method_name)
-	elif entity.get_node(component_name):
+	elif entity.has_node(component_name):
 		return entity.get_node(component_name)
 	
 	# 遍历所有子节点，查找具有指定方法的组件（鸭子类型）

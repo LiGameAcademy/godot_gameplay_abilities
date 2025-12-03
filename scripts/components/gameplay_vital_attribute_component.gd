@@ -16,7 +16,6 @@ signal vital_value_changed(vital_id: StringName, current: float, max: float, per
 signal vital_depleted(vital_id: StringName)
 
 func _ready() -> void:
-	super()
 	# 确保开启 process 以处理 Vital 恢复
 	set_process(true)
 
@@ -29,13 +28,12 @@ func _process(delta: float) -> void:
 ## 初始化组件（扩展父类方法）
 ## [param] sets: Array[GameplayAttributeSet] 属性集数组
 ## [param] vitals: Array[GameplayVital] Vital 数组
-func initialize(sets: Array[GameplayAttributeSet], vitals: Array[GameplayVital] = []) -> void:
+func initialize(sets: Array[GameplayAttributeSet] = [], vitals: Array[GameplayVital] = []) -> void:
 	# 先初始化属性系统
-	super.initialize(sets)
+	super(sets)
 	
 	# 再初始化 Vitals
-	if not vitals.is_empty():
-		_initialize_vitals(vitals)
+	_initialize_vitals(vitals)
 
 ## 初始化 Vitals
 ## [param] vitals: Array[GameplayVital] Vital 模板数组
@@ -173,7 +171,7 @@ func register_vital(vital: GameplayVital) -> bool:
 ## [param] current: float 当前值
 ## [param] max: float 最大值
 ## [param] percent: float 百分比
-func _on_vital_value_changed(vital_id: StringName, current: float, max: float, percent: float) -> void:
+func _on_vital_value_changed(current: float, max: float, percent: float, vital_id: StringName) -> void:
 	vital_value_changed.emit(vital_id, current, max, percent)
 
 ## Vital 耗尽回调

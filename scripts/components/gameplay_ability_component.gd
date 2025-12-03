@@ -6,21 +6,19 @@ class_name GameplayAbilityComponent
 
 @export var initial_abilities: Array[GameplayAbility] = []  ## 初始技能列表
 
-var _status_comp: Node = null  ## 状态组件（采用鸭子类型）
-var _mana_comp: Node = null  ## 法力组件（采用鸭子类型）
+@export var _status_comp: GameplayStatusComponent = null  ## 状态组件
+@export var _attribute_comp: GameplayVitalAttributeComponent = null  ## 属性组件
+
 var _cooldown_timers: Dictionary[StringName, Timer] = {}  ## 冷却计时器
 var _learned_abilities: Dictionary[StringName, GameplayAbility] = {}  ## 已学会的技能
 
-signal ability_learned(ability_id: StringName)
-signal ability_forgotten(ability_id: StringName)
-signal ability_cast(ability_id: StringName, target: Node)
-signal cooldown_ready(ability_id: StringName)
+signal ability_learned(ability_id: StringName)				## 技能学会信号
+signal ability_forgotten(ability_id: StringName)			## 技能遗忘信号
+signal ability_cast(ability_id: StringName)					## 技能施放信号
+signal ability_activated(ability_id: StringName)			## 技能生效信号
+signal cooldown_ready(ability_id: StringName)				## 冷却就绪信号
 
 func _ready() -> void:
-	# 使用鸭子类型查询组件
-	_status_comp = GameplayAbilitySystem.get_component_by_interface(get_parent(), "GameplayStatusComponent")
-	_mana_comp = GameplayAbilitySystem.get_component_by_interface(get_parent(), "ManaComponent")
-	
 	# 学习初始技能
 	for ability_data in initial_abilities:
 		learn_ability(ability_data)
@@ -120,11 +118,13 @@ func start_cooldown(ability_id: StringName, duration: float) -> void:
 ## [param] ability_id: StringName 技能ID
 ## [param] target: Node 目标
 ## [param] context: Dictionary 上下文信息
-func can_cast(ability_id: StringName, target: Node, context: Dictionary = {}) -> bool:
+func can_cast(ability_id: StringName, target: Node = null, context: Dictionary = {}) -> bool:
 	var ability_data = get_ability_data(ability_id)
 	if not is_instance_valid(ability_data):
+		push_error("GameplayAbilityComponent: Ability %s not found." % ability_id)
 		return false  # 没学会
 	if ability_data.disabled:
+		print("GameplayAbilityComponent: Ability %s is disabled." % ability_id)
 		return false  # 技能禁用
 	
 	return ability_data.can_cast(self, target, context)
@@ -181,53 +181,44 @@ func toggle_autocast(ability_id: StringName) -> void:
 		return
 	ability_data.toggle_autocast()
 
-## 获取当前法力值
-func get_mana() -> float:
-	if not is_instance_valid(_mana_comp):
-		return 0.0
-	if _mana_comp.has_method("get_current_value"):
-		return _mana_comp.get_current_value()
-	return 0.0
-
-## 尝试消耗法力
-## [param] amount: float 消耗量
-func try_spend_mana(amount: float) -> bool:
-	if not is_instance_valid(_mana_comp):
-		return false
-	if _mana_comp.has_method("try_spend_mana"):
-		return _mana_comp.try_spend_mana(amount)
-	return false
-
 ## 提交施法（消耗资源，让技能进入冷却）
 ## [param] ability_id: StringName 技能ID
 func commit_cast(ability_id: StringName) -> bool:
 	var ability_data = get_ability_data(ability_id)
 	if not is_instance_valid(ability_data): 
+		push_error("GameplayAbilityComponent: Ability %s not found." % ability_id)
 		return false
 	
 	if not ability_data.commit_cast(self):
+		push_error("GameplayAbilityComponent: Ability %s commit cast failed." % ability_id)
 		return false
+
+	ability_cast.emit(ability_id)
+	# 触发统一游戏事件：ability_cast
+	AbilityEventBus.trigger_game_event(&"ability_cast", {
+		"entity": get_parent(),
+		"ability_id": ability_id,
+	})
+	print("AbilityComponent: ability commit casted: ", ability_id)
 	return true
 
 ## 应用技能效果
 ## [param] ability_id: StringName 技能ID
 ## [param] target: Node 目标
 ## [param] context: Dictionary 上下文信息
-func apply_ability_effect(ability_id: StringName, target: Node, context: Dictionary = {}) -> void:
+func apply_ability_effect(ability_id: StringName, target: Node = null, context: Dictionary = {}) -> void:
 	var ability_data = get_ability_data(ability_id)
 	if not is_instance_valid(ability_data): 
+		push_error("GameplayAbilityComponent: Ability data is not valid")
 		return
 	
 	ability_data.cast(self, target, context)
-	ability_cast.emit(ability_id, target)
-		# 触发统一游戏事件：ability_activated
+	ability_activated.emit(ability_id)
+	# 触发统一游戏事件：ability_activated
 	AbilityEventBus.trigger_game_event(&"ability_activated", {
 		"entity": get_parent(),
 		"ability_id": ability_id
 	})
-	
-	# 同时发送细粒度事件（向后兼容）
-	#AbilityEventBus.emit_ability_activated(get_parent(), ability_id)
 
 ## 清除技能效果
 ## [param] ability_id: StringName 技能ID
@@ -261,11 +252,8 @@ func _create_cooldown_timer(ability_id: StringName) -> Timer:
 ## 冷却时间到期
 func _on_cooldown_timeout(ability_id: StringName) -> void:
 	cooldown_ready.emit(ability_id)
-		# 触发统一游戏事件：ability_cooldown_ready
+	# 触发统一游戏事件：ability_cooldown_ready
 	AbilityEventBus.trigger_game_event(&"ability_cooldown_ready", {
 		"entity": get_parent(),
 		"ability_id": ability_id
 	})
-	
-	# 同时发送细粒度事件（向后兼容）
-	#AbilityEventBus.emit_ability_cooldown_ready(get_parent(), ability_id)

@@ -13,22 +13,19 @@ var _attributes: Dictionary[StringName, GameplayAttributeInstance] = {}
 
 signal attribute_value_changed(id: StringName, new_val: float)
 
-func _ready() -> void:
-	pass  # 基础组件不需要 process，由子类决定
-
 ## 初始化属性组件
 ## [param] sets: Array[GameplayAttributeSet] 属性集数组
-func initialize(sets: Array[GameplayAttributeSet]) -> void:
+func initialize(sets: Array[GameplayAttributeSet] = []) -> void:
 	if not sets.is_empty():
 		_active_sets = sets.duplicate(true)
 	# 1. 先注册所有属性 (此时属性实例尚未创建，无法互相读取)
-	for set in _active_sets:
-		var new_instances = set.instantiate_attributes()
+	for atr_set in _active_sets:
+		var new_instances = atr_set.instantiate_attributes()
 		for id in new_instances:
 			_register_instance(id, new_instances[id])
 	# 2. 再处理依赖关系 (此时所有属性都已存在，可以互相读取)
-	for set in _active_sets:
-		set.resolve_dependencies(self)
+	for atr_set in _active_sets:
+		atr_set.resolve_dependencies(self)
 
 # --- Public API ---
 

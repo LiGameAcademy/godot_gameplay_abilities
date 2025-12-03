@@ -16,6 +16,8 @@ class_name HitDetectorBase
 ##   - "target_unit": Node 锁定目标（用于指向性技能）
 ##   - "detection_radius": float 检测半径（可选覆盖）
 ##   - "collision_mask": int 碰撞遮罩（物理检测时使用）
+##   - "facing_angle": float 面朝角度（弧度，用于近战攻击盒等）
+##   - "facing_direction": Vector3 面朝方向向量（用于近战攻击盒等）
 ## [return] Array[Node] 检测到的目标实体列表（已转换为实体根节点）
 func get_targets(caster: Node3D, context: Dictionary = {}) -> Array[Node]:
 	return _get_targets(caster, context)
