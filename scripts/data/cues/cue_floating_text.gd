@@ -7,8 +7,9 @@ class_name CueFloatingText
 @export_group("Text Settings")
 ## 飘字文本颜色
 @export var text_color: Color = Color.WHITE
+@export var pixel_size: float = 0.02
 ## 飘字字体大小
-@export var text_font_size: int = 24
+@export var text_font_size: int = 48
 ## 飘字向上移动的距离
 @export var text_float_distance: float = 2.0
 ## 飘字持续时间（秒）
@@ -41,26 +42,23 @@ func _execute(target: Node, location: Vector3, context: Dictionary) -> void:
 	
 	text_node.text = text_content
 	text_node.modulate = text_color
+	text_node.pixel_size = pixel_size
 	
 	# 设置字体大小
 	if text_node.has_method("add_theme_font_size_override"):
 		text_node.add_theme_font_size_override("font_size", text_font_size)
 	
-	# 设置位置
-	text_node.global_position = location
-	
-	# 添加到场景树
+	# 先添加到场景树，然后才能设置 global_position
 	var root = Engine.get_main_loop().root
-	if not is_instance_valid(root):
-		push_warning("CueFloatingText: Cannot show floating text, no valid root node")
-		_recycle_text_node(text_node)
-		return
 	if not is_instance_valid(root):
 		push_warning("CueFloatingText: Cannot show floating text, no valid root node")
 		_recycle_text_node(text_node)
 		return
 	
 	root.add_child(text_node)
+	
+	# 现在可以安全地设置 global_position（节点已在场景树中）
+	text_node.global_position = location
 	
 	# 播放动画
 	_play_animation(text_node)
@@ -143,4 +141,3 @@ func initialize_pool(template: PackedScene, initial_size: int = 10) -> void:
 		var text = _create_text_node()
 		if is_instance_valid(text):
 			_text_pool.append(text)
-

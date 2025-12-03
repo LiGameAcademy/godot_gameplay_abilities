@@ -15,6 +15,11 @@ class_name GameplayCueBase
 ## - "muzzle": 枪口位置
 @export var attachment_point: StringName = &"root"
 
+## 挂点偏移量（相对于挂点位置的偏移）
+## 用于微调特效/飘字的精确位置
+## 例如：飘字可以设置在头顶上方一点，使用 offset = Vector3(0, 0.2, 0)
+@export var offset: Vector3 = Vector3.ZERO
+
 ## 执行 Cue
 ## [param] target: Node 目标节点
 ## [param] location: Vector3 播放位置（已根据挂点计算）

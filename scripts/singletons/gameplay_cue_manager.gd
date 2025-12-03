@@ -34,6 +34,9 @@ func execute_cue(cue: GameplayCue, target: Node, context: Dictionary = {}) -> vo
 		# 计算挂点位置
 		var location = _get_attachment_point_position(target, cue_component.attachment_point)
 		
+		# 应用偏移量（如果配置了）
+		location += cue_component.offset
+		
 		# 初始化飘字 Cue 的对象池（如果需要）
 		if cue_component.has_method("initialize_pool"):
 			if cue_component.get("_text_template") == null and is_instance_valid(_floating_text_template):
@@ -56,8 +59,12 @@ func _get_attachment_point_position(target: Node, attachment_point: StringName) 
 		if is_instance_valid(point) and point is Node3D:
 			return (point as Node3D).global_position
 	
-	# 如果找不到挂点，返回目标节点的位置
-	push_warning("GameplayCueManager: Target %s has no attachment point %s" % [target.name, attachment_point])
+	# 否则，尝试通过常见路径查找挂点节点
+	var point_node = _find_attachment_point_node(target, attachment_point)
+	if is_instance_valid(point_node) and point_node is Node3D:
+		return (point_node as Node3D).global_position
+	
+	# 如果找不到挂点，返回目标节点的位置（不显示警告，因为这是正常情况）
 	return _get_node_3d_position(target)
 
 ## 查找挂点节点（通过常见路径）
