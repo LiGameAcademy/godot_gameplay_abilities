@@ -95,6 +95,22 @@ func is_cooldown_ready(ability_id: StringName) -> bool:
 		return true
 	return timer.time_left <= 0.0
 
+## 获取冷却进度（0.0-1.0，0.0 表示冷却完成，1.0 表示刚开始冷却）
+## [param] ability_id: StringName 技能ID
+## [return] float 冷却进度
+func get_cooldown_progress(ability_id: StringName) -> float:
+	if not _cooldown_timers.has(ability_id):
+		return 0.0  # 没有冷却，进度为 0
+	
+	var timer = _cooldown_timers[ability_id]
+	if not is_instance_valid(timer):
+		return 0.0
+	
+	if timer.wait_time <= 0.0:
+		return 0.0
+	
+	return timer.time_left / timer.wait_time
+
 ## 开始冷却
 ## [param] ability_id: StringName 技能ID
 ## [param] duration: float 冷却持续时间
@@ -126,7 +142,8 @@ func can_cast(ability_id: StringName, target: Node = null, context: Dictionary =
 	if ability_data.disabled:
 		print("GameplayAbilityComponent: Ability %s is disabled." % ability_id)
 		return false  # 技能禁用
-	
+	if not is_cooldown_ready(ability_id):
+		return false  # 技能冷却中
 	return ability_data.can_cast(self, target, context)
 
 ## 获取技能数据
@@ -156,6 +173,11 @@ func enable_ability(ability_id: StringName) -> void:
 ## 获取所有技能
 func get_all_abilities() -> Array[GameplayAbility]:
 	return _learned_abilities.values()
+
+## 获取所有已学会的技能字典
+## [return] Dictionary[StringName, GameplayAbility] 技能字典
+func get_all_learned_abilities() -> Dictionary:
+	return _learned_abilities.duplicate()
 
 ## 检查是否正在自动施法
 ## [param] ability_id: StringName 技能ID
@@ -192,6 +214,11 @@ func commit_cast(ability_id: StringName) -> bool:
 	if not ability_data.commit_cast(self):
 		push_error("GameplayAbilityComponent: Ability %s commit cast failed." % ability_id)
 		return false
+
+	if not is_cooldown_ready(ability_id):
+		return false
+	
+	start_cooldown(ability_id, ability_data.cooldown_duration)
 
 	ability_cast.emit(ability_id)
 	# 触发统一游戏事件：ability_cast

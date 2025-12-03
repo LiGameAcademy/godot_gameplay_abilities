@@ -16,7 +16,7 @@ enum TargetingType {
 @export var ability_id: StringName                  ## 技能的唯一ID
 @export var ability_name: String                    ## 技能名称
 @export_multiline var description: String           ## 技能描述
-@export var icon: Texture2D                         ## 技能图标
+@export var icon: Texture                         ## 技能图标
 @export var tags: Array[StringName] = []            ## 技能标签
 @export var disabled: bool = false                  ## 技能是否禁用
 
