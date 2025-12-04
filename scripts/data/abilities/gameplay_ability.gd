@@ -129,3 +129,9 @@ func get_effects_description() -> String:
 	if is_instance_valid(status_to_apply):
 		descriptions.append("Apply status: %s" % status_to_apply.status_display_name)
 	return "\n".join(descriptions)
+
+## 获取消耗描述（用于UI显示）
+## [return] String 消耗描述文本
+func get_costs_description() -> String:
+	# 由子类实现
+	return ""

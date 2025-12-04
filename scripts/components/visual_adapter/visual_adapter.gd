@@ -125,8 +125,7 @@ func _on_ability_cast(ability_id: StringName) -> void:
 	if not is_instance_valid(ability_data):
 		push_error("VisualAdapter: Ability data is not valid for ability_id: %s" % ability_id)
 		return
-	
-	# 统一处理：获取动画名称并播放（由技能自己决定动画名称）
+		# 统一处理：获取动画名称并播放（由技能自己决定动画名称）
 	var anim_name: StringName = ability_data.get_animation_name()
 	if anim_name != &"":
 		# 【简化设计】每次技能开始时，先切换到 movement 状态
@@ -144,6 +143,15 @@ func _on_ability_cast(ability_id: StringName) -> void:
 		_play_animation(anim_name)
 		_current_ability_id = ability_id
 		print("VisualAdapter: Ability casted: %s (animation: %s)" % [ability_id, anim_name])
+	else:
+		
+		# 【立即生效技能】如果没有动画，直接应用效果并完成
+		_ability_component.apply_ability_effect(ability_id, null, {})
+		# 立即清除当前执行技能标记（因为已经完成）
+		if is_instance_valid(_ability_component) and _ability_component.has_method("clear_current_casting_ability"):
+			_ability_component.clear_current_casting_ability()
+		print("VisualAdapter: Instant cast ability applied: %s" % ability_id)
+	
 
 ## 能力激活时的回调（由能力组件信号触发）
 ## 技能激活 = 伤害判定完成 = 进入后摇阶段 = 可以中断

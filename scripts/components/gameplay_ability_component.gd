@@ -219,7 +219,7 @@ func toggle_autocast(ability_id: StringName) -> void:
 
 ## 提交施法（消耗资源，让技能进入冷却）
 ## [param] ability_id: StringName 技能ID
-func commit_cast(ability_id: StringName) -> bool:
+func commit_cast(ability_id: StringName, target: Node = null, context: Dictionary = {}) -> bool:
 	var ability_data = get_ability_data(ability_id)
 	if not is_instance_valid(ability_data): 
 		push_error("GameplayAbilityComponent: Ability %s not found." % ability_id)
@@ -247,6 +247,9 @@ func commit_cast(ability_id: StringName) -> bool:
 		"entity": get_parent(),
 		"ability_id": ability_id,
 	})
+	if ability_data.get_animation_name().is_empty():
+		apply_ability_effect(ability_id, target, context)
+	
 	print("AbilityComponent: ability commit casted: ", ability_id)
 	return true
 
