@@ -188,19 +188,8 @@ func _resolve_direction(body: Node3D, context: Dictionary) -> Vector3:
 				var facing_dir = context["facing_direction"] as Vector3
 				if facing_dir != Vector3.ZERO:
 					facing_angle = atan2(facing_dir.x, facing_dir.z)
-			else:
-				# 从目标节点的 transform 计算
-				var visuals = body.get_node_or_null("Visuals")
-				if is_instance_valid(visuals) and visuals is Node3D:
-					facing_angle = (visuals as Node3D).rotation.y
-				else:
-					facing_angle = body.rotation.y
-					if facing_angle == 0.0:
-						var forward = -body.global_transform.basis.z
-						facing_angle = atan2(forward.x, forward.z)
-			
 			var rotation_basis = Basis.from_euler(Vector3(0, facing_angle, 0))
-			dir = -rotation_basis.z
+			dir = rotation_basis.z
 		
 		DirectionType.INPUT:
 			# 获取输入向量
@@ -220,9 +209,9 @@ func _resolve_direction(body: Node3D, context: Dictionary) -> Vector3:
 				if is_instance_valid(visuals) and visuals is Node3D:
 					var facing_angle = (visuals as Node3D).rotation.y
 					var rotation_basis = Basis.from_euler(Vector3(0, facing_angle, 0))
-					dir = -rotation_basis.z
+					dir = rotation_basis.z
 				else:
-					var forward = -body.global_transform.basis.z
+					var forward = body.global_transform.basis.z
 					dir = Vector3(forward.x, 0, forward.z).normalized()
 		
 		DirectionType.MOUSE:
@@ -241,9 +230,9 @@ func _resolve_direction(body: Node3D, context: Dictionary) -> Vector3:
 				if is_instance_valid(visuals) and visuals is Node3D:
 					var facing_angle = (visuals as Node3D).rotation.y
 					var rotation_basis = Basis.from_euler(Vector3(0, facing_angle, 0))
-					dir = -rotation_basis.z
+					dir = rotation_basis.z
 				else:
-					var forward = -body.global_transform.basis.z
+					var forward = body.global_transform.basis.z
 					dir = Vector3(forward.x, 0, forward.z).normalized()
 		
 		DirectionType.CUSTOM:

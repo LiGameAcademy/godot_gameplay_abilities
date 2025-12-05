@@ -351,7 +351,7 @@ CombatEventBus.trigger_game_event(&"damage_received", {
     "damage_info": damage_info
 })
 
-CombatEventBus.trigger_game_event(&"ability_activated", {
+CombatEventBus.trigger_game_event(&"ability_completed", {
     "entity": caster,
     "ability_id": &"fireball"
 })
@@ -365,10 +365,10 @@ func _on_game_event(event_type: StringName, context: Dictionary) -> void:
             var target = context.get("target")
             var damage_info = context.get("damage_info")
             # 处理伤害事件
-        &"ability_activated":
+        &"ability_completed":
             var entity = context.get("entity")
             var ability_id = context.get("ability_id")
-            # 处理技能激活事件
+            # 处理技能完成事件
 ```
 
 #### 细粒度事件信号（向后兼容）
@@ -378,13 +378,13 @@ func _on_game_event(event_type: StringName, context: Dictionary) -> void:
 CombatEventBus.damage_dealt.connect(_on_damage_dealt)
 CombatEventBus.entity_died.connect(_on_entity_died)
 CombatEventBus.status_applied.connect(_on_status_applied)
-CombatEventBus.ability_activated.connect(_on_ability_activated)
+CombatEventBus.ability_completed.connect(_on_ability_completed)
 
 # 发送事件（通常由系统内部调用）
 CombatEventBus.emit_damage_dealt(instigator, target, damage_info, final_damage)
 CombatEventBus.emit_entity_died(entity, instigator)
 CombatEventBus.emit_status_applied(entity, status_id)
-CombatEventBus.emit_ability_activated(entity, ability_id)
+CombatEventBus.emit_ability_completed(entity, ability_id)
 ```
 
 #### 常用事件类型
@@ -393,7 +393,7 @@ CombatEventBus.emit_ability_activated(entity, ability_id)
 - `"damage_dealt"`: 造成伤害时触发，context包含 `{instigator: Node, target: Node, damage_info: DamageInfo, final_damage: float}`
 - `"entity_died"`: 实体死亡时触发，context包含 `{entity: Node, instigator: Node}`
 - `"healing_applied"`: 受到治疗时触发，context包含 `{target: Node, amount: float}`
-- `"ability_activated"`: 技能激活时触发，context包含 `{entity: Node, ability_id: StringName}`
+- `"ability_completed"`: 技能完成时触发（所有逻辑执行完毕），context包含 `{entity: Node, ability_id: StringName}`
 - `"status_applied"`: 状态应用时触发，context包含 `{entity: Node, status_id: StringName}`
 - `"status_removed"`: 状态移除时触发，context包含 `{entity: Node, status_id: StringName}`
 
@@ -432,7 +432,7 @@ EffectExecutor.execute_effects(effects, target, instigator)
 - `attribute_changed(entity, attribute_id, new_value)`
 
 **技能相关：**
-- `ability_activated(entity, ability_id)`
+- `ability_completed(entity, ability_id)`
 - `ability_failed(entity, ability_id, reason)`
 - `ability_learned(entity, ability_id)`
 - `ability_forgotten(entity, ability_id)`

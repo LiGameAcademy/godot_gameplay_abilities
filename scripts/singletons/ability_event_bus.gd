@@ -35,7 +35,7 @@ signal health_restored(entity: Node)
 signal attribute_changed(entity: Node, attribute_id: StringName, new_value: float)
 
 # 技能相关事件
-signal ability_activated(entity: Node, ability_id: StringName)
+signal ability_completed(entity: Node, ability_id: StringName)  ## 技能完成信号（所有逻辑执行完毕）
 signal ability_failed(entity: Node, ability_id: StringName, reason: String)
 signal ability_learned(entity: Node, ability_id: StringName)
 signal ability_forgotten(entity: Node, ability_id: StringName)
@@ -71,9 +71,9 @@ func emit_healing_applied(target: Node, amount: float) -> void:
 func emit_attribute_changed(entity: Node, attribute_id: StringName, new_value: float) -> void:
 	attribute_changed.emit(entity, attribute_id, new_value)
 
-## 发送技能激活事件
-func emit_ability_activated(entity: Node, ability_id: StringName) -> void:
-	ability_activated.emit(entity, ability_id)
+## 发送技能完成事件
+func emit_ability_completed(entity: Node, ability_id: StringName) -> void:
+	ability_completed.emit(entity, ability_id)
 
 ## 发送技能失败事件
 func emit_ability_failed(entity: Node, ability_id: StringName, reason: String) -> void:

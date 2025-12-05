@@ -32,6 +32,13 @@ func get_current_combo_index() -> int:
 ## 获取最大连击段数
 func get_max_combo_count() -> int:
 	return combo_abilities.size()
+	
+## 获取施法前摇时间
+func get_cast_point() -> float:
+	var current_ability = get_current_combo_ability()
+	if is_instance_valid(current_ability):
+		return current_ability.get_cast_point()
+	return super()
 
 ## 获取当前连击对应的能力
 func get_current_combo_ability() -> ActiveAbility:
@@ -83,13 +90,6 @@ func get_cast_duration() -> float:
 		return current_ability.get_cast_duration()
 	return super()
 
-## 重写：获取施法前摇时间
-func get_cast_point() -> float:
-	var current_ability = get_current_combo_ability()
-	if is_instance_valid(current_ability):
-		return current_ability.get_cast_point()
-	return super()
-
 ## 重写：获取冷却时间
 func get_cooldown_duration() -> float:
 	# 连击技能通常不需要冷却（由连击重置时间控制）
@@ -98,6 +98,14 @@ func get_cooldown_duration() -> float:
 	if is_instance_valid(current_ability):
 		return current_ability.get_cooldown_duration()
 	return 0.0
+
+## 重写：获取技能图标
+## 返回当前连击段对应的图标
+func get_icon() -> Texture:
+	var current_ability = get_current_combo_ability()
+	if is_instance_valid(current_ability):
+		return current_ability.icon
+	return icon
 
 ## 重写：获取效果描述
 ## 对于连击技能，需要遍历所有连击段并收集它们的效果描述
@@ -190,12 +198,6 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 			_fail_safe_timer = ability_comp.get_tree().create_timer(max_wait_time)
 			_fail_safe_timer.timeout.connect(_on_fail_safe_timeout)
 	
-	# 推进到下一段（在动画事件触发后，由外部调用 advance_combo）
-	# 这里不自动推进，等待动画事件或超时
-
-## 重写：技能完成回调（在效果应用后调用）
-## 用于推进到下一段连击
-func _on_ability_complete() -> void:
 	# 取消兜底计时器（动画事件正常触发了）
 	if is_instance_valid(_fail_safe_timer):
 		_fail_safe_timer.timeout.disconnect(_on_fail_safe_timeout)

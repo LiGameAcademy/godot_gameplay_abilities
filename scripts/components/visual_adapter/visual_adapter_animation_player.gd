@@ -36,7 +36,23 @@ func _play_animation(anim_name: StringName, speed: float = 1.0) -> void:
 		push_warning("AnimationPlayerVisualAdapter: Animation '%s' not found" % anim_name)
 		return
 	
-	_animation_player.play(anim_name, speed)
+	# 设置播放速度
+	_animation_player.speed_scale = speed
+	_animation_player.play(anim_name)
+
+## 获取动画时长（重写基类方法）
+func _get_animation_duration(anim_name: StringName) -> float:
+	if not is_instance_valid(_animation_player):
+		return 0.0
+	
+	if not _animation_player.has_animation(anim_name):
+		return 0.0
+	
+	var animation = _animation_player.get_animation(anim_name)
+	if not is_instance_valid(animation):
+		return 0.0
+	
+	return animation.length
 
 ## 获取动画播放器
 func get_animation_player() -> AnimationPlayer:

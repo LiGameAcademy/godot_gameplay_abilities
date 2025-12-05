@@ -34,7 +34,7 @@ func _ready() -> void:
 	
 	if is_instance_valid(_ability_component):
 		_ability_component.ability_cast.connect(_on_ability_cast)
-		_ability_component.ability_activated.connect(_on_ability_activated)
+		_ability_component.ability_completed.connect(_on_ability_completed)
 		_initialize_adapter()
 	else:
 		push_warning("VisualAdapter: Ability component not found, animation adapter will not work")
@@ -57,41 +57,27 @@ func play_animation(anim_name: StringName, speed: float = 1.0) -> void:
 ## [param] anim_name: StringName 动画名称
 @abstract func _play_animation(anim_name: StringName, speed: float = 1.0) -> void
 
+## 【已废弃】动画事件回调（逻辑驱动后不再使用）
+## 保留此方法以兼容旧代码，但不再触发技能效果
+## 技能效果现在由 GameplayAbilityComponent 的逻辑计时器控制
 func _on_animation_ability_activated(data: Dictionary = {}) -> void:
-	
+	# 【逻辑驱动重构】不再通过动画事件触发技能效果
+	# 技能效果由 GameplayAbilityComponent 的 cast_point 计时器控制
+	# 这里只保留用于调试或特殊需求
 	if _current_ability_id.is_empty():
 		return
 	
-	if not is_instance_valid(_ability_component):
-		push_warning("VisualAdapter: Cannot apply ability effect, _ability_component is not valid")
-		_current_ability_id = &""
-		return
-	
-	# 构建上下文，包含角色面朝方向
-	var context: Dictionary = data
-	context["facing_angle"] = _get_facing_angle()
-	
-	# 应用技能效果（技能系统内部会处理完成回调）
-	_ability_component.apply_ability_effect(_current_ability_id, null, context)
-	
-	var applied_ability_id = _current_ability_id
-	_current_ability_id = &""
-	
-	# 技能效果已应用，清除当前执行的技能标记
-	if is_instance_valid(_ability_component) and _ability_component.has_method("clear_current_casting_ability"):
-		_ability_component.clear_current_casting_ability()
-	
-	print("VisualAdapter: Ability effect applied: %s on animation event: ability_activated" % applied_ability_id)
+	print("VisualAdapter: Animation event 'ability_activated' received for %s (effect already handled by logic timer)" % _current_ability_id)
 
 ## 动画事件回调（内部实现）
 ## [param] event_name: String 事件名称
-## [param] _data: Variant 事件数据
+## [param] data: Dictionary 事件数据
+## 【逻辑驱动重构】动画事件现在主要用于调试或特殊需求
+## 技能效果由 GameplayAbilityComponent 的逻辑计时器控制
 func _on_animation_event(event_name: StringName, data: Dictionary = {}) -> void:
-	# 如果事件名是技能生效点，则执行技能效果
-	if event_name != _ability_event_name:
-		return
-
-	_on_animation_ability_activated(data)
+	# 如果事件名是技能生效点，记录日志（但不再触发技能效果）
+	if event_name == _ability_event_name:
+		_on_animation_ability_activated(data)
 
 ## 获取角色面朝角度（公共方法，供外部调用）
 ## [return] float 面朝角度（弧度）
@@ -122,6 +108,8 @@ func _get_facing_angle() -> float:
 	return 0.0
 
 ## 能力施放时的回调（由能力组件信号触发）
+## 【逻辑驱动重构】现在只负责播放动画，不再触发技能效果
+## 技能效果由 GameplayAbilityComponent 的逻辑计时器控制
 func _on_ability_cast(ability_id: StringName) -> void:
 	if not is_instance_valid(_ability_component):
 		return
@@ -130,7 +118,8 @@ func _on_ability_cast(ability_id: StringName) -> void:
 	if not is_instance_valid(ability_data):
 		push_error("VisualAdapter: Ability data is not valid for ability_id: %s" % ability_id)
 		return
-		# 统一处理：获取动画名称并播放（由技能自己决定动画名称）
+	
+	# 获取动画名称并播放（由技能自己决定动画名称）
 	var anim_name: StringName = ability_data.get_animation_name()
 	if anim_name != &"":
 		# 【简化设计】每次技能开始时，先切换到 movement 状态
@@ -149,25 +138,28 @@ func _on_ability_cast(ability_id: StringName) -> void:
 		_current_ability_id = ability_id
 		print("VisualAdapter: Ability casted: %s (animation: %s)" % [ability_id, anim_name])
 	else:
-		
-		# 【立即生效技能】如果没有动画，直接应用效果并完成
-		_ability_component.apply_ability_effect(ability_id, null, {})
-		# 立即清除当前执行技能标记（因为已经完成）
-		if is_instance_valid(_ability_component) and _ability_component.has_method("clear_current_casting_ability"):
-			_ability_component.clear_current_casting_ability()
-		print("VisualAdapter: Instant cast ability applied: %s" % ability_id)
+		# 没有动画的技能（瞬发技能），表现层无需处理
+		print("VisualAdapter: Instant cast ability (no animation): %s" % ability_id)
 	
 
-## 能力激活时的回调（由能力组件信号触发）
-## 技能激活 = 伤害判定完成 = 进入后摇阶段 = 可以中断
+## 能力完成时的回调（由能力组件信号触发）
+## 技能完成 = 所有逻辑执行完毕 = 进入后摇阶段 = 可以中断
 ## 注意：此时技能效果已应用，但动画可能还在播放后摇部分
-func _on_ability_activated(_ability_id: StringName) -> void:
-	print("VisualAdapter: Ability activated: ", _ability_id)
-	# 技能激活时，进入后摇阶段，允许中断
+func _on_ability_completed(_ability_id: StringName) -> void:
+	print("VisualAdapter: Ability completed: ", _ability_id)
+	# 技能完成时，进入后摇阶段，允许中断
 	can_interrupt = true
 	# 通知能力组件（解耦设计：通过能力组件作为中介）
 	if is_instance_valid(_ability_component) and _ability_component.has_method("set_can_interrupt"):
 		_ability_component.set_can_interrupt(true)
+
+## 获取动画时长（子类可重写）
+## [param] anim_name: StringName 动画名称
+## [return] float 动画时长（秒），如果无法获取则返回 0
+func _get_animation_duration(anim_name: StringName) -> float:
+	# 子类应重写此方法以获取实际动画时长
+	# 例如：从 AnimationPlayer 或 AnimationTree 获取
+	return 0.0
 
 ## 检查是否可以中断当前攻击
 ## [return] bool 是否可以中断

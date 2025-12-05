@@ -75,6 +75,30 @@ func get_costs_description() -> String:
 	
 	return "\n".join(cost_descriptions)
 
+## [重写] 获取效果描述
+func get_effects_description() -> String:
+	var descriptions: Array[String] = []
+	
+	if not caster_effects.is_empty():
+		descriptions.append("[自身]")
+		for effect in caster_effects:
+			if is_instance_valid(effect):
+				descriptions.append(effect.get_description())
+	
+	# 获取目标效果（向后兼容）
+	var effects_to_show = target_effects if not target_effects.is_empty() else effects
+	if not effects_to_show.is_empty():
+		descriptions.append("[目标]")
+		for effect in effects_to_show:
+			if is_instance_valid(effect):
+				descriptions.append(effect.get_description())
+	
+	# 状态效果
+	if is_instance_valid(status_to_apply):
+		descriptions.append("[状态] %s" % status_to_apply.status_display_name)
+	
+	return "\n".join(descriptions)
+
 func _on_learned(_ability_comp: Node, _status_comp: Node) -> void:
 	pass
 
@@ -166,7 +190,7 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 				# 传递 context 和 callback
 				effect.apply(target, instigator, context)
 
-## [新增] 封装目标获取逻辑
+## 封装目标获取逻辑
 func _resolve_targets(instigator: Node, input_target: Node, context: Dictionary) -> Array[Node]:
 	var targets: Array[Node] = []
 	
@@ -184,7 +208,7 @@ func _resolve_targets(instigator: Node, input_target: Node, context: Dictionary)
 	# 适用于：给自己加血，或者纯位移技能
 	# 注意：现在有了 caster_effects，这里的逻辑可以简化
 	if targets.is_empty():
-		if targeting_type == TargetingType.SELF_ONLY or targeting_type == TargetingType.NO_TARGET:
+		if targeting_type == TargetingType.SELF_ONLY:
 			targets.append(instigator)
 	
 	return targets
@@ -219,36 +243,3 @@ func _clear_cast(_ability_comp: Node, target: Node) -> void:
 		var target_status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
 		if is_instance_valid(target_status_comp) and target_status_comp.has_method("remove_status"):
 			target_status_comp.remove_status(status_to_apply.status_id)
-
-## [重写] 获取效果描述
-func get_effects_description() -> String:
-	var descriptions: Array[String] = []
-	
-	if not caster_effects.is_empty():
-		descriptions.append("[自身]")
-		for effect in caster_effects:
-			if is_instance_valid(effect):
-				descriptions.append(effect.get_description())
-	
-	# 获取目标效果（向后兼容）
-	var effects_to_show = target_effects if not target_effects.is_empty() else effects
-	if not effects_to_show.is_empty():
-		descriptions.append("[目标]")
-		for effect in effects_to_show:
-			if is_instance_valid(effect):
-				descriptions.append(effect.get_description())
-	
-	# 状态效果
-	if is_instance_valid(status_to_apply):
-		descriptions.append("[状态] %s" % status_to_apply.status_display_name)
-	
-	return "\n".join(descriptions)
-
-func _play_animation(owner_entity: Node) -> void:
-	# 动画播放由业务层实现，这里只提供接口
-	# 业务层可以监听技能事件来播放动画
-	if not is_instance_valid(owner_entity): 
-		return
-	
-	# 发送技能施放事件
-	AbilityEventBus.emit_ability_activated(owner_entity, ability_id)

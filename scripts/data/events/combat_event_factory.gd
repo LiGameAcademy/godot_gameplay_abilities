@@ -23,7 +23,7 @@ func _initialize_event_map() -> void:
 	_register_event(&"healing_applied", _create_healing_applied_event)
 	_register_event(&"health_restored", _create_health_restored_event)
 	_register_event(&"attribute_changed", _create_attribute_changed_event)
-	_register_event(&"ability_activated", _create_ability_activated_event)
+	_register_event(&"ability_completed", _create_ability_completed_event)
 	_register_event(&"ability_failed", _create_ability_failed_event)
 	_register_event(&"ability_learned", _create_ability_learned_event)
 	_register_event(&"ability_forgotten", _create_ability_forgotten_event)
@@ -76,8 +76,8 @@ func _create_health_restored_event(context: Dictionary) -> CombatEvent:
 func _create_attribute_changed_event(context: Dictionary) -> CombatEvent:
 	return AttributeChangedEvent.new(context)
 
-func _create_ability_activated_event(context: Dictionary) -> CombatEvent:
-	return AbilityActivatedEvent.new(context)
+func _create_ability_completed_event(context: Dictionary) -> CombatEvent:
+	return AbilityCompletedEvent.new(context)
 
 func _create_ability_failed_event(context: Dictionary) -> CombatEvent:
 	return AbilityFailedEvent.new(context)

@@ -383,8 +383,8 @@ func _on_game_event(event_type: StringName, context: Dictionary) -> void:
     match event_type:
         &"damage_received":
             _handle_damage_received(context)
-        &"ability_activated":
-            _handle_ability_activated(context)
+        &"ability_completed":
+            _handle_ability_completed(context)
 ```
 
 #### ⚠️ 向后兼容：监听细粒度信号
@@ -504,7 +504,7 @@ func _on_combat_event(event_type: StringName, context: Dictionary) -> void:
             # 处理死亡事件（例如：显示死亡动画、掉落物品等）
             _handle_entity_death(entity, instigator)
         
-        &"ability_activated":
+        &"ability_completed":
             var entity = context.get("entity")
             var ability_id = context.get("ability_id")
             # 处理技能激活（例如：播放技能特效、音效等）
@@ -531,7 +531,7 @@ func _on_entity_died(entity: Node, instigator: Node) -> void:
     # 处理死亡事件
     _handle_entity_death(entity, instigator)
 
-func _on_ability_activated(entity: Node, ability_id: StringName) -> void:
+func _on_ability_completed(entity: Node, ability_id: StringName) -> void:
     # 处理技能激活
     _play_ability_effects(entity, ability_id)
 ```
@@ -644,7 +644,7 @@ func _on_combat_event(event_type: StringName, context: Dictionary) -> void:
                 # 玩家死亡，触发游戏结束
                 game_over.emit()
         
-        &"ability_activated":
+        &"ability_completed":
             var entity = context.get("entity")
             var ability_id = context.get("ability_id")
             # 记录技能使用统计

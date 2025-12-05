@@ -34,7 +34,7 @@ enum StackingPolicy {
 
 @export_group("Event Triggers")
 ## 此状态可以响应的游戏事件类型
-## 例如: [&"damage_received", &"turn_start", &"ability_activated"]
+## 例如: [&"damage_received", &"turn_start", &"ability_completed"]
 ## 当这些事件发生时，状态会触发对应的效果
 ## 注意：效果需要设置 event_to_listen 字段才能被触发
 @export var trigger_on_events: Array[StringName] = []

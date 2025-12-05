@@ -10,6 +10,8 @@ class_name GameplayAbilityComponent
 @export var _attribute_comp: GameplayVitalAttributeComponent = null  ## 属性组件
 
 var _cooldown_timers: Dictionary[StringName, Timer] = {}  ## 冷却计时器
+var _cast_point_timers: Dictionary[StringName, SceneTreeTimer] = {}  ## 施法前摇计时器（逻辑驱动）
+var _cast_contexts: Dictionary[StringName, Dictionary] = {}  ## 存储施法上下文（target, context）
 var _learned_abilities: Dictionary[StringName, GameplayAbility] = {}  ## 已学会的技能
 ## 当前正在执行的技能ID（用于后摇可取消机制）
 var _current_casting_ability_id: StringName = &""
@@ -22,7 +24,7 @@ var _blocking_tasks_count: int = 0
 signal ability_learned(ability_id: StringName)				## 技能学会信号
 signal ability_forgotten(ability_id: StringName)			## 技能遗忘信号
 signal ability_cast(ability_id: StringName)					## 技能施放信号
-signal ability_activated(ability_id: StringName)			## 技能生效信号
+signal ability_completed(ability_id: StringName)			## 技能完成信号（所有逻辑执行完毕，进入后摇阶段）
 signal cooldown_ready(ability_id: StringName)				## 冷却就绪信号
 
 func _ready() -> void:
@@ -60,7 +62,7 @@ func learn_ability(ability_data: GameplayAbility) -> void:
 	
 	# 检查并应用被动技能
 	if is_instance_valid(_status_comp):
-		ability_data.on_learned(self, _status_comp)
+		ability_data.handle_learned(self, _status_comp)
 	
 	ability_learned.emit(ability_id)
 	# 触发统一游戏事件：ability_learned
@@ -90,7 +92,7 @@ func forget_ability(ability_id: StringName) -> void:
 	
 	# 移除被动技能效果
 	if is_instance_valid(ability_data) and is_instance_valid(_status_comp):
-		ability_data.on_forgotten(self, _status_comp)
+		ability_data.handle_forgotten(self, _status_comp)
 	
 	ability_forgotten.emit(ability_id)
 		# 触发统一游戏事件：ability_forgotten
@@ -222,6 +224,8 @@ func toggle_autocast(ability_id: StringName) -> void:
 
 ## 提交施法（消耗资源，让技能进入冷却）
 ## [param] ability_id: StringName 技能ID
+## [param] target: Node 目标节点
+## [param] context: Dictionary 上下文信息
 func commit_cast(ability_id: StringName, target: Node = null, context: Dictionary = {}) -> bool:
 	var ability_data = get_ability_data(ability_id)
 	if not is_instance_valid(ability_data): 
@@ -248,19 +252,28 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 	# 这防止了 Effect 执行太快导致技能瞬间结束，也解决了没有 Effect 时的自动结束问题
 	_blocking_tasks_count = 1
 	
+	# 1. 触发表现层（播放动画）
 	ability_cast.emit(ability_id)
 	# 触发统一游戏事件：ability_cast
 	AbilityEventBus.trigger_game_event(&"ability_cast", {
 		"entity": get_parent(),
 		"ability_id": ability_id,
 	})
-	if ability_data.get_animation_name().is_empty():
+	
+	# 2. 【逻辑驱动】获取前摇时间（cast_point）
+	var cast_point_time = ability_data.get_cast_point()
+	
+	# 3. 【分支】瞬发 vs 延迟生效
+	if cast_point_time <= 0.001:
+		# 瞬发：直接生效
 		apply_ability_effect(ability_id, target, context)
+		# 施法循环结束，移除"主锁"
+		unregister_blocking_task(ability_id)
+	else:
+		# 延迟生效：启动逻辑计时器
+		_start_cast_point_timer(ability_id, cast_point_time, target, context)
 	
-	# 施法循环结束，移除"主锁"
-	unregister_blocking_task(ability_id)
-	
-	print("AbilityComponent: ability commit casted: ", ability_id)
+	print("AbilityComponent: ability commit casted: %s (cast_point: %.3f)" % [ability_id, cast_point_time])
 	return true
 
 ## 应用技能效果
@@ -283,9 +296,9 @@ func _end_ability(ability_id: StringName) -> void:
 		# 技能逻辑完成，进入后摇阶段，允许中断
 		can_interrupt_current = true
 		
-		ability_activated.emit(ability_id)
-		# 触发统一游戏事件：ability_activated
-		AbilityEventBus.trigger_game_event(&"ability_activated", {
+		ability_completed.emit(ability_id)
+		# 触发统一游戏事件：ability_completed
+		AbilityEventBus.trigger_game_event(&"ability_completed", {
 			"entity": get_parent(),
 			"ability_id": ability_id
 		})
@@ -378,6 +391,53 @@ func clear_current_casting_ability() -> void:
 	can_interrupt_current = false
 	_blocking_tasks_count = 0
 
+## 启动前摇计时器（逻辑驱动）
+## [param] ability_id: StringName 技能ID
+## [param] time: float 前摇时间
+## [param] target: Node 目标节点
+## [param] context: Dictionary 上下文信息
+func _start_cast_point_timer(ability_id: StringName, time: float, target: Node, context: Dictionary) -> void:
+	# 先清理旧的（防止快速连点）
+	_cancel_cast_timer(ability_id)
+	
+	# 存储上下文（供计时器回调使用）
+	_cast_contexts[ability_id] = {
+		"target": target,
+		"context": context
+	}
+	
+	# 创建计时器
+	var timer = get_tree().create_timer(time)
+	_cast_point_timers[ability_id] = timer
+	
+	# 计时结束 -> 触发效果
+	timer.timeout.connect(func() -> void:
+		# 双重检查：确保没有被取消
+		if _cast_point_timers.has(ability_id) and _cast_point_timers[ability_id] == timer:
+			var saved_context = _cast_contexts.get(ability_id, {})
+			var saved_target = saved_context.get("target", null)
+			var saved_context_dict = saved_context.get("context", {})
+			
+			# 应用技能效果
+			apply_ability_effect(ability_id, saved_target, saved_context_dict)
+			
+			# 清理
+			_cast_point_timers.erase(ability_id)
+			_cast_contexts.erase(ability_id)
+			
+			# 施法循环结束，移除"主锁"
+			unregister_blocking_task(ability_id)
+	)
+
+## 取消施法计时器
+## [param] ability_id: StringName 技能ID
+func _cancel_cast_timer(ability_id: StringName) -> void:
+	if _cast_point_timers.has(ability_id):
+		# SceneTreeTimer 无法手动 stop，但我们可以从字典移除它
+		# timeout 回调里的 check 会让它失效
+		_cast_point_timers.erase(ability_id)
+		_cast_contexts.erase(ability_id)
+
 ## 强制中断当前技能
 ## [param] ability_id: StringName 技能ID（可选，如果不提供则取消当前执行的技能）
 func cancel_ability(ability_id: StringName = &"") -> void:
@@ -387,6 +447,9 @@ func cancel_ability(ability_id: StringName = &"") -> void:
 	
 	if target_id.is_empty():
 		return
+	
+	# 【关键】只要被打断，立即销毁计时器 -> 伤害永远不会打出来！
+	_cancel_cast_timer(target_id)
 	
 	var ability_data = get_ability_data(target_id)
 	if not is_instance_valid(ability_data):

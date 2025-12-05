@@ -31,12 +31,14 @@ enum TargetingType {
 ## 如果同时设置了 effects 和 status_to_apply，两者都会生效
 @export var status_to_apply: GameplayStatusData = null
 
-## 技能学习时调用
-func on_learned(ability_comp: Node, status_comp: Node) -> void:
+## 处理技能学习事件
+## 当技能被学习时，由 GameplayAbilityComponent 调用此方法
+func handle_learned(ability_comp: Node, status_comp: Node) -> void:
 	_on_learned(ability_comp, status_comp)
 
-## 技能遗忘时调用
-func on_forgotten(ability_comp: Node, status_comp: Node) -> void:
+## 处理技能遗忘事件
+## 当技能被遗忘时，由 GameplayAbilityComponent 调用此方法
+func handle_forgotten(ability_comp: Node, status_comp: Node) -> void:
 	_on_forgotten(ability_comp, status_comp)
 
 ## 检查是否可以施法
@@ -54,10 +56,25 @@ func commit_cast(ability_comp: Node) -> bool:
 func cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> void:
 	_on_cast(ability_comp, target, context)
 
-## [子类可重写] 技能完成回调（在效果应用后调用）
-## 用于处理技能完成后的逻辑，如连击推进
-func _on_ability_complete() -> void:
-	pass
+## [子类可重写] 每帧更新（用于需要持续更新的技能，如连击计时器）
+## [param] delta: float 帧时间
+func update(_delta: float) -> void: pass
+
+## 获取效果描述
+func get_effects_description() -> String:
+	var descriptions: Array[String] = []
+	for effect in effects:
+		if is_instance_valid(effect):
+			descriptions.append(effect.get_description())
+	if is_instance_valid(status_to_apply):
+		descriptions.append("Apply status: %s" % status_to_apply.status_display_name)
+	return "\n".join(descriptions)
+
+## 获取消耗描述（用于UI显示）
+## [return] String 消耗描述文本
+func get_costs_description() -> String:
+	# 由子类实现
+	return ""
 
 ## 清除施法效果
 func clear_cast(ability_comp: Node, target: Node) -> void:
@@ -83,6 +100,10 @@ func get_cast_duration() -> float:
 func get_cast_point() -> float:
 	return 0.0
 
+## 获取技能图标
+func get_icon() -> Texture:
+	return icon
+
 ## 获取施法距离
 func get_cast_range() -> float:
 	return 0.0
@@ -98,40 +119,26 @@ func get_cooldown_duration() -> float:
 func get_animation_name() -> StringName:
 	return &""
 
-## [子类重写] 技能学习时的处理
-@abstract func _on_learned(ability_comp: Node, status_comp: Node) -> void
+## [子类可重写] 技能学习时的处理
+## 默认实现为空，子类可按需重写（如 PassiveAbility 需要应用状态）
+func _on_learned(_ability_comp: Node, _status_comp: Node) -> void: pass
 
-## [子类重写] 技能遗忘时的处理
-@abstract func _on_forgotten(ability_comp: Node, status_comp: Node) -> void
+## [子类可重写] 技能遗忘时的处理
+## 默认实现为空，子类可按需重写（如 PassiveAbility 需要移除状态）
+func _on_forgotten(_ability_comp: Node, _status_comp: Node) -> void: pass
 
-## [子类重写] 检查是否可以施法
-@abstract func _can_cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> bool
+## [子类可重写] 检查是否可以施法
+## 默认返回 true，子类应重写此方法以实现具体的施法条件检查
+func _can_cast(_ability_comp: Node, _target: Node, _context: Dictionary = {}) -> bool: return true
 
-## [子类重写] 提交施法
-@abstract func _commit_cast(ability_comp: Node) -> bool
+## [子类可重写] 提交施法（消耗资源、开始冷却等）
+## 默认返回 true，子类应重写此方法以实现具体的资源消耗逻辑
+func _commit_cast(_ability_comp: Node) -> bool: return true
 
-## [子类重写] 施放技能
+## [子类可重写] 清除施法效果
+## 默认实现为空，子类可按需重写（如需要移除持续效果）
+func _clear_cast(_ability_comp: Node, _target: Node) -> void: pass
+
+## [子类必须重写] 施放技能（应用效果）
+## 这是技能系统的核心方法，所有子类都必须实现
 @abstract func _on_cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> void
-
-## [子类重写] 清除施法效果
-@abstract func _clear_cast(ability_comp: Node, target: Node) -> void
-
-## [子类可重写] 每帧更新（用于需要持续更新的技能，如连击计时器）
-## [param] delta: float 帧时间
-func update(_delta: float) -> void: pass
-
-## 获取效果描述
-func get_effects_description() -> String:
-	var descriptions: Array[String] = []
-	for effect in effects:
-		if is_instance_valid(effect):
-			descriptions.append(effect.get_description())
-	if is_instance_valid(status_to_apply):
-		descriptions.append("Apply status: %s" % status_to_apply.status_display_name)
-	return "\n".join(descriptions)
-
-## 获取消耗描述（用于UI显示）
-## [return] String 消耗描述文本
-func get_costs_description() -> String:
-	# 由子类实现
-	return ""
