@@ -49,10 +49,11 @@ func commit_cast(ability_comp: Node) -> bool:
 	return _commit_cast(ability_comp)
 
 ## 施放技能（应用效果）
+## [param] ability_comp: Node 技能组件
+## [param] target: Node 目标节点
+## [param] context: Dictionary 上下文信息（可选）
 func cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> void:
 	_on_cast(ability_comp, target, context)
-	# 通知技能完成（由技能自己决定如何处理，如连击推进）
-	_on_ability_complete()
 
 ## [子类可重写] 技能完成回调（在效果应用后调用）
 ## 用于处理技能完成后的逻辑，如连击推进

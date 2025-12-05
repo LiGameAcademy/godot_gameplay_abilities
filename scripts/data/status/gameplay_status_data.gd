@@ -24,6 +24,14 @@ enum StackingPolicy {
 ## 这个状态所包含的所有效果
 @export var effects: Array[GameplayEffect] = []
 
+@export_group("Effect Timing")
+## 周期性效果的周期时间，如果为0，则不周期性触发
+## 当 period > 0 时，所有效果会按此周期重复触发
+@export var period: float = 0.0
+## 监听的事件，如果为空，则不监听事件
+## 当 event_to_listen 不为空时，所有效果会在该事件发生时触发
+@export var event_to_listen: StringName = &""
+
 @export_group("Event Triggers")
 ## 此状态可以响应的游戏事件类型
 ## 例如: [&"damage_received", &"turn_start", &"ability_activated"]

@@ -149,6 +149,7 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 		for effect in effects:
 			if is_instance_valid(effect):
 				# 对目标应用效果（可能是受害者，也可能是施法者自己）
+				# Effect 会自己注册/注销阻塞任务
 				effect.apply(target, instigator, context)
 
 func _clear_cast(_ability_comp: Node, target: Node) -> void:

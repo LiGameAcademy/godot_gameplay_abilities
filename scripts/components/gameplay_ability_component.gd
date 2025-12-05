@@ -15,6 +15,9 @@ var _learned_abilities: Dictionary[StringName, GameplayAbility] = {}  ## 已学�
 var _current_casting_ability_id: StringName = &""
 ## 是否允许中断当前攻击（用于后摇取消机制）
 var can_interrupt_current: bool = false
+## 阻塞任务计数器（动态令牌模式）
+## 初始为 1（主锁），Effect 在运行时注册/注销
+var _blocking_tasks_count: int = 0
 
 signal ability_learned(ability_id: StringName)				## 技能学会信号
 signal ability_forgotten(ability_id: StringName)			## 技能遗忘信号
@@ -241,6 +244,10 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 	_current_casting_ability_id = ability_id
 	can_interrupt_current = false  # 技能刚开始，不可中断（前摇锁死）
 	
+	# 【核心修改】初始计数器设为 1，代表"Ability 本身的施法逻辑正在运行"
+	# 这防止了 Effect 执行太快导致技能瞬间结束，也解决了没有 Effect 时的自动结束问题
+	_blocking_tasks_count = 1
+	
 	ability_cast.emit(ability_id)
 	# 触发统一游戏事件：ability_cast
 	AbilityEventBus.trigger_game_event(&"ability_cast", {
@@ -249,6 +256,9 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 	})
 	if ability_data.get_animation_name().is_empty():
 		apply_ability_effect(ability_id, target, context)
+	
+	# 施法循环结束，移除"主锁"
+	unregister_blocking_task(ability_id)
 	
 	print("AbilityComponent: ability commit casted: ", ability_id)
 	return true
@@ -263,18 +273,25 @@ func apply_ability_effect(ability_id: StringName, target: Node = null, context: 
 		push_error("GameplayAbilityComponent: Ability data is not valid")
 		return
 	
+	# 执行技能（不再传递回调，Effect 会自己注册/注销）
 	ability_data.cast(self, target, context)
-	
-	# 技能效果已应用，进入后摇阶段，允许中断
+
+## 结束技能（内部方法）
+## [param] ability_id: StringName 技能ID
+func _end_ability(ability_id: StringName) -> void:
 	if _current_casting_ability_id == ability_id:
+		# 技能逻辑完成，进入后摇阶段，允许中断
 		can_interrupt_current = true
-	
-	ability_activated.emit(ability_id)
-	# 触发统一游戏事件：ability_activated
-	AbilityEventBus.trigger_game_event(&"ability_activated", {
-		"entity": get_parent(),
-		"ability_id": ability_id
-	})
+		
+		ability_activated.emit(ability_id)
+		# 触发统一游戏事件：ability_activated
+		AbilityEventBus.trigger_game_event(&"ability_activated", {
+			"entity": get_parent(),
+			"ability_id": ability_id
+		})
+		
+		# 注意：不在这里清除 _current_casting_ability_id
+		# 因为后摇阶段可能还需要这个标记，由 clear_current_casting_ability() 清除
 
 ## 清除技能效果
 ## [param] ability_id: StringName 技能ID
@@ -333,7 +350,65 @@ func get_current_casting_ability_id() -> StringName:
 func has_casting_ability() -> bool:
 	return not _current_casting_ability_id.is_empty()
 
+## 注册阻塞任务（由 Effect 在运行时调用）
+## [param] ability_id: StringName 技能ID
+func register_blocking_task(ability_id: StringName) -> void:
+	# 安全检查：确保是当前技能请求的
+	if _current_casting_ability_id != ability_id:
+		return
+	_blocking_tasks_count += 1
+	print("GameplayAbilityComponent: Blocking task registered for %s, count: %d" % [ability_id, _blocking_tasks_count])
+
+## 注销阻塞任务（由 Effect 在运行时调用）
+## [param] ability_id: StringName 技能ID
+func unregister_blocking_task(ability_id: StringName) -> void:
+	if _current_casting_ability_id != ability_id:
+		return
+	
+	_blocking_tasks_count -= 1
+	print("GameplayAbilityComponent: Blocking task unregistered for %s, count: %d" % [ability_id, _blocking_tasks_count])
+	
+	# 只有当计数器归零，才真正结束技能
+	if _blocking_tasks_count <= 0:
+		_end_ability(ability_id)
+
 ## 清除当前正在执行的技能（在技能完全结束时调用）
 func clear_current_casting_ability() -> void:
 	_current_casting_ability_id = &""
 	can_interrupt_current = false
+	_blocking_tasks_count = 0
+
+## 强制中断当前技能
+## [param] ability_id: StringName 技能ID（可选，如果不提供则取消当前执行的技能）
+func cancel_ability(ability_id: StringName = &"") -> void:
+	var target_id = ability_id
+	if target_id.is_empty():
+		target_id = _current_casting_ability_id
+	
+	if target_id.is_empty():
+		return
+	
+	var ability_data = get_ability_data(target_id)
+	if not is_instance_valid(ability_data):
+		return
+	
+	# 获取目标（假设是对自己释放，如果是对敌人需要记录目标）
+	var instigator = get_parent()
+	if not is_instance_valid(instigator):
+		return
+	
+	# 调用所有效果的 remove 方法（这会触发持续效果的清理，如停止 Tween）
+	for effect in ability_data.effects:
+		if is_instance_valid(effect):
+			effect.remove(instigator, instigator)
+	
+	# 强制重置状态
+	_blocking_tasks_count = 0
+	if _current_casting_ability_id == target_id:
+		clear_current_casting_ability()
+	
+	print("GameplayAbilityComponent: Ability cancelled: ", target_id)
+	
+	# 发送中断信号（如果组件有 gameplay_event 信号）
+	if has_signal("gameplay_event"):
+		emit_signal("gameplay_event", &"ability_cancelled", {"ability_id": target_id})

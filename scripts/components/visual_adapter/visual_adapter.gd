@@ -93,6 +93,11 @@ func _on_animation_event(event_name: StringName, data: Dictionary = {}) -> void:
 
 	_on_animation_ability_activated(data)
 
+## 获取角色面朝角度（公共方法，供外部调用）
+## [return] float 面朝角度（弧度）
+func get_facing_angle() -> float:
+	return _get_facing_angle()
+
 ## 获取角色面朝角度（子类可重写）
 ## [return] float 面朝角度（弧度）
 func _get_facing_angle() -> float:

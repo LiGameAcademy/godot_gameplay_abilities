@@ -49,18 +49,21 @@ func apply(context: Dictionary = {}) -> void:
 	# 1. 施加状态型效果（立即生效，持续存在）
 	_apply_all_stateful_effects(context)
 	
-	# 2. 注册周期和事件型效果
-	for effect_template in status_data.effects:
-		# 注意：这里我们迭代的是 *模板* (status_data.effects)
-		if effect_template.period > 0.0:
-			_create_timer(effect_template)
-		elif effect_template.event_to_listen != &"":
-			_add_event_listener(effect_template)
+	# 2. 注册周期性效果（使用状态级别的 period）
+	if status_data.period > 0.0:
+		_create_periodic_timer()
 	
-	# 3. 连接到统一游戏事件系统（如果状态配置了trigger_on_events）
-	if not status_data.trigger_on_events.is_empty() and not _is_connected_to_event_bus:
-		AbilityEventBus.game_event_occurred.connect(_on_game_event_occurred)
-		_is_connected_to_event_bus = true
+	# 3. 注册事件监听型效果（使用状态级别的 event_to_listen）
+	if status_data.event_to_listen != &"":
+		_add_event_listeners()
+	
+	# 4. 连接到统一游戏事件系统
+	# 如果状态配置了 trigger_on_events 或 event_to_listen，需要连接事件总线
+	if not _is_connected_to_event_bus:
+		var needs_event_bus = not status_data.trigger_on_events.is_empty() or status_data.event_to_listen != &""
+		if needs_event_bus:
+			AbilityEventBus.game_event_occurred.connect(_on_game_event_occurred)
+			_is_connected_to_event_bus = true
 
 ## 状态被移除时，移除所有效果
 func remove() -> void:
@@ -99,12 +102,10 @@ func handle_event(event_id: StringName, context: Dictionary) -> void:
 	if not status_data.can_trigger_on_event(event_id):
 		return
 	
-	# 处理所有监听此事件的效果
-	for effect in event_listeners.get(event_id, []):
-		if is_instance_valid(effect):
-			# 在context中添加stacks信息，供Effect使用
-			context["stacks"] = stacks
-			effect.apply(target, instigator, context)
+	# 检查是否是状态级别的事件监听
+	if status_data.event_to_listen == event_id:
+		# 应用所有效果
+		_apply_all_effects(context)
 
 ## 统一游戏事件系统的回调
 ## 当任何游戏事件发生时，此方法会被调用
@@ -128,7 +129,11 @@ func _on_game_event_occurred(event_type: StringName, context: Dictionary) -> voi
 		return
 	
 	# 检查状态是否应该响应这个事件类型
+	# 1. 检查 trigger_on_events（旧系统）
 	if status_data.can_trigger_on_event(event_type):
+		handle_event(event_type, context)
+	# 2. 检查 event_to_listen（新系统，状态级别的事件监听）
+	elif status_data.event_to_listen == event_type:
 		handle_event(event_type, context)
 
 ## 刷新持续时间
@@ -166,23 +171,25 @@ func add_stack(amount: int = 1, is_refresh_duration: bool = true) -> void:
 	if is_refresh_duration:
 		refresh_duration()
 
-func _create_timer(effect: GameplayEffect) -> Timer:
+## 创建周期性计时器（使用状态级别的 period）
+func _create_periodic_timer() -> void:
 	if not is_instance_valid(owner_component):
 		push_error("GameplayStatusInstance: owner_component is not valid!")
-		return null
+		return
 	
 	var timer = Timer.new()
-	timer.wait_time = effect.period
-	timer.timeout.connect(_on_periodic_effect.bind(effect))
+	timer.wait_time = status_data.period
+	timer.timeout.connect(_on_periodic_effect)
 	owner_component.add_child(timer)
 	timer.start()
 	periodic_timers.append(timer)
-	return timer
 
-func _add_event_listener(effect: GameplayEffect) -> void:
-	if not event_listeners.has(effect.event_to_listen):
-		event_listeners[effect.event_to_listen] = []
-	event_listeners[effect.event_to_listen].append(effect)
+## 添加事件监听器（使用状态级别的 event_to_listen）
+func _add_event_listeners() -> void:
+	# 将状态级别的事件监听记录到 event_listeners 字典中
+	# 这里存储的是事件ID，用于后续判断
+	if not event_listeners.has(status_data.event_to_listen):
+		event_listeners[status_data.event_to_listen] = true
 
 func _create_duration_timer() -> void:
 	if not is_instance_valid(owner_component):
@@ -200,17 +207,18 @@ func _create_duration_timer() -> void:
 	_duration_timer.start()
 
 ## 施加所有状态型效果（立即生效，持续存在）
+## 状态型效果：既不是周期性，也不是事件监听型的效果
 func _apply_all_stateful_effects(context: Dictionary) -> void:
 	var target = get_target_entity()
 	if not is_instance_valid(target):
 		return
 	
+	# 检查是否是状态型效果（不是周期性，不是事件监听型）
+	if status_data.period > 0.0 or status_data.event_to_listen != &"":
+		return
+	
 	# 迭代 *模板*
 	for effect_template in status_data.effects:
-		# 检查是否是"状态型"（不是周期性，不是事件监听型）
-		if effect_template.period != 0.0 or not effect_template.event_to_listen.is_empty():
-			continue
-		
 		# 创建克隆
 		var effect_clone = effect_template.duplicate(true)
 		# 在context中添加stacks信息
@@ -219,6 +227,20 @@ func _apply_all_stateful_effects(context: Dictionary) -> void:
 		effect_clone.apply(target, instigator, context)
 		# 存储克隆，以便移除
 		stateful_effects.append(effect_clone)
+
+## 应用所有效果（用于周期性和事件监听型效果）
+func _apply_all_effects(context: Dictionary) -> void:
+	var target = get_target_entity()
+	if not is_instance_valid(target):
+		return
+	
+	# 在context中添加stacks信息
+	context["stacks"] = stacks
+	
+	# 迭代 *模板*，应用所有效果
+	for effect_template in status_data.effects:
+		if is_instance_valid(effect_template):
+			effect_template.apply(target, instigator, context)
 
 ## 移除所有状态型效果
 func _remove_all_stateful_effects() -> void:
@@ -243,12 +265,7 @@ func _on_duration_timer_timeout() -> void:
 	if owner_component.has_method("remove_status"):
 		owner_component.remove_status(get_id())
 
-## 周期性效果到期时，应用效果
-func _on_periodic_effect(effect: GameplayEffect) -> void:
-	var target = get_target_entity()
-	if not is_instance_valid(target):
-		return
-	
+## 周期性效果到期时，应用所有效果
+func _on_periodic_effect() -> void:
 	var context = {"stacks": stacks}
-	if is_instance_valid(effect):
-		effect.apply(target, instigator, context)
+	_apply_all_effects(context)
