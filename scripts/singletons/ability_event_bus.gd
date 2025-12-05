@@ -55,49 +55,19 @@ func _ready() -> void:
 	# 自动查找外部事件总线（可选）
 	_auto_discover_external_event_bus()
 
-## 发送伤害事件
-func emit_damage_dealt(instigator: Node, target: Node, damage_info: DamageInfo, final_damage: float) -> void:
-	damage_dealt.emit(instigator, target, damage_info, final_damage)
+# ========== 细粒度信号发射方法（向后兼容，但推荐使用 trigger_game_event）==========
+# 注意：这些方法主要用于向后兼容，新代码应该使用 trigger_game_event 统一接口
 
-## 发送实体死亡事件
-func emit_entity_died(entity: Node, instigator: Node) -> void:
-	entity_died.emit(entity, instigator)
-
-## 发送治疗事件
-func emit_healing_applied(target: Node, amount: float) -> void:
-	healing_applied.emit(target, amount)
-
-## 发送属性变化事件
-func emit_attribute_changed(entity: Node, attribute_id: StringName, new_value: float) -> void:
-	attribute_changed.emit(entity, attribute_id, new_value)
-
-## 发送技能完成事件
-func emit_ability_completed(entity: Node, ability_id: StringName) -> void:
-	ability_completed.emit(entity, ability_id)
-
-## 发送技能失败事件
-func emit_ability_failed(entity: Node, ability_id: StringName, reason: String) -> void:
-	ability_failed.emit(entity, ability_id, reason)
-
-## 发送技能学习事件
-func emit_ability_learned(entity: Node, ability_id: StringName) -> void:
-	ability_learned.emit(entity, ability_id)
-
-## 发送技能遗忘事件
-func emit_ability_forgotten(entity: Node, ability_id: StringName) -> void:
-	ability_forgotten.emit(entity, ability_id)
-
-## 发送技能冷却就绪事件
-func emit_ability_cooldown_ready(entity: Node, ability_id: StringName) -> void:
-	ability_cooldown_ready.emit(entity, ability_id)
-
-## 发送状态应用事件
+## 发送状态应用事件（仍在使用，保留）
 func emit_status_applied(entity: Node, status_id: StringName) -> void:
 	status_applied.emit(entity, status_id)
 
-## 发送状态移除事件
+## 发送状态移除事件（仍在使用，保留）
 func emit_status_removed(entity: Node, status_id: StringName) -> void:
 	status_removed.emit(entity, status_id)
+
+# 以下方法已废弃，请使用 trigger_game_event 统一接口
+# 细粒度信号仍会通过事件系统自动触发（通过 DamageDealtEvent.emit_gameplay_signal 等）
 
 # ========== 统一游戏事件系统接口 ==========
 
