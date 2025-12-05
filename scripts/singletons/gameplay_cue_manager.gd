@@ -7,10 +7,30 @@ extends Node
 
 ## 飘字场景模板（用于初始化飘字 Cue 的对象池）
 var _floating_text_template: PackedScene = null
+## 持续 Cue 列表（需要每帧更新的 Cue，如拖尾）
+var _persistent_cues: Array[GameplayCueBase] = []
 
 func _ready() -> void:
 	# 初始化飘字模板
 	_init_floating_text_template()
+	# 启用 process 以更新持续 Cue
+	set_process(true)
+
+func _process(delta: float) -> void:
+	# 更新所有持续 Cue（如拖尾残影）
+	var to_remove: Array[GameplayCueBase] = []
+	for cue_component in _persistent_cues:
+		if not is_instance_valid(cue_component):
+			to_remove.append(cue_component)
+			continue
+		
+		# 如果 Cue 组件实现了 _process_trails 方法，调用它
+		if cue_component.has_method("_process_trails"):
+			cue_component._process_trails(delta)
+	
+	# 清理无效的 Cue
+	for cue_component in to_remove:
+		_persistent_cues.erase(cue_component)
 
 ## 初始化飘字模板
 func _init_floating_text_template() -> void:
@@ -44,6 +64,10 @@ func execute_cue(cue: GameplayCue, target: Node, context: Dictionary = {}) -> vo
 		
 		# 执行 Cue 组件
 		cue_component.execute(target, location, context)
+		
+		# 如果是持续 Cue（需要每帧更新），添加到列表
+		if cue_component.has_method("_process_trails") and not _persistent_cues.has(cue_component):
+			_persistent_cues.append(cue_component)
 
 ## 获取挂点位置
 ## [param] target: Node 目标节点

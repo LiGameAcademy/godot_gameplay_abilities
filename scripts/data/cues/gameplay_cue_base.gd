@@ -30,3 +30,13 @@ func execute(target: Node, location: Vector3, context: Dictionary = {}) -> void:
 ## [子类重写] 执行 Cue 的具体实现
 func _execute(_target: Node, _location: Vector3, _context: Dictionary) -> void:
 	pass
+
+## 停止 Cue（用于持续效果，如拖尾、持续特效等）
+## [param] target: Node 目标节点
+## 默认实现为空，子类可重写以实现停止逻辑
+func stop(target: Node) -> void:
+	_stop(target)
+
+## [子类重写] 停止 Cue 的具体实现
+func _stop(_target: Node) -> void:
+	pass

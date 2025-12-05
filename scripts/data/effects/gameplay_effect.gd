@@ -79,6 +79,8 @@ func _find_ability_component(node: Node) -> GameplayAbilityComponent:
 ## [param] instigator: Node 施法者节点
 func remove(target: Node, instigator: Node) -> void: 
 	_remove(target, instigator)
+	# 停止持续 Cue（如拖尾、持续特效等）
+	_stop_cue(target)
 	# 递归移除子效果
 	for effect in effects:
 		effect.remove(target, instigator)
@@ -130,3 +132,18 @@ func _execute_cue(target: Node, context: Dictionary = {}) -> void:
 	
 	# 执行 Cue（Manager 会处理挂点计算）
 	GameplayCueManager.execute_cue(cue, target, context)
+
+## 停止 Cue（用于持续效果）
+## [param] target: Node 目标节点
+func _stop_cue(target: Node) -> void:
+	if not is_instance_valid(cue):
+		return
+	
+	# 遍历所有 Cue 组件并停止持续效果
+	for cue_component in cue.cues:
+		if not is_instance_valid(cue_component):
+			continue
+		
+		# 如果 Cue 组件实现了 stop 方法，调用它
+		if cue_component.has_method("stop"):
+			cue_component.stop(target)
