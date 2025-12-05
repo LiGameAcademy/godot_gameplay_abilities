@@ -96,13 +96,14 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 		"direction": move_dir
 	}
 	
-	# 7. 存储实例信息
+	# 7. 存储实例信息（包含 target 和 instigator，用于 remove 时停止 Cue）
 	_active_instances[target_rid] = {
 		"tween": tween,
 		"ability_comp": ability_comp,
 		"ability_id": ability_id,
 		"state": state,
-		"target": body
+		"target": body,
+		"instigator": instigator
 	}
 	
 	# 8. 启动驱动器：0.0 -> 1.0
@@ -258,13 +259,23 @@ func _on_motion_finished(instance_id: String) -> void:
 		return
 	
 	var instance = _active_instances[instance_id]
-	_active_instances.erase(instance_id)
+	var target = instance.get("target") as Node
+	var instigator = instance.get("instigator") as Node
+	
+	# 【重要】先调用 remove 方法，停止持续 Cue（如拖尾残影）
+	# 必须在 _active_instances.erase 之前调用，因为 _remove 会检查 _active_instances
+	# 这会触发 GameplayEffect.remove() → _stop_cue() → CueTrail.stop()
+	if is_instance_valid(target) and is_instance_valid(instigator):
+		remove(target, instigator)
 	
 	# 注销阻塞任务，通知技能系统
 	var ability_comp = instance.get("ability_comp") as GameplayAbilityComponent
 	var ability_id = instance.get("ability_id") as StringName
 	if is_instance_valid(ability_comp) and not ability_id.is_empty():
 		ability_comp.unregister_blocking_task(ability_id)
+	
+	# 最后清理实例（在 remove 之后）
+	_active_instances.erase(instance_id)
 
 func _remove(target: Node, instigator: Node) -> void:
 	if not is_instance_valid(target) or not target is Node3D:
