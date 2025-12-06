@@ -5,7 +5,10 @@ class_name ActiveAbility
 ## 核心改进：分离了"对己效果"和"对敌效果"，解耦了目标获取逻辑
 
 @export_group("Casting Rules")
-@export var targeting_type: TargetingType = TargetingType.UNIT_TARGET  ## 目标类型
+## [推荐] 目标获取策略（优先使用，提供最大灵活性）
+## 如果设置了此策略，将使用策略来获取目标，忽略 targeting_type
+## 如果未设置，将回退使用 targeting_type 枚举（向后兼容）
+@export var targeting_strategy: TargetingStrategy = null
 @export var cooldown_duration: float = 0.0  ## 技能冷却时间
 @export var costs: Array[AbilityCostBase] = []  ## 技能消耗器数组（支持多种消耗类型）
 @export var cast_duration: float = 1.0  ## 施法/引导的总时长
@@ -164,6 +167,9 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 	
 	# 2. 解析目标 (Resolve Targets)
 	# 将复杂的 if-else 逻辑封装出去
+	# 将 hit_detector 传递到 context 中，供策略使用
+	if hit_detector:
+		context["hit_detector"] = hit_detector
 	var final_targets = _resolve_targets(instigator, input_target, context)
 	
 	# 3. 如果没有目标且必须要有目标，则不再继续执行目标效果
@@ -191,26 +197,34 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 				effect.apply(target, instigator, context)
 
 ## 封装目标获取逻辑
+## 【重构】优先使用 TargetingStrategy，回退到枚举（向后兼容）
 func _resolve_targets(instigator: Node, input_target: Node, context: Dictionary) -> Array[Node]:
+	# 优先级1: 使用 TargetingStrategy（推荐方式）
+	if is_instance_valid(targeting_strategy):
+		return targeting_strategy.resolve_targets(instigator, input_target, context)
+	
+	# 优先级2: 回退到枚举（向后兼容）
+	# 注意：这里保留了原有的逻辑，但建议迁移到策略模式
+	return _resolve_targets_by_enum(instigator, input_target, context)
+
+## [已弃用] 使用枚举解析目标（向后兼容）
+## 建议：使用 TargetingStrategy 替代
+func _resolve_targets_by_enum(instigator: Node, input_target: Node, context: Dictionary) -> Array[Node]:
 	var targets: Array[Node] = []
 	
 	# 策略 A: 命中检测器 (优先)
 	# 适用于：近战挥砍、周围 AOE
-	if hit_detector:
-		targets = hit_detector.get_targets(instigator, context)
+	if hit_detector and instigator is Node3D:
+		targets = hit_detector.get_targets(instigator as Node3D, context)
+		if not targets.is_empty():
+			return targets
 	
 	# 策略 B: 指定目标 (Fallback)
 	# 适用于：指向性法术、远程锁定
-	elif is_instance_valid(input_target):
+	if is_instance_valid(input_target):
 		targets.append(input_target)
-	
-	# 策略 C: 自身/无目标兜底
-	# 适用于：给自己加血，或者纯位移技能
-	# 注意：现在有了 caster_effects，这里的逻辑可以简化
-	if targets.is_empty():
-		if targeting_type == TargetingType.SELF_ONLY:
-			targets.append(instigator)
-	
+		return targets
+
 	return targets
 
 ## [新增] 应用施法者效果

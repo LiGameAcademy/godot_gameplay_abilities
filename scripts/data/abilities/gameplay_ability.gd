@@ -5,14 +5,6 @@ class_name GameplayAbility
 ## 技能数据基类（抽象类）
 ## 定义技能的所有属性和行为
 
-## 定义技能的目标类型
-enum TargetingType {
-	SELF_ONLY,      ## 只能对施法者自己 (e.g., 持盾)
-	UNIT_TARGET,    ## 需要一个单位 (友军或敌军) (e.g., 治疗, 减速)
-	GROUND_TARGET,  ## 需要一个地面位置 (e.g., 暴风雪, 驱散)
-	NO_TARGET       ## 不需要目标 (e.g., 战吼)
-}
-
 @export var ability_id: StringName                  ## 技能的唯一ID
 @export var ability_name: String                    ## 技能名称
 @export_multiline var description: String           ## 技能描述
