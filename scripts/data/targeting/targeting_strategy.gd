@@ -32,19 +32,9 @@ func resolve_targets(instigator: Node, input_target: Node, context: Dictionary =
 func get_description() -> String:
 	return _get_description()
 
-## 判断是否为远程技能（需要鼠标指向）
-## [return] bool 是否为远程技能
-func is_ranged() -> bool:
-	return _is_ranged()
-
 ## [子类必须重写] 解析目标的具体实现
 @abstract func _resolve_targets(instigator: Node, input_target: Node, context: Dictionary) -> Array[Node]
 
 ## [子类可重写] 获取描述
 func _get_description() -> String:
 	return "Targeting Strategy"
-
-## [子类可重写] 判断是否为远程技能
-## 默认返回 false，子类应根据策略特性重写
-func _is_ranged() -> bool:
-	return false

@@ -52,14 +52,23 @@ func _connect_animation_events() -> void:
 
 ## 播放动画（重写基类方法）
 func _play_animation(anim_name: StringName, speed: float = 1.0) -> void:
+	if not is_instance_valid(_animation_tree):
+		push_warning("AnimationTreeVisualAdapter: Cannot play animation '%s', _animation_tree is invalid" % anim_name)
+		return
+	
+	# 尝试重新获取状态机（如果之前未初始化）
 	if not is_instance_valid(_animation_state_machine):
-		# 尝试重新获取
-		if is_instance_valid(_animation_tree):
-			_animation_state_machine = _animation_tree.get("parameters/" + _animation_state_machine_path)
+		_animation_state_machine = _animation_tree.get("parameters/" + _animation_state_machine_path)
 	
 	if not is_instance_valid(_animation_state_machine):
 		push_warning("AnimationTreeVisualAdapter: Cannot play animation '%s', animation_state_machine is invalid" % anim_name)
 		return
 	
+	# 设置播放速度
 	_animation_tree.set("parameters/" + _animation_speed_scale_path, speed)
+	
+	# 尝试切换到动画状态
+	# 注意：如果状态不存在，travel() 会报错
+	# 这是预期的行为，让用户知道需要在动画状态机中添加该状态
+	# 错误信息会显示：cast_spell_default is not found current state
 	_animation_state_machine.travel(anim_name)

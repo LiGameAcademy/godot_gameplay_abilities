@@ -172,6 +172,18 @@ func _physics_process_step(progress: float, state: Dictionary) -> void:
 		if slide_vector.length() > 0.001:
 			body.move_and_collide(slide_vector)
 
+## 获取角色的面朝方向（统一方法）
+## [param] body: Node3D 目标节点
+## [param] context: Dictionary 上下文信息
+## [return] Vector3 面朝方向向量（已归一化，-Z 为默认前方）
+func _get_facing_direction(body: Node3D, context: Dictionary) -> Vector3:
+	if not context.has("facing_angle"):
+		push_error("GE_PhysicsMotion: facing_angle not found in context")
+		return body.global_transform.basis.z.normalized()
+	
+	var facing_angle : float = context.get("facing_angle")
+	return Vector3(-sin(facing_angle), 0.0, -cos(facing_angle)).normalized()
+
 ## 方向解析
 ## [param] body: Node3D 目标节点
 ## [param] context: Dictionary 上下文信息
@@ -181,16 +193,8 @@ func _resolve_direction(body: Node3D, context: Dictionary) -> Vector3:
 	
 	match direction_type:
 		DirectionType.FORWARD:
-			# 向面朝方向
-			var facing_angle: float = 0.0
-			if context.has("facing_angle"):
-				facing_angle = context["facing_angle"]
-			elif context.has("facing_direction"):
-				var facing_dir = context["facing_direction"] as Vector3
-				if facing_dir != Vector3.ZERO:
-					facing_angle = atan2(facing_dir.x, facing_dir.z)
-			var rotation_basis = Basis.from_euler(Vector3(0, facing_angle, 0))
-			dir = rotation_basis.z
+			# 向面朝方向（-Z 为默认前方）
+			dir = _get_facing_direction(body, context)
 		
 		DirectionType.INPUT:
 			# 获取输入向量
@@ -200,51 +204,36 @@ func _resolve_direction(body: Node3D, context: Dictionary) -> Vector3:
 				var cam = body.get_viewport().get_camera_3d()
 				if is_instance_valid(cam):
 					var cam_basis = cam.global_transform.basis
+					# 相机空间：使用相机的 X 和 Z 轴
 					dir = (cam_basis.x * input.x + cam_basis.z * input.y).normalized()
 				else:
 					# 如果没有相机，使用世界空间
-					dir = Vector3(input.x, 0, input.y).normalized()
+					# 注意：与 player.gd 的移动方向保持一致
+					# player.gd 使用 Vector3(input_dir.x, 0, -input_dir.y)（-Z 为前方）
+					dir = Vector3(input.x, 0, -input.y).normalized()
 			else:
 				# 如果没有输入，使用面朝方向
-				var visuals = body.get_node_or_null("Visuals")
-				if is_instance_valid(visuals) and visuals is Node3D:
-					var facing_angle = (visuals as Node3D).rotation.y
-					var rotation_basis = Basis.from_euler(Vector3(0, facing_angle, 0))
-					dir = rotation_basis.z
-				else:
-					var forward = body.global_transform.basis.z
-					dir = Vector3(forward.x, 0, forward.z).normalized()
+				dir = _get_facing_direction(body, context)
 		
 		DirectionType.MOUSE:
 			# 向鼠标方向
-			if context.has("mouse_direction"):
-				var mouse_dir = context["mouse_direction"]
-				if mouse_dir is Vector3:
-					dir = mouse_dir.normalized()
-					# 确保方向在 XZ 平面上（忽略 Y 轴）
-					dir.y = 0.0
-					dir = dir.normalized()
+			if context.has("mouse_direction") and context["mouse_direction"] is Vector3:
+				dir = (context["mouse_direction"] as Vector3).normalized()
+				# 确保方向在 XZ 平面上（忽略 Y 轴）
+				dir.y = 0.0
+				dir = dir.normalized()
 			else:
 				# 如果没有鼠标方向，回退到面朝方向
 				push_warning("GE_PhysicsMotion: MOUSE_DIR mode requires 'mouse_direction' in context, falling back to FORWARD")
-				var visuals = body.get_node_or_null("Visuals")
-				if is_instance_valid(visuals) and visuals is Node3D:
-					var facing_angle = (visuals as Node3D).rotation.y
-					var rotation_basis = Basis.from_euler(Vector3(0, facing_angle, 0))
-					dir = rotation_basis.z
-				else:
-					var forward = body.global_transform.basis.z
-					dir = Vector3(forward.x, 0, forward.z).normalized()
+				dir = _get_facing_direction(body, context)
 		
 		DirectionType.CUSTOM:
 			# 自定义方向
-			if context.has("direction"):
-				var custom_dir = context["direction"]
-				if custom_dir is Vector3:
-					dir = custom_dir.normalized()
-					# 确保方向在 XZ 平面上
-					dir.y = 0.0
-					dir = dir.normalized()
+			if context.has("direction") and context["direction"] is Vector3:
+				dir = (context["direction"] as Vector3).normalized()
+				# 确保方向在 XZ 平面上
+				dir.y = 0.0
+				dir = dir.normalized()
 			else:
 				push_warning("GE_PhysicsMotion: CUSTOM mode requires 'direction' in context")
 	
@@ -304,4 +293,3 @@ func _get_description() -> String:
 	var dir_name = DirectionType.keys()[direction_type]
 	var curve_info = "（使用曲线）" if speed_curve else "（线性）"
 	return "物理位移: 向 %s 方向移动 %.1f 米 (%.2f秒)%s" % [dir_name, distance, duration, curve_info]
-

@@ -79,34 +79,6 @@ func _on_animation_event(event_name: StringName, data: Dictionary = {}) -> void:
 	if event_name == _ability_event_name:
 		_on_animation_ability_activated(data)
 
-## 获取角色面朝角度（公共方法，供外部调用）
-## [return] float 面朝角度（弧度）
-func get_facing_angle() -> float:
-	return _get_facing_angle()
-
-## 获取角色面朝角度（子类可重写）
-## [return] float 面朝角度（弧度）
-func _get_facing_angle() -> float:
-	if not is_instance_valid(_character):
-		return 0.0
-	
-	# 尝试从 visuals 子节点获取
-	var visuals = _character.get_node_or_null("Visuals")
-	if is_instance_valid(visuals) and visuals is Node3D:
-		return (visuals as Node3D).rotation.y
-	
-	# 如果没有 visuals，尝试从角色自身获取
-	if _character is Node3D:
-		var char_3d = _character as Node3D
-		if char_3d.rotation.y != 0.0:
-			return char_3d.rotation.y
-		
-		# 从 transform 计算
-		var forward = -char_3d.global_transform.basis.z
-		return atan2(forward.x, forward.z)
-	
-	return 0.0
-
 ## 能力施放时的回调（由能力组件信号触发）
 ## 【逻辑驱动重构】现在只负责播放动画，不再触发技能效果
 ## 技能效果由 GameplayAbilityComponent 的逻辑计时器控制

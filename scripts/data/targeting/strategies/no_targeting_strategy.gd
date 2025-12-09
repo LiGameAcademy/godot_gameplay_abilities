@@ -13,6 +13,3 @@ func _resolve_targets(_instigator: Node, _input_target: Node, _context: Dictiona
 func _get_description() -> String:
 	return "No Target (无目标)"
 
-func _is_ranged() -> bool:
-	return false  # 无目标不是远程技能
-

@@ -33,6 +33,3 @@ func _resolve_targets(instigator: Node, _input_target: Node, context: Dictionary
 func _get_description() -> String:
 	return "Ground Target (地面位置)"
 
-func _is_ranged() -> bool:
-	return true  # 地面目标通常是远程技能（需要指向地面位置）
-

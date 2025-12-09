@@ -62,11 +62,16 @@ func _try_pay(ability_comp: Node, instigator: Node) -> bool:
 
 func _get_cost_description() -> String:
 	var vital_name = vital_id
+	
+	# 注意：_get_cost_description() 可能在资源编辑时被调用，此时 _vital_comp 可能未初始化
+	# 这种情况下，直接使用 vital_id 作为名称
 	if not is_instance_valid(_vital_comp):
-		push_warning("VitalCost: Cannot find VitalComponent on instigator")
-		return ""
+		# 不在运行时调用时，不输出警告（可能是资源编辑时的正常调用）
+		return "消耗 %s: %.0f" % [vital_name, amount]
+	
 	if not _vital_comp.has_vital(vital_id):
 		return "消耗 %s: %.0f" % [vital_name, amount]
+	
 	# 尝试获取更友好的名称
 	var vital : GameplayVital = _vital_comp.get_vital(vital_id)
 	if not is_instance_valid(vital):

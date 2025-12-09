@@ -12,6 +12,3 @@ func _resolve_targets(instigator: Node, _input_target: Node, _context: Dictionar
 
 func _get_description() -> String:
 	return "Self (施法者自己)"
-
-func _is_ranged() -> bool:
-	return false  # 自身目标不是远程技能

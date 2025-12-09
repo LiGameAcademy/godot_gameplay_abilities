@@ -44,4 +44,3 @@ func get_cost_description() -> String:
 ## [return] String 消耗描述文本
 func _get_cost_description() -> String:
 	return "消耗: 未知"
-

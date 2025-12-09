@@ -38,6 +38,3 @@ func _resolve_targets(instigator: Node, input_target: Node, context: Dictionary)
 func _get_description() -> String:
 	return "Unit Target (指定单位)"
 
-func _is_ranged() -> bool:
-	return true  # 单位目标通常是远程技能（需要指向目标）
-

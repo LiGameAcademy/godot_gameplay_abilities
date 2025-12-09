@@ -21,10 +21,6 @@ var _is_combo_cooldown: bool = false
 ## 兜底计时器（防止动画事件丢失导致卡死）
 var _fail_safe_timer: SceneTreeTimer = null
 
-func _init() -> void:
-	# 连击技能默认不需要目标
-	targeting_type = TargetingType.NO_TARGET
-
 ## 获取当前连击段数
 func get_current_combo_index() -> int:
 	return _current_combo_index
