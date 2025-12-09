@@ -19,6 +19,10 @@ class_name GameplayEffect
 ## true: 技能会等待该效果执行完毕（调用 finished_callback）才算结束
 ## false: 技能施放即完成（Fire and Forget，即时效果）
 @export var blocks_ability_completion: bool = false
+## 延迟执行时间（秒）
+## 如果 > 0，效果会在延迟后执行，而不是立即执行
+## 适用于：前摇时间、延迟伤害、延迟治疗等场景
+@export var delay: float = 0.0
 
 ## 应用效果（核心入口）
 ## [param] target: Node 目标节点
@@ -28,6 +32,19 @@ func apply(target: Node, instigator: Node, context: Dictionary = {}) -> void:
 	if not _check_filters(target, instigator, context):
 		return
 	
+	# 检查是否有延迟
+	if delay > 0:
+		# 延迟执行：使用 SceneTreeTimer
+		_apply_delayed(target, instigator, context)
+	else:
+		# 立即执行
+		_apply_immediate(target, instigator, context)
+
+## 立即应用效果（内部方法）
+## [param] target: Node 目标节点
+## [param] instigator: Node 施法者节点
+## [param] context: Dictionary 上下文信息
+func _apply_immediate(target: Node, instigator: Node, context: Dictionary) -> void:
 	# 1. 获取 AbilityComponent（用于注册/注销阻塞任务）
 	var ability_comp = _find_ability_component(instigator)
 	var current_ability_id: StringName = &""
@@ -58,6 +75,75 @@ func apply(target: Node, instigator: Node, context: Dictionary = {}) -> void:
 	for effect in effects:
 		if is_instance_valid(effect):
 			effect.apply(target, instigator, context)
+
+## 延迟应用效果（内部方法）
+## [param] target: Node 目标节点
+## [param] instigator: Node 施法者节点
+## [param] context: Dictionary 上下文信息
+func _apply_delayed(target: Node, instigator: Node, context: Dictionary) -> void:
+	# 获取 SceneTree（从 target 或 instigator）
+	var scene_tree: SceneTree = null
+	if is_instance_valid(target) and target.is_inside_tree():
+		scene_tree = target.get_tree()
+	elif is_instance_valid(instigator) and instigator.is_inside_tree():
+		scene_tree = instigator.get_tree()
+	
+	if not is_instance_valid(scene_tree):
+		push_warning("GameplayEffect: Cannot apply delayed effect, no valid SceneTree found")
+		# 回退到立即执行
+		_apply_immediate(target, instigator, context)
+		return
+	
+	# 1. 获取 AbilityComponent（用于注册/注销阻塞任务）
+	var ability_comp = _find_ability_component(instigator)
+	var current_ability_id: StringName = &""
+	
+	# 2. 如果是阻塞效果，立即向组件"举手"注册（延迟期间也算阻塞）
+	if blocks_ability_completion and is_instance_valid(ability_comp):
+		current_ability_id = ability_comp.get_current_casting_ability_id()
+		if not current_ability_id.is_empty():
+			ability_comp.register_blocking_task(current_ability_id)
+	
+	# 3. 创建延迟计时器
+	var timer = scene_tree.create_timer(delay)
+	
+	# 4. 延迟执行回调
+	timer.timeout.connect(func() -> void:
+		# 延迟执行前再次检查目标有效性
+		if not is_instance_valid(target) or not is_instance_valid(instigator):
+			# 如果目标或施法者已失效，注销阻塞任务
+			if blocks_ability_completion and is_instance_valid(ability_comp) and not current_ability_id.is_empty():
+				ability_comp.unregister_blocking_task(current_ability_id)
+			return
+		
+		# 再次检查过滤器（延迟期间可能状态已改变）
+		if not _check_filters(target, instigator, context):
+			# 过滤器不通过，注销阻塞任务
+			if blocks_ability_completion and is_instance_valid(ability_comp) and not current_ability_id.is_empty():
+				ability_comp.unregister_blocking_task(current_ability_id)
+			return
+		
+		# 执行具体逻辑（子类实现）
+		_apply(target, instigator, context)
+		
+		# 执行 Cue（逻辑与表现分离）
+		_execute_cue(target, context)
+		
+		# 异步处理
+		if blocks_ability_completion and is_instance_valid(ability_comp) and not current_ability_id.is_empty():
+			if _is_asynchronous():
+				# 如果是异步，等待子类自己在结束后调用 unregister
+				# 子类需要在完成时调用：ability_comp.unregister_blocking_task(current_ability_id)
+				pass
+			else:
+				# 如果是同步（即时），立即注销
+				ability_comp.unregister_blocking_task(current_ability_id)
+		
+		# 递归应用子效果（每个子效果会自己去 register/unregister）
+		for effect in effects:
+			if is_instance_valid(effect):
+				effect.apply(target, instigator, context)
+	)
 
 ## 辅助查找组件
 ## [param] node: Node 节点
@@ -96,8 +182,7 @@ func get_description() -> String:
 ## [param] target: Node 目标节点
 ## [param] instigator: Node 施法者节点
 ## [param] context: Dictionary 上下文信息
-func _apply(target: Node, instigator: Node, context: Dictionary) -> void: 
-	pass
+@abstract func _apply(target: Node, instigator: Node, context: Dictionary) -> void
 
 ## [子类重写] 是否是异步执行？
 ## 如果子类有 Tween 或 Timer，返回 true，并负责手动调用 finished_callback
