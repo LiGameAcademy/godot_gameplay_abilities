@@ -32,6 +32,10 @@ class_name ProjectileAbility
 ## - "head": 头顶
 ## - "body": 身体中心
 @export var muzzle_attachment_point: StringName = &"muzzle"
+## 撞击时生成的 AoE 场景（可选）
+## 如果设置了，投射物撞击时会生成 AoE 实体而不是直接应用单体效果
+## AoE 实体会使用投射物携带的 payload_effects 对范围内所有目标应用效果
+@export var impact_aoe_scene: PackedScene = null
 
 ## [重写] 施放技能
 ## 逻辑：生成投射物，并把 target_effects 作为"弹头"传递给投射物
@@ -67,9 +71,32 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 	# 调试日志
 	print("ProjectileAbility: Casting %s with %d effect(s)" % [ability_id, payload_effects.size()])
 	
-	# 6. 循环生成投射物
+	# 6. 解析目标（用于追踪）
+	# 如果配置了 targeting_strategy，尝试解析目标
+	# 如果解析到目标，投射物会追踪；否则直线飞行
+	var target_for_homing: Node3D = null
+	if is_instance_valid(targeting_strategy):
+		var resolved_targets = targeting_strategy.resolve_targets(instigator, input_target, context)
+		if not resolved_targets.is_empty() and is_instance_valid(resolved_targets[0]):
+			var first_target = resolved_targets[0]
+			# 确保目标是 Node3D（追踪需要 3D 位置）
+			if first_target is Node3D:
+				target_for_homing = first_target as Node3D
+			else:
+				# 尝试从目标节点获取 3D 位置
+				var target_3d = CombatUtils.get_node_3d_position(first_target)
+				if target_3d != Vector3.ZERO:
+					# 如果目标不是 Node3D，但能获取到位置，创建一个虚拟节点用于追踪
+					# 注意：这种情况下，追踪可能不够精确，但至少能朝目标方向飞行
+					pass  # 暂时不支持非 Node3D 目标的追踪
+	else:
+		# 如果没有配置 targeting_strategy，直接使用 input_target
+		if is_instance_valid(input_target) and input_target is Node3D:
+			target_for_homing = input_target as Node3D
+	
+	# 7. 循环生成投射物
 	for i in range(projectile_count):
-		_spawn_projectile(instigator, spawn_transform, projectile_data, input_target, payload_effects, context)
+		_spawn_projectile(instigator, spawn_transform, projectile_data, target_for_homing, payload_effects, context)
 	
 	# 注意：投射物是"发射即不管"（Fire and Forget），所以这里不需要阻塞
 	# 如果投射物需要阻塞技能完成，可以在 ProjectileBase 中实现
@@ -148,6 +175,10 @@ func _spawn_projectile(
 	projectile_base.impact_context = context.duplicate()
 	projectile_base.impact_context["ability_id"] = ability_id
 	projectile_base.impact_context["instigator"] = instigator
+	
+	# F. 注入 AoE 场景（如果配置了）
+	if is_instance_valid(impact_aoe_scene):
+		projectile_base.impact_aoe_scene = impact_aoe_scene
 
 ## 获取枪口变换（发射点位置和朝向）
 ## [param] instigator: Node 施法者

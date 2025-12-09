@@ -34,6 +34,8 @@ var target_reference: Node3D = null
 var movement_strategy: ProjectileMovementStrategy = null
 ## 撞击时的上下文信息（会传递给 Effect）
 var impact_context: Dictionary = {}
+## 撞击时生成的 AoE 场景（如果设置了，会生成 AoE 实体而不是直接应用效果）
+var impact_aoe_scene: PackedScene = null
 
 # ========== 内部状态 ==========
 ## 当前速度向量（策略类需要访问）
@@ -107,17 +109,25 @@ func _handle_impact(target: Node) -> void:
 	
 	print("ProjectileBase: Impact detected - target: %s, position: %s" % [target.name if target else "null", global_position])
 	
-	# 2. 传递效果（Payload Delivery）
-	_deliver_payload(target)
+	# 2. 获取撞击位置
+	var hit_pos = global_position  # 或者更精确的碰撞点
 	
-	# 3. 处理穿透
+	# 3. 处理 AoE 或单体效果
+	if is_instance_valid(impact_aoe_scene):
+		# A. 如果配置了 AoE，就生成 AoE 实体
+		_spawn_aoe_entity(hit_pos)
+	else:
+		# B. 如果没配置 AoE，就退化为单体攻击（旧逻辑）
+		_deliver_payload(target)
+	
+	# 4. 处理穿透
 	if piercing and (max_pierce_count < 0 or _pierce_count < max_pierce_count):
 		_pierce_count += 1
 		print("ProjectileBase: Piercing through (count: %d)" % _pierce_count)
 		# 穿透时继续飞行，不销毁
 		return
 	
-	# 4. 销毁投射物
+	# 5. 销毁投射物
 	print("ProjectileBase: Destroying projectile after impact")
 	_destroy_projectile()
 
@@ -198,6 +208,47 @@ func initialize_velocity() -> void:
 	if speed <= 0.0:
 		push_warning("ProjectileBase: speed is %f, projectile may not move" % speed)
 
+## 生成 AoE 实体
+## [param] hit_pos: Vector3 撞击位置
+func _spawn_aoe_entity(hit_pos: Vector3) -> void:
+	if not is_instance_valid(impact_aoe_scene):
+		push_warning("ProjectileBase: impact_aoe_scene is not valid")
+		return
+	
+	# 实例化 AoE 场景
+	var aoe_instance = impact_aoe_scene.instantiate()
+	if not aoe_instance is AoEBase:
+		push_error("ProjectileBase: impact_aoe_scene must be an AoEBase, got: %s" % aoe_instance.get_class())
+		aoe_instance.queue_free()
+		return
+	
+	var aoe_base = aoe_instance as AoEBase
+	
+	# 添加到场景（通常加到当前关卡的独立容器中）
+	var level_root = get_tree().current_scene
+	if not is_instance_valid(level_root):
+		push_error("ProjectileBase: Cannot find current scene root")
+		aoe_base.queue_free()
+		return
+	
+	level_root.add_child(aoe_base)
+	
+	# 设置位置
+	aoe_base.global_position = hit_pos
+	
+	# 注入数据
+	aoe_base.instigator = instigator
+	# 把投射物携带的弹头转交给 AoE（深拷贝，避免引用问题）
+	aoe_base.effects_to_apply = payload_effects.duplicate(true)
+	# 传递上下文
+	var aoe_context = impact_context.duplicate()
+	aoe_context["hit_position"] = hit_pos
+	aoe_context["hit_direction"] = velocity.normalized()
+	aoe_context["projectile"] = self
+	aoe_base.spawn_context = aoe_context
+	
+	print("ProjectileBase: Spawned AoE entity at position: %s" % hit_pos)
+
 ## 销毁投射物
 func _destroy_projectile() -> void:
 	# 可以在这里播放爆炸特效、音效等
@@ -209,6 +260,7 @@ func _destroy_projectile() -> void:
 	movement_strategy = null
 	payload_effects.clear()
 	impact_context.clear()
+	impact_aoe_scene = null
 	
 	# 销毁节点
 	queue_free()

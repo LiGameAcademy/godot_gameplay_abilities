@@ -18,10 +18,12 @@ func _get_targets(caster: Node3D, context: Dictionary = {}) -> Array[Node]:
 	if not is_instance_valid(caster):
 		return []
 	
-	# 确定检测位置
+	# 确定检测位置（优先级：hit_position > target_position > caster位置）
 	var detection_position: Vector3
-	if context.has("target_position"):
-		detection_position = context["target_position"]
+	if context.has("hit_position") and context["hit_position"] is Vector3:
+		detection_position = context["hit_position"] as Vector3
+	elif context.has("target_position") and context["target_position"] is Vector3:
+		detection_position = context["target_position"] as Vector3
 	else:
 		detection_position = caster.global_position
 	
