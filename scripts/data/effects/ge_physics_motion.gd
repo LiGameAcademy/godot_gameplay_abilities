@@ -31,9 +31,13 @@ enum DirectionType {
 ## 过渡类型（当 speed_curve 为 null 时使用）
 @export var transition_type: Tween.TransitionType = Tween.TRANS_CUBIC
 
-# 存储每个目标节点对应的 Tween 和组件引用
-# Key: 目标节点的 RID (String), Value: Dictionary {tween: Tween, ability_comp: GameplayAbilityComponent, ability_id: StringName, state: Dictionary}
-var _active_instances: Dictionary = {}
+# 运行时状态（本效果实例内，不再跨实例共享）
+var _tween: Tween = null
+var _ability_comp: GameplayAbilityComponent = null
+var _ability_id: StringName = &""
+var _state: Dictionary = {}
+var _target_body: CharacterBody3D = null
+var _instigator_ref: Node = null
 
 func _init() -> void:
 	# 这是一个持续效果，技能需要等待它完成
@@ -55,66 +59,46 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 				ability_comp.unregister_blocking_task(ability_id)
 		return
 	
-	var target_rid = str(body.get_rid())
-	
 	# 2. 获取 AbilityComponent 和当前技能ID（用于完成时注销）
-	var ability_comp = _find_ability_component(instigator)
-	var ability_id: StringName = &""
-	if is_instance_valid(ability_comp):
-		ability_id = ability_comp.get_current_casting_ability_id()
+	_ability_comp = _find_ability_component(instigator)
+	_ability_id = &""
+	if is_instance_valid(_ability_comp):
+		_ability_id = _ability_comp.get_current_casting_ability_id()
 	
-	# 3. 如果已有正在运行的实例，先停止它
-	if _active_instances.has(target_rid):
-		var old_instance = _active_instances[target_rid]
-		if is_instance_valid(old_instance.get("tween")):
-			old_instance.tween.kill()
-		# 注销旧的阻塞任务
-		var old_comp = old_instance.get("ability_comp") as GameplayAbilityComponent
-		var old_id = old_instance.get("ability_id") as StringName
-		if is_instance_valid(old_comp) and not old_id.is_empty():
-			old_comp.unregister_blocking_task(old_id)
-		_active_instances.erase(target_rid)
-	
-	# 4. 计算方向（这是冲锋瞬间锁定的，过程不可变）
+	# 3. 计算方向（这是冲锋瞬间锁定的，过程不可变）
 	var move_dir = _resolve_direction(body, context)
 	if move_dir == Vector3.ZERO:
 		push_warning("GE_PhysicsMotion: Cannot resolve direction")
 		# 注销阻塞任务
-		if is_instance_valid(ability_comp) and not ability_id.is_empty():
-			ability_comp.unregister_blocking_task(ability_id)
+		if is_instance_valid(_ability_comp) and not _ability_id.is_empty():
+			_ability_comp.unregister_blocking_task(_ability_id)
 		return
 	
-	# 5. 准备 Tween（必须在 Physics Process 运行以保证碰撞稳定）
-	var tween = body.create_tween()
-	tween.set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
-	tween.set_trans(Tween.TRANS_LINEAR)  # 线性时间，曲线逻辑我们在回调里自己算
+	# 4. 准备 Tween（必须在 Physics Process 运行以保证碰撞稳定）
+	_tween = body.create_tween()
+	_tween.set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
+	_tween.set_trans(Tween.TRANS_LINEAR)  # 线性时间，曲线逻辑我们在回调里自己算
 	
-	# 6. 状态闭包：用于在回调中记录上一帧走到哪了
-	var state = {
+	# 5. 状态闭包：用于在回调中记录上一帧走到哪了
+	_state = {
 		"accumulated_dist": 0.0,
 		"body": body,
 		"direction": move_dir
 	}
 	
-	# 7. 存储实例信息（包含 target 和 instigator，用于 remove 时停止 Cue）
-	_active_instances[target_rid] = {
-		"tween": tween,
-		"ability_comp": ability_comp,
-		"ability_id": ability_id,
-		"state": state,
-		"target": body,
-		"instigator": instigator
-	}
+	# 6. 缓存目标与施法者
+	_target_body = body
+	_instigator_ref = instigator
 	
-	# 8. 启动驱动器：0.0 -> 1.0
-	tween.tween_method(
-		_physics_process_step.bind(state),
+	# 7. 启动驱动器：0.0 -> 1.0
+	_tween.tween_method(
+		_physics_process_step.bind(_state),
 		0.0, 1.0, duration
 	)
 	
-	# 9. 完成回调
-	tween.finished.connect(func():
-		_on_motion_finished(target_rid)
+	# 8. 完成回调
+	_tween.finished.connect(func():
+		_on_motion_finished()
 	)
 
 ## 物理步进回调（每物理帧调用）
@@ -243,51 +227,27 @@ func _resolve_direction(body: Node3D, context: Dictionary) -> Vector3:
 
 ## 位移完成回调
 ## [param] instance_id: String 实例ID
-func _on_motion_finished(instance_id: String) -> void:
-	if not _active_instances.has(instance_id):
-		return
-	
-	var instance = _active_instances[instance_id]
-	var target = instance.get("target") as Node
-	var instigator = instance.get("instigator") as Node
-	
-	# 【重要】先调用 remove 方法，停止持续 Cue（如拖尾残影）
-	# 必须在 _active_instances.erase 之前调用，因为 _remove 会检查 _active_instances
-	# 这会触发 GameplayEffect.remove() → _stop_cue() → CueTrail.stop()
-	if is_instance_valid(target) and is_instance_valid(instigator):
-		remove(target, instigator)
-	
-	# 注销阻塞任务，通知技能系统
-	var ability_comp = instance.get("ability_comp") as GameplayAbilityComponent
-	var ability_id = instance.get("ability_id") as StringName
-	if is_instance_valid(ability_comp) and not ability_id.is_empty():
-		ability_comp.unregister_blocking_task(ability_id)
-	
-	# 最后清理实例（在 remove 之后）
-	_active_instances.erase(instance_id)
+func _on_motion_finished() -> void:
+	if is_instance_valid(_target_body) and is_instance_valid(_instigator_ref):
+		remove(_target_body, _instigator_ref)
 
 func _remove(target: Node, instigator: Node) -> void:
 	if not is_instance_valid(target) or not target is Node3D:
 		return
 	
-	var target_rid = str((target as Node3D).get_rid())
+	# 停止 Tween
+	if is_instance_valid(_tween):
+		_tween.kill()
 	
-	if _active_instances.has(target_rid):
-		var instance = _active_instances[target_rid]
-		
-		# 停止 Tween
-		var tween = instance.get("tween")
-		if is_instance_valid(tween):
-			tween.kill()
-		
-		# 注销阻塞任务（被取消时也需要注销，避免技能卡死）
-		var ability_comp = instance.get("ability_comp") as GameplayAbilityComponent
-		var ability_id = instance.get("ability_id") as StringName
-		if is_instance_valid(ability_comp) and not ability_id.is_empty():
-			ability_comp.unregister_blocking_task(ability_id)
-		
-		# 清理实例
-		_active_instances.erase(target_rid)
+	# 注销阻塞任务（被取消时也需要注销，避免技能卡死）
+	if is_instance_valid(_ability_comp) and not _ability_id.is_empty():
+		_ability_comp.unregister_blocking_task(_ability_id)
+	
+	# 清理运行时状态
+	_tween = null
+	_state.clear()
+	_target_body = null
+	_instigator_ref = null
 
 func _get_description() -> String:
 	var dir_name = DirectionType.keys()[direction_type]

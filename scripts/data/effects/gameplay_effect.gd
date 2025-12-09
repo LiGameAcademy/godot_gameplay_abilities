@@ -24,6 +24,9 @@ class_name GameplayEffect
 ## 适用于：前摇时间、延迟伤害、延迟治疗等场景
 @export var delay: float = 0.0
 
+# 运行时实例标记：模板在调度时会被克隆，克隆后标记为 true
+var _is_runtime_instance: bool = false
+
 ## 应用效果（核心入口）
 ## [param] target: Node 目标节点
 ## [param] instigator: Node 施法者节点
@@ -31,6 +34,15 @@ class_name GameplayEffect
 func apply(target: Node, instigator: Node, context: Dictionary = {}) -> void:
 	if not _check_filters(target, instigator, context):
 		return
+	
+	# 如果当前是模板（未标记为运行时实例），先克隆再执行，避免共享状态
+	if not _is_runtime_instance:
+		var inst = duplicate(true)
+		if inst is GameplayEffect:
+			var effect_inst: GameplayEffect = inst
+			effect_inst._is_runtime_instance = true
+			effect_inst.apply(target, instigator, context)
+			return
 	
 	# 检查是否有延迟
 	if delay > 0:
