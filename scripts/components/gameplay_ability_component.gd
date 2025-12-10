@@ -161,6 +161,13 @@ func can_cast(ability_id: StringName, target: Node = null, context: Dictionary =
 	if ability_data.disabled:
 		print("GameplayAbilityComponent: Ability %s is disabled." % ability_id)
 		return false  # 技能禁用
+	
+	# 如果技能正在执行，让技能自己判断是否可以关闭（符合开闭原则）
+	# ToggleAbility 会在 can_cast 中处理切换逻辑
+	if _current_casting_ability_id == ability_id:
+		# 直接调用 can_cast，让技能自己判断（ToggleAbility 会返回 true 如果可以关闭）
+		return ability_data.can_cast(self, target, context)
+	
 	if not is_cooldown_ready(ability_id):
 		return false  # 技能冷却中
 	return ability_data.can_cast(self, target, context)
@@ -232,6 +239,17 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 		push_error("GameplayAbilityComponent: Ability %s not found." % ability_id)
 		return false
 	
+	# 检查技能是否正在执行
+	if _current_casting_ability_id == ability_id:
+		# 让技能自己处理切换逻辑（符合开闭原则）
+		# ToggleAbility 会在 commit_cast 中处理关闭逻辑
+		# 如果 commit_cast 返回 true，说明切换成功；返回 false，说明不允许重复执行
+		var result = ability_data.commit_cast(self, context)
+		if not result:
+			push_warning("GameplayAbilityComponent: Ability %s is already executing, cannot cast again." % ability_id)
+		return result
+	
+	# 正常执行技能：检查消耗
 	if not ability_data.commit_cast(self, context):
 		push_error("GameplayAbilityComponent: Ability %s commit cast failed." % ability_id)
 		return false
@@ -455,7 +473,8 @@ func _cancel_cast_timer(ability_id: StringName) -> void:
 
 ## 强制中断当前技能
 ## [param] ability_id: StringName 技能ID（可选，如果不提供则取消当前执行的技能）
-func cancel_ability(ability_id: StringName = &"") -> void:
+## [param] context: Dictionary 上下文信息（可选，传递给技能的 on_cancel 方法）
+func cancel_ability(ability_id: StringName = &"", context: Dictionary = {}) -> void:
 	var target_id = ability_id
 	if target_id.is_empty():
 		target_id = _current_casting_ability_id
@@ -469,6 +488,9 @@ func cancel_ability(ability_id: StringName = &"") -> void:
 	var ability_data = get_ability_data(target_id)
 	if not is_instance_valid(ability_data):
 		return
+	
+	# 调用技能的取消方法（允许技能自己处理清理逻辑）
+	ability_data.handle_cancel(self, context)
 	
 	# 获取目标（假设是对自己释放，如果是对敌人需要记录目标）
 	var instigator = get_parent()

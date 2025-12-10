@@ -97,11 +97,14 @@ func get_cooldown_duration() -> float:
 
 ## 重写：获取技能图标
 ## 返回当前连击段对应的图标
-func get_icon() -> Texture:
+## [param] ability_comp: Node 技能组件（可选，用于动态图标）
+## [return] Texture 技能图标
+func get_icon(ability_comp: Node = null) -> Texture:
 	var current_ability = get_current_combo_ability()
 	if is_instance_valid(current_ability):
-		return current_ability.icon
-	return icon
+		# 如果当前连击段支持动态图标，传递 ability_comp
+		return current_ability.get_icon(ability_comp)
+	return super.get_icon(ability_comp)
 
 ## 重写：获取效果描述
 ## 对于连击技能，需要遍历所有连击段并收集它们的效果描述

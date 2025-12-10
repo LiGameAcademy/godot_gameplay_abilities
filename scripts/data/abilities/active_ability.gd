@@ -14,7 +14,6 @@ class_name ActiveAbility
 @export var cast_duration: float = 1.0  ## 施法/引导的总时长
 @export var cast_point: float = 0.5  ## 施法前摇时间 (动画关键帧)
 @export var cast_range: float = 8.0  ## 施法距离
-@export var channel_duration: float = 0.0  ## 引导持续时间
 @export var autocast: bool = false  ## 技能是否可以自动施法
 @export var animation_name: StringName = &"cast_spell_default"  ## 动画名称
 @export var target_filters: Array[GameplayFilterData] = []  ## 技能目标过滤器
@@ -55,9 +54,6 @@ func get_cast_point() -> float:
 
 func get_cast_range() -> float:
 	return cast_range
-
-func get_channel_duration() -> float:
-	return channel_duration
 
 func get_cooldown_duration() -> float:
 	return cooldown_duration

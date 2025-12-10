@@ -50,9 +50,16 @@ func commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
 func cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> void:
 	_on_cast(ability_comp, target, context)
 
-## [子类可重写] 每帧更新（用于需要持续更新的技能，如连击计时器）
+## [子类可重写] 每帧更新（用于需要持续更新的技能，如连击计时器、引导技能）
 ## [param] delta: float 帧时间
 func update(_delta: float) -> void: pass
+
+## [子类可重写] 技能被取消时的处理
+## 当技能被主动取消时（如被打断、资源不足等），由 GameplayAbilityComponent 调用此方法
+## [param] ability_comp: Node 技能组件
+## [param] context: Dictionary 上下文信息（可选）
+func handle_cancel(ability_comp: Node, context: Dictionary = {}) -> void:
+	_on_cancel(ability_comp, context)
 
 ## 获取效果描述
 func get_effects_description() -> String:
@@ -95,15 +102,13 @@ func get_cast_point() -> float:
 	return 0.0
 
 ## 获取技能图标
-func get_icon() -> Texture:
+## [param] ability_comp: Node 技能组件（可选，用于动态图标）
+## [return] Texture 技能图标
+func get_icon(ability_comp: Node = null) -> Texture:
 	return icon
 
 ## 获取施法距离
 func get_cast_range() -> float:
-	return 0.0
-
-## 获取引导持续时间
-func get_channel_duration() -> float:
 	return 0.0
 
 ## 获取冷却时间
@@ -136,3 +141,7 @@ func _clear_cast(_ability_comp: Node, _target: Node) -> void: pass
 ## [子类必须重写] 施放技能（应用效果）
 ## 这是技能系统的核心方法，所有子类都必须实现
 @abstract func _on_cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> void
+
+## [子类可重写] 技能被取消时的处理
+## 默认实现为空，子类可按需重写（如需要清理持续效果、停止计时器等）
+func _on_cancel(_ability_comp: Node, _context: Dictionary = {}) -> void: pass
