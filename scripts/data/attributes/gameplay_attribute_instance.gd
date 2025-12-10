@@ -89,7 +89,7 @@ func _recalculate_value() -> void:
 	var override_val = 0.0
 	
 	for mod in _modifiers:
-		match mod.type:
+		match mod.modifier_type:
 			ModifierType.OVERRIDE:
 				has_override = true
 				override_val = mod.value
