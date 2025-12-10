@@ -152,7 +152,7 @@ func _can_cast(ability_comp: Node, target: Node = null, context: Dictionary = {}
 	return current_ability.can_cast(ability_comp, target, context)
 
 ## 重写：提交施法
-func _commit_cast(ability_comp: Node) -> bool:
+func _commit_cast(ability_comp: Node, _context: Dictionary = {}) -> bool:
 	var current_ability := get_current_combo_ability()
 	if not is_instance_valid(current_ability):
 		return false

@@ -232,17 +232,19 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 		push_error("GameplayAbilityComponent: Ability %s not found." % ability_id)
 		return false
 	
-	if not ability_data.commit_cast(self):
+	if not ability_data.commit_cast(self, context):
 		push_error("GameplayAbilityComponent: Ability %s commit cast failed." % ability_id)
 		return false
 
-	if not is_cooldown_ready(ability_id):
-		return false
-	
-	# 获取冷却时间（使用方法，支持 CombatAbility 重写）
-	var cooldown = ability_data.get_cooldown_duration()
-	if cooldown > 0.0:
-		start_cooldown(ability_id, cooldown)
+	# 检查是否跳过冷却（用于技能链式调用）
+	if not context.get("skip_cooldown", false):
+		if not is_cooldown_ready(ability_id):
+			return false
+		
+		# 获取冷却时间（使用方法，支持 CombatAbility 重写）
+		var cooldown = ability_data.get_cooldown_duration()
+		if cooldown > 0.0:
+			start_cooldown(ability_id, cooldown)
 
 	# 设置当前正在执行的技能
 	_current_casting_ability_id = ability_id
@@ -287,6 +289,19 @@ func apply_ability_effect(ability_id: StringName, target: Node = null, context: 
 		return
 	
 	# 执行技能（不再传递回调，Effect 会自己注册/注销）
+	ability_data.cast(self, target, context)
+
+## 直接执行技能（不检查冷却、消耗，不触发信号）
+## 用于技能链式调用（如投射物触发魔法阵）
+## [param] ability_data: GameplayAbility 技能数据（可以是未学会的技能）
+## [param] target: Node 目标
+## [param] context: Dictionary 上下文信息（可包含 skip_cooldown、skip_cost 等标志）
+func execute_ability_direct(ability_data: GameplayAbility, target: Node = null, context: Dictionary = {}) -> void:
+	if not is_instance_valid(ability_data):
+		push_error("GameplayAbilityComponent: Ability data is not valid")
+		return
+	
+	# 直接执行技能效果，跳过 commit_cast（冷却、消耗已在 context 中标记跳过）
 	ability_data.cast(self, target, context)
 
 ## 结束技能（内部方法）

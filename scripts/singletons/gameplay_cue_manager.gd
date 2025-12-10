@@ -34,7 +34,7 @@ func _process(delta: float) -> void:
 
 ## 初始化飘字模板
 func _init_floating_text_template() -> void:
-	_floating_text_template = load("res://prefabs/floating_text.tscn")
+	_floating_text_template = load("res://prefabs/fx/floating_text.tscn")
 	if not is_instance_valid(_floating_text_template):
 		push_warning("GameplayCueManager: Floating text scene not found")
 

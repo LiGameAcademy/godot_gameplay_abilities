@@ -14,6 +14,16 @@ class_name ProjectileAbility
 ## - 不要让 Projectile 去生产 Effect（逻辑混乱）
 ## - 让 Ability 打包好 Effect，交给 Projectile，告诉它送到哪里
 
+## 效果传递策略
+## - USE_MAGIC_CIRCLE_EFFECTS: 魔法阵总是使用自己的效果（默认）
+## - USE_PROJECTILE_EFFECTS: 魔法阵使用投射物的效果（如果魔法阵未配置效果）
+## - MERGE_EFFECTS: 合并两者（魔法阵效果 + 投射物效果）
+enum EffectTransferStrategy {
+	USE_PROJECTILE_EFFECTS,  ## 使用投射物效果
+	USE_MAGIC_CIRCLE_EFFECTS,  ## 使用魔法阵效果（默认）
+	MERGE_EFFECTS  ## 合并效果
+}
+
 @export_group("Projectile Settings")
 ## 投射物场景（必须继承自 ProjectileBase）
 @export var projectile_scene: PackedScene = null
@@ -32,10 +42,17 @@ class_name ProjectileAbility
 ## - "head": 头顶
 ## - "body": 身体中心
 @export var muzzle_attachment_point: StringName = &"muzzle"
-## 撞击时生成的 AoE 场景（可选）
-## 如果设置了，投射物撞击时会生成 AoE 实体而不是直接应用单体效果
-## AoE 实体会使用投射物携带的 payload_effects 对范围内所有目标应用效果
-@export var impact_aoe_scene: PackedScene = null
+
+@export_group("Magic Circle Settings")
+## 撞击时触发的魔法阵技能（可选）
+## 如果设置了，投射物撞击时会触发此技能来创建魔法阵
+## 技能会使用自己的目标筛选和效果配置
+@export var impact_magic_circle_ability: MagicCircleAbility = null
+## 是否在生命周期结束时触发魔法阵（即使没有命中目标）
+## 如果为 true，投射物在 max_lifetime 到期时会自动触发魔法阵技能
+@export var trigger_magic_circle_on_timeout: bool = false
+## 效果传递策略
+@export var effect_transfer_strategy: EffectTransferStrategy = EffectTransferStrategy.USE_MAGIC_CIRCLE_EFFECTS
 
 ## [重写] 施放技能
 ## 逻辑：生成投射物，并把 target_effects 作为"弹头"传递给投射物
@@ -44,7 +61,6 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 	if not is_instance_valid(instigator):
 		push_warning("ProjectileAbility: Cannot cast, instigator is not valid")
 		return
-	
 	# 1. 应用自身效果（后坐力、耗蓝等）
 	_apply_caster_effects(instigator, context)
 	
@@ -71,35 +87,167 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 	# 调试日志
 	print("ProjectileAbility: Casting %s with %d effect(s)" % [ability_id, payload_effects.size()])
 	
-	# 6. 解析目标（用于追踪）
-	# 如果配置了 targeting_strategy，尝试解析目标
-	# 如果解析到目标，投射物会追踪；否则直线飞行
-	var target_for_homing: Node3D = null
-	if is_instance_valid(targeting_strategy):
-		var resolved_targets = targeting_strategy.resolve_targets(instigator, input_target, context)
-		if not resolved_targets.is_empty() and is_instance_valid(resolved_targets[0]):
-			var first_target = resolved_targets[0]
-			# 确保目标是 Node3D（追踪需要 3D 位置）
-			if first_target is Node3D:
-				target_for_homing = first_target as Node3D
-			else:
-				# 尝试从目标节点获取 3D 位置
-				var target_3d = CombatUtils.get_node_3d_position(first_target)
-				if target_3d != Vector3.ZERO:
-					# 如果目标不是 Node3D，但能获取到位置，创建一个虚拟节点用于追踪
-					# 注意：这种情况下，追踪可能不够精确，但至少能朝目标方向飞行
-					pass  # 暂时不支持非 Node3D 目标的追踪
-	else:
-		# 如果没有配置 targeting_strategy，直接使用 input_target
-		if is_instance_valid(input_target) and input_target is Node3D:
-			target_for_homing = input_target as Node3D
+	# 6. 获取追踪目标（用于投射物追踪）
+	# 符合开闭原则：通过 context 传递追踪目标，或使用 input_target
+	# 业务层可以在 context 中设置 "homing_target" 来指定追踪目标
+	var target_for_homing: Node3D = _get_homing_target(instigator, input_target, context)
 	
 	# 7. 循环生成投射物
 	for i in range(projectile_count):
-		_spawn_projectile(instigator, spawn_transform, projectile_data, target_for_homing, payload_effects, context)
+		var projectile = _spawn_projectile(instigator, spawn_transform, projectile_data, target_for_homing, payload_effects, context)
+		# 8. 连接信号（如果配置了魔法阵技能）
+		if is_instance_valid(projectile) and (is_instance_valid(impact_magic_circle_ability) or trigger_magic_circle_on_timeout):
+			_connect_projectile_signals(projectile, ability_comp, payload_effects, context)
 	
 	# 注意：投射物是"发射即不管"（Fire and Forget），所以这里不需要阻塞
 	# 如果投射物需要阻塞技能完成，可以在 ProjectileBase 中实现
+
+## 连接投射物信号
+## [param] projectile: ProjectileBase 投射物实例
+## [param] ability_comp: Node 技能组件
+## [param] payload_effects: Array[GameplayEffect] 投射物效果列表
+## [param] context: Dictionary 上下文信息
+func _connect_projectile_signals(
+		projectile: ProjectileBase,
+		ability_comp: Node,
+		payload_effects: Array,
+		context: Dictionary) -> void:
+	if not is_instance_valid(projectile):
+		return
+	
+	# 连接撞击信号
+	projectile.impact_triggered.connect(_on_projectile_impact.bind(ability_comp, payload_effects, context))
+	
+	# 连接超时信号（如果配置了）
+	if trigger_magic_circle_on_timeout:
+		projectile.timeout_triggered.connect(_on_projectile_timeout.bind(ability_comp, payload_effects, context))
+
+## 处理投射物撞击事件
+## [param] hit_position: Vector3 撞击位置
+## [param] direct_hit_target: Node 直接命中的目标
+## [param] impact_context: Dictionary 撞击上下文
+## [param] ability_comp: Node 技能组件
+## [param] payload_effects: Array[GameplayEffect] 投射物效果列表
+## [param] original_context: Dictionary 原始上下文
+func _on_projectile_impact(
+		hit_position: Vector3,
+		direct_hit_target: Node,
+		impact_context: Dictionary,
+		ability_comp: Node,
+		payload_effects: Array,
+		original_context: Dictionary) -> void:
+	var instigator = ability_comp.get_parent()
+	if not is_instance_valid(instigator):
+		return
+	
+	# 如果目标无效，直接标记不消耗撞击
+	if not is_instance_valid(direct_hit_target):
+		impact_context["consume_hit"] = false
+		return
+	
+	# 先用技能的 targeting_strategy 进行筛选，决定是否对命中目标直接应用效果
+	impact_context["target_unit"] = direct_hit_target
+	var filtered_targets = _filter_targets_with_strategy([direct_hit_target], instigator, impact_context, targeting_strategy, direct_hit_target)
+	if not filtered_targets.is_empty():
+		var effects_to_apply = target_effects if not target_effects.is_empty() else effects
+		_apply_effects_to_targets(effects_to_apply, instigator, filtered_targets, impact_context)
+	
+	# 命中发生即消耗本次撞击（不让弹体继续飞行），无论是否直伤命中
+	impact_context["consume_hit"] = true
+	
+	# 如果未配置魔法阵技能，仅消耗撞击即可
+	if not is_instance_valid(impact_magic_circle_ability):
+		return
+	
+	# 准备魔法阵技能的上下文
+	var magic_circle_context = impact_context.duplicate()
+	magic_circle_context["spawn_position"] = hit_position
+	magic_circle_context["direct_hit_target"] = direct_hit_target
+	magic_circle_context["original_ability_id"] = ability_id
+	
+	_trigger_magic_circle(magic_circle_context, ability_comp, payload_effects, "impact", hit_position)
+
+## 处理投射物超时事件
+## [param] position: Vector3 超时位置
+## [param] timeout_context: Dictionary 超时上下文
+## [param] ability_comp: Node 技能组件
+## [param] payload_effects: Array[GameplayEffect] 投射物效果列表
+## [param] original_context: Dictionary 原始上下文
+func _on_projectile_timeout(
+		position: Vector3,
+		timeout_context: Dictionary,
+		ability_comp: Node,
+		payload_effects: Array,
+		original_context: Dictionary) -> void:
+	if not is_instance_valid(impact_magic_circle_ability):
+		return
+	
+	var instigator = ability_comp.get_parent()
+	if not is_instance_valid(instigator):
+		return
+	
+	# 准备魔法阵技能的上下文
+	var magic_circle_context = timeout_context.duplicate()
+	magic_circle_context["spawn_position"] = position
+	magic_circle_context["timeout_position"] = position
+	magic_circle_context["original_ability_id"] = ability_id
+	
+	_trigger_magic_circle(magic_circle_context, ability_comp, payload_effects, "timeout", position)
+
+## 应用效果传递策略
+## [param] magic_circle_ability: MagicCircleAbility 魔法阵技能
+## [param] payload_effects: Array[GameplayEffect] 投射物效果列表
+func _apply_effect_transfer_strategy(magic_circle_ability: MagicCircleAbility, payload_effects: Array) -> void:
+	if not is_instance_valid(magic_circle_ability):
+		return
+	
+	match effect_transfer_strategy:
+		EffectTransferStrategy.USE_PROJECTILE_EFFECTS:
+			# 如果魔法阵未配置效果，使用投射物的效果
+			if magic_circle_ability.target_effects.is_empty() and magic_circle_ability.effects.is_empty():
+				magic_circle_ability.target_effects = payload_effects.duplicate(true)
+		
+		EffectTransferStrategy.USE_MAGIC_CIRCLE_EFFECTS:
+			# 魔法阵总是使用自己的效果（默认，不做任何处理）
+			pass
+		
+		EffectTransferStrategy.MERGE_EFFECTS:
+			# 合并效果：魔法阵效果 + 投射物效果
+			var merged_effects = magic_circle_ability.target_effects.duplicate(true)
+			if merged_effects.is_empty():
+				merged_effects = magic_circle_ability.effects.duplicate(true)
+			merged_effects.append_array(payload_effects.duplicate(true))
+			magic_circle_ability.target_effects = merged_effects
+
+## 触发魔法阵技能的通用方法
+## [param] magic_circle_context: Dictionary 上下文
+## [param] ability_comp: Node 技能组件
+## [param] payload_effects: Array[GameplayEffect] 投射物效果
+## [param] reason: String 用于日志（impact / timeout）
+## [param] position: Vector3 触发位置
+func _trigger_magic_circle(
+		magic_circle_context: Dictionary,
+		ability_comp: Node,
+		payload_effects: Array,
+		reason: String,
+		position: Vector3) -> void:
+	# 处理效果传递
+	_apply_effect_transfer_strategy(impact_magic_circle_ability, payload_effects)
+	
+	# 确保位置被正确设置（优先级：显式传入的 position > context 中的位置）
+	if not magic_circle_context.has("spawn_position") or not (magic_circle_context["spawn_position"] is Vector3):
+		magic_circle_context["spawn_position"] = position
+	# 同时设置 hit_position 作为备用（MagicCircleAbility 会优先读取 spawn_position）
+	magic_circle_context["hit_position"] = position
+	
+	# 标记跳过冷却与消耗（投射物的副作用）
+	magic_circle_context["skip_cooldown"] = true
+	magic_circle_context["skip_cost"] = true
+	
+	# 通过组件执行技能，保持架构一致性
+	# 使用 execute_ability_direct 方法，支持执行未学会的技能
+	ability_comp.execute_ability_direct(impact_magic_circle_ability, null, magic_circle_context)
+	print("ProjectileAbility: Triggered magic circle ability on %s at position: %s" % [reason, position])
 
 ## 生成投射物
 ## [param] instigator: Node 施法者
@@ -108,20 +256,21 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 ## [param] target_node: Node3D 追踪目标（可选）
 ## [param] payload_effects: Array[GameplayEffect] 弹头效果列表
 ## [param] context: Dictionary 上下文信息
+## [return] ProjectileBase 投射物实例（用于连接信号），如果失败则返回 null
 func _spawn_projectile(
 		instigator: Node, 
 		spawn_transform: Transform3D, 
 		data: ProjectileData, 
 		target_node: Node3D, 
 		payload_effects: Array, 
-		context: Dictionary = {}) -> void:
+		context: Dictionary = {}) -> ProjectileBase:
 	var projectile = projectile_scene.instantiate()
 	
 	# 类型检查
 	if not projectile is ProjectileBase:
 		push_error("ProjectileAbility: projectile_scene must be a ProjectileBase, got: %s" % projectile.get_class())
 		projectile.queue_free()
-		return
+		return null
 	
 	var projectile_base = projectile as ProjectileBase
 	
@@ -130,7 +279,7 @@ func _spawn_projectile(
 	if not is_instance_valid(level_root):
 		push_error("ProjectileAbility: Cannot find current scene root")
 		projectile_base.queue_free()
-		return
+		return null
 	
 	level_root.add_child(projectile_base)
 	
@@ -176,9 +325,8 @@ func _spawn_projectile(
 	projectile_base.impact_context["ability_id"] = ability_id
 	projectile_base.impact_context["instigator"] = instigator
 	
-	# F. 注入 AoE 场景（如果配置了）
-	if is_instance_valid(impact_aoe_scene):
-		projectile_base.impact_aoe_scene = impact_aoe_scene
+	# 返回投射物实例，供调用者连接信号
+	return projectile_base
 
 ## 获取枪口变换（发射点位置和朝向）
 ## [param] instigator: Node 施法者
@@ -346,3 +494,35 @@ func _build_transform_from_direction(position: Vector3, direction: Vector3) -> T
 func _get_attachment_point_position(target: Node, attachment_point: StringName) -> Vector3:
 	# 使用 AttachmentPointUtils 单例（AutoLoad 后可以直接通过名称访问）
 	return AttachmentPointUtils.get_attachment_point_position(target, attachment_point)
+
+## 获取追踪目标（用于投射物追踪）
+## 符合开闭原则：通过 context 传递追踪目标，避免硬编码目标解析逻辑
+## [param] instigator: Node 施法者
+## [param] input_target: Node 输入目标
+## [param] context: Dictionary 上下文信息
+## [return] Node3D 追踪目标，如果不存在则返回 null（投射物将直线飞行）
+func _get_homing_target(instigator: Node, input_target: Node, context: Dictionary) -> Node3D:
+	# 优先级1: 从 context 获取追踪目标（业务层可以显式指定）
+	# 这样设计允许业务层通过 context 传递任意类型的追踪目标，无需修改框架代码
+	if context.has("homing_target"):
+		var homing_target = context["homing_target"]
+		if is_instance_valid(homing_target) and homing_target is Node3D:
+			return homing_target as Node3D
+	
+	# 优先级2: 使用 input_target（如果存在且是 Node3D）
+	if is_instance_valid(input_target) and input_target is Node3D:
+		return input_target as Node3D
+	
+	# 优先级3: 通过 targeting_strategy 解析（如果配置了）
+	# 注意：这里只获取第一个目标，用于追踪
+	# 如果业务层需要更复杂的追踪逻辑，应该通过 context["homing_target"] 传递
+	if is_instance_valid(targeting_strategy):
+		var resolved_targets = targeting_strategy.resolve_targets(instigator, input_target, context)
+		if not resolved_targets.is_empty() and is_instance_valid(resolved_targets[0]):
+			var first_target = resolved_targets[0]
+			# 确保目标是 Node3D（追踪需要 3D 位置）
+			if first_target is Node3D:
+				return first_target as Node3D
+	
+	# 无追踪目标，投射物将直线飞行
+	return null

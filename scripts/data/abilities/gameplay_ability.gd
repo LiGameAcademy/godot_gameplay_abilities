@@ -38,8 +38,10 @@ func can_cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> boo
 	return _can_cast(ability_comp, target, context)
 
 ## 提交施法（消耗资源、开始冷却等）
-func commit_cast(ability_comp: Node) -> bool:
-	return _commit_cast(ability_comp)
+## [param] ability_comp: Node 技能组件
+## [param] context: Dictionary 上下文信息（可选，可包含 skip_cost 等标志）
+func commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
+	return _commit_cast(ability_comp, context)
 
 ## 施放技能（应用效果）
 ## [param] ability_comp: Node 技能组件
@@ -125,7 +127,7 @@ func _can_cast(_ability_comp: Node, _target: Node, _context: Dictionary = {}) ->
 
 ## [子类可重写] 提交施法（消耗资源、开始冷却等）
 ## 默认返回 true，子类应重写此方法以实现具体的资源消耗逻辑
-func _commit_cast(_ability_comp: Node) -> bool: return true
+func _commit_cast(_ability_comp: Node, _context: Dictionary = {}) -> bool: return true
 
 ## [子类可重写] 清除施法效果
 ## 默认实现为空，子类可按需重写（如需要移除持续效果）

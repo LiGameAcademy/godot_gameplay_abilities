@@ -37,4 +37,3 @@ func _resolve_targets(instigator: Node, input_target: Node, context: Dictionary)
 
 func _get_description() -> String:
 	return "Unit Target (指定单位)"
-
