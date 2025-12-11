@@ -18,6 +18,14 @@ class_name ActiveAbility
 @export var target_filters: Array[GameplayFilterData] = []  ## 技能目标过滤器
 @export var indicator_data: TargetIndicatorData = null  ## 目标指示器数据
 
+@export_group("Tag Requirements")
+## 施法者必须拥有的标签（技能施放的前置条件）
+## 如果施法者没有所有必需的标签，技能无法施放
+@export var caster_required_tags: Array[StringName] = []
+## 施法者不能拥有的标签（技能施放的阻止条件）
+## 如果施法者拥有任意一个阻止标签，技能无法施放
+@export var caster_blocked_tags: Array[StringName] = []
+
 @export_group("Targeting & Effects")
 ## [新增] 施法者效果：技能施放成功时，立即对施法者应用的效果
 ## 适用：自身Buff、消耗生命值、后坐力、冲锋位移
@@ -100,6 +108,19 @@ func _can_cast(ability_comp: Node, target: Node = null, context: Dictionary = {}
 	var instigator = ability_comp.get_parent() if ability_comp.has_method("get_parent") else null
 	if not is_instance_valid(instigator):
 		return false
+	
+	# 检查标签要求（标签系统集成）
+	# 检查必须标签
+	if not caster_required_tags.is_empty():
+		if not TagManager.has_all_tags(instigator, caster_required_tags):
+			print("ActiveAbility: Caster required tags not found for ability %s" % ability_id)
+			return false
+	
+	# 检查阻止标签
+	if not caster_blocked_tags.is_empty():
+		if TagManager.has_any_tag(instigator, caster_blocked_tags):
+			print("ActiveAbility: Caster blocked tags found for ability %s" % ability_id)
+			return false
 	
 	# 检查是否可以支付所有消耗
 	for cost in costs:

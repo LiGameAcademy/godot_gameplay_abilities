@@ -27,10 +27,18 @@ class_name GameplayAbility
 ## 格式：{effect_instance: true}
 var _pending_effects: Dictionary = {}
 
+## 冷却剩余时间（秒，由技能自己管理）
+var _cooldown_remaining: float = 0.0
+
 ## 技能完成信号
 ## 当所有 Effect 完成时，会发出此信号
 ## Component 会订阅此信号来判断技能是否完成
 signal ability_completed(ability: GameplayAbility)
+
+## 冷却就绪信号
+## 当冷却时间完成时，会发出此信号
+## Component 会订阅此信号并转发
+signal cooldown_ready(ability: GameplayAbility)
 
 ## 处理技能学习事件
 ## 当技能被学习时，由 GameplayAbilityComponent 调用此方法
@@ -63,7 +71,14 @@ func cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> void:
 
 ## [子类可重写] 每帧更新（用于需要持续更新的技能，如连击计时器、引导技能）
 ## [param] delta: float 帧时间
-func update(_delta: float) -> void: pass
+func update(delta: float) -> void:
+	# 更新冷却时间
+	if _cooldown_remaining > 0.0:
+		_cooldown_remaining -= delta
+		if _cooldown_remaining <= 0.0:
+			_cooldown_remaining = 0.0
+			# 冷却完成，发出信号
+			cooldown_ready.emit(self)
 
 ## [子类可重写] 技能被取消时的处理
 ## 当技能被主动取消时（如被打断、资源不足等），由 GameplayAbilityComponent 调用此方法
@@ -188,6 +203,30 @@ func _clear_cast(_ability_comp: Node, _target: Node) -> void: pass
 func _on_cancel(ability_comp: Node, context: Dictionary = {}) -> void:
 	# 清理 Effect 订阅
 	_clear_effects()
+
+## 检查冷却是否就绪
+## [return] bool 冷却是否就绪
+func is_cooldown_ready() -> bool:
+	return _cooldown_remaining <= 0.0
+
+## 开始冷却
+## [param] duration: float 冷却持续时间（秒）
+func start_cooldown(duration: float) -> void:
+	if duration > 0.0:
+		_cooldown_remaining = duration
+
+## 获取冷却剩余时间
+## [return] float 冷却剩余时间（秒）
+func get_cooldown_remaining() -> float:
+	return _cooldown_remaining
+
+## 获取冷却进度（0.0-1.0，0.0 表示冷却完成，1.0 表示刚开始冷却）
+## [return] float 冷却进度
+func get_cooldown_progress() -> float:
+	var total_cooldown = get_cooldown_duration()
+	if total_cooldown <= 0.0:
+		return 0.0
+	return _cooldown_remaining / total_cooldown
 
 ## 处理 Effect 完成信号
 ## [param] effect: GameplayEffect 完成的效果实例

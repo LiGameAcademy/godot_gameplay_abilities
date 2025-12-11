@@ -4,12 +4,11 @@ class_name GameplayAbilityComponent
 ## 技能组件（采用鸭子类型设计，不继承基类）
 ## 管理实体的技能、法力、冷却等
 
-@export var initial_abilities: Array[GameplayAbility] = []  ## 初始技能列表
-
+@export var _initial_abilities: Array[GameplayAbility] = []  ## 初始技能列表
 @export var _status_comp: GameplayStatusComponent = null  ## 状态组件
 @export var _attribute_comp: GameplayVitalAttributeComponent = null  ## 属性组件
 
-var _cooldown_timers: Dictionary[StringName, Timer] = {}  ## 冷却计时器
+## 冷却时间管理已移至技能自身的 update() 方法中，不再需要统一管理
 var _cast_point_timers: Dictionary[StringName, SceneTreeTimer] = {}  ## 施法前摇计时器（逻辑驱动）
 var _cast_contexts: Dictionary[StringName, Dictionary] = {}  ## 存储施法上下文（target, context）
 var _learned_abilities: Dictionary[StringName, GameplayAbility] = {}  ## 已学会的技能
@@ -26,7 +25,7 @@ signal cooldown_ready(ability_id: StringName)				## 冷却就绪信号
 
 func _ready() -> void:
 	# 学习初始技能
-	for ability_data in initial_abilities:
+	for ability_data in _initial_abilities:
 		learn_ability(ability_data)
 	# 启用 process 以更新连击计时器
 	set_process(true)
@@ -34,6 +33,7 @@ func _ready() -> void:
 ## 每帧更新（更新所有技能的内部状态）
 func _process(delta: float) -> void:
 	# 统一调用所有技能的 update 方法（符合开闭原则）
+	# 技能会在自己的 update 中管理冷却时间，并在冷却完成时发出信号
 	for ability_id in _learned_abilities:
 		var ability_data = _learned_abilities[ability_id]
 		if is_instance_valid(ability_data):
@@ -57,10 +57,11 @@ func learn_ability(ability_data: GameplayAbility) -> void:
 	if not learned_ability.ability_completed.is_connected(_on_ability_completed):
 		learned_ability.ability_completed.connect(_on_ability_completed)
 	
-	# 创建冷却计时器
-	var timer = _create_cooldown_timer(ability_id)
-	if is_instance_valid(timer):
-		_cooldown_timers[ability_id] = timer
+	# 订阅技能冷却就绪信号
+	if not learned_ability.cooldown_ready.is_connected(_on_ability_cooldown_ready):
+		learned_ability.cooldown_ready.connect(_on_ability_cooldown_ready)
+	
+	# 冷却时间管理已移至技能自身的 update() 方法中
 	
 	# 检查并应用被动技能
 	if is_instance_valid(_status_comp):
@@ -86,12 +87,11 @@ func forget_ability(ability_id: StringName) -> void:
 	if is_instance_valid(ability_data) and ability_data.ability_completed.is_connected(_on_ability_completed):
 		ability_data.ability_completed.disconnect(_on_ability_completed)
 	
-	# 移除冷却计时器
-	if _cooldown_timers.has(ability_id):
-		var timer = _cooldown_timers[ability_id]
-		if is_instance_valid(timer):
-			timer.queue_free()
-		_cooldown_timers.erase(ability_id)
+	# 取消订阅技能冷却就绪信号
+	if is_instance_valid(ability_data) and ability_data.cooldown_ready.is_connected(_on_ability_cooldown_ready):
+		ability_data.cooldown_ready.disconnect(_on_ability_cooldown_ready)
+	
+	# 冷却时间管理已移至技能自身，无需清理
 	
 	# 移除被动技能效果
 	if is_instance_valid(ability_data) and is_instance_valid(_status_comp):
@@ -173,13 +173,13 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 
 	# 检查是否跳过冷却（用于技能链式调用）
 	if not context.get("skip_cooldown", false):
-		if not is_cooldown_ready(ability_id):
+		if not ability_data.is_cooldown_ready():
 			return false
 		
 		# 获取冷却时间（使用方法，支持 CombatAbility 重写）
 		var cooldown = ability_data.get_cooldown_duration()
 		if cooldown > 0.0:
-			start_cooldown(ability_id, cooldown)
+			ability_data.start_cooldown(cooldown)
 
 	# 设置当前正在执行的技能
 	_current_casting_ability_id = ability_id
@@ -354,47 +354,19 @@ func has_casting_ability() -> bool:
 ## 检查冷却是否就绪
 ## [param] ability_id: StringName 技能ID
 func is_cooldown_ready(ability_id: StringName) -> bool:
-	if not _cooldown_timers.has(ability_id):
-		return true  # 没有冷却计时器，认为冷却就绪
-	var timer = _cooldown_timers[ability_id]
-	if not is_instance_valid(timer):
+	var ability_data = get_ability_data(ability_id)
+	if not is_instance_valid(ability_data):
 		return true
-	return timer.time_left <= 0.0
+	return ability_data.is_cooldown_ready()
 
 ## 获取冷却进度（0.0-1.0，0.0 表示冷却完成，1.0 表示刚开始冷却）
 ## [param] ability_id: StringName 技能ID
 ## [return] float 冷却进度
 func get_cooldown_progress(ability_id: StringName) -> float:
-	if not _cooldown_timers.has(ability_id):
-		return 0.0  # 没有冷却，进度为 0
-	
-	var timer = _cooldown_timers[ability_id]
-	if not is_instance_valid(timer):
+	var ability_data = get_ability_data(ability_id)
+	if not is_instance_valid(ability_data):
 		return 0.0
-	
-	if timer.wait_time <= 0.0:
-		return 0.0
-	
-	return timer.time_left / timer.wait_time
-
-## 开始冷却
-## [param] ability_id: StringName 技能ID
-## [param] duration: float 冷却持续时间
-func start_cooldown(ability_id: StringName, duration: float) -> void:
-	if duration <= 0.0:
-		return
-	
-	if not _cooldown_timers.has(ability_id):
-		# 创建新的冷却计时器
-		var timer = _create_cooldown_timer(ability_id)
-		if not is_instance_valid(timer):
-			return
-		_cooldown_timers[ability_id] = timer
-	
-	var timer = _cooldown_timers[ability_id]
-	if is_instance_valid(timer):
-		timer.wait_time = duration
-		timer.start()
+	return ability_data.get_cooldown_progress()
 
 ## 清除当前正在执行的技能（在技能完全结束时调用）
 func clear_current_casting_ability() -> void:
@@ -436,23 +408,7 @@ func _start_cast_point_timer(ability_id: StringName, time: float, target: Node, 
 			_cast_contexts.erase(ability_id)
 	)
 
-## 创建冷却计时器
-func _create_cooldown_timer(ability_id: StringName) -> Timer:
-	var ability_data = get_ability_data(ability_id)
-	if not is_instance_valid(ability_data):
-		return null
-	
-	# 使用 get_cooldown_duration() 方法获取冷却时间（支持 CombatAbility 重写）
-	var cooldown = ability_data.get_cooldown_duration()
-	if cooldown <= 0.0:
-		return null
-	
-	var timer = Timer.new()
-	timer.name = "CooldownTimer_%s" % ability_id
-	timer.one_shot = true
-	timer.timeout.connect(_on_cooldown_timeout.bind(ability_id))
-	add_child(timer)
-	return timer
+## 冷却时间管理已移至技能自身的 update() 方法中，不再需要创建 Timer 节点
 
 ## 结束技能（内部方法）
 ## [param] ability_id: StringName 技能ID
@@ -491,8 +447,11 @@ func _on_ability_completed(ability: GameplayAbility) -> void:
 	# 检查是否是临时订阅（链式调用未学习的技能）
 	# 如果是临时订阅，需要断开连接
 	var is_learned = _learned_abilities.has(ability_id)
-	if not is_learned and ability.ability_completed.is_connected(_on_ability_completed):
-		ability.ability_completed.disconnect(_on_ability_completed)
+	if not is_learned:
+		if ability.ability_completed.is_connected(_on_ability_completed):
+			ability.ability_completed.disconnect(_on_ability_completed)
+		if ability.cooldown_ready.is_connected(_on_ability_cooldown_ready):
+			ability.cooldown_ready.disconnect(_on_ability_cooldown_ready)
 	
 	# 只有当前正在执行的技能才需要结束
 	if _current_casting_ability_id != ability_id:
@@ -501,8 +460,15 @@ func _on_ability_completed(ability: GameplayAbility) -> void:
 	# 结束技能
 	_end_ability(ability_id)
 
-## 冷却时间到期
-func _on_cooldown_timeout(ability_id: StringName) -> void:
+## 处理技能冷却就绪信号（由 Ability 发出）
+## [param] ability: GameplayAbility 冷却完成的技能实例
+func _on_ability_cooldown_ready(ability: GameplayAbility) -> void:
+	if not is_instance_valid(ability):
+		return
+	
+	var ability_id = ability.ability_id
+	
+	# 转发冷却就绪信号
 	cooldown_ready.emit(ability_id)
 	# 触发统一游戏事件：ability_cooldown_ready
 	AbilityEventBus.trigger_game_event(&"ability_cooldown_ready", {

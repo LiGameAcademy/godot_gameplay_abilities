@@ -64,6 +64,9 @@ func apply(context: Dictionary = {}) -> void:
 		if needs_event_bus:
 			AbilityEventBus.game_event_occurred.connect(_on_game_event_occurred)
 			_is_connected_to_event_bus = true
+	
+	# 5. 应用状态标签（标签系统集成）
+	_apply_status_tags()
 
 ## 状态被移除时，移除所有效果
 func remove() -> void:
@@ -87,7 +90,10 @@ func remove() -> void:
 			AbilityEventBus.game_event_occurred.disconnect(_on_game_event_occurred)
 		_is_connected_to_event_bus = false
 	
-	# 5. 清理数组
+	# 5. 移除状态标签（标签系统集成）
+	_remove_status_tags()
+	
+	# 6. 清理数组
 	periodic_timers.clear()
 	event_listeners.clear()
 
@@ -269,3 +275,25 @@ func _on_duration_timer_timeout() -> void:
 func _on_periodic_effect() -> void:
 	var context = {"stacks": stacks}
 	_apply_all_effects(context)
+
+## 应用状态标签（标签系统集成）
+func _apply_status_tags() -> void:
+	var target = get_target_entity()
+	if not is_instance_valid(target) or not is_instance_valid(status_data):
+		return
+	
+	# 应用状态的所有标签
+	for tag_id in status_data.tags:
+		if tag_id != &"":
+			TagManager.add_tag(target, tag_id)
+
+## 移除状态标签（标签系统集成）
+func _remove_status_tags() -> void:
+	var target = get_target_entity()
+	if not is_instance_valid(target) or not is_instance_valid(status_data):
+		return
+	
+	# 移除状态的所有标签
+	for tag_id in status_data.tags:
+		if tag_id != &"":
+			TagManager.remove_tag(target, tag_id)

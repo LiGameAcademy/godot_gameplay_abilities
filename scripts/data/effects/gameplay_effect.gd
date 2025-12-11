@@ -9,6 +9,14 @@ class_name GameplayEffect
 
 @export var sub_effects : Array[GameplayEffect] = [] 		## 子效果，支持效果组合
 
+@export_group("Tag Requirements")
+## 目标必须拥有的标签（效果生效的前置条件）
+## 如果目标没有所有必需的标签，效果不会生效
+@export var target_required_tags: Array[StringName] = []
+## 目标不能拥有的标签（效果生效的阻止条件，如免疫）
+## 如果目标拥有任意一个阻止标签，效果不会生效
+@export var target_blocked_tags: Array[StringName] = []
+
 @export_group("Visual Feedback")
 ## 游戏提示（Cue），用于逻辑与表现分离
 ## 当效果应用成功时，会执行此 Cue 来播放表现（特效、音效、飘字等）
@@ -182,9 +190,24 @@ func _remove(_target: Node, _instigator: Node) -> void:
 ## [param] instigator: Node 施法者
 ## [param] context: Dictionary 上下文
 func _check_filters(target: Node, instigator: Node, context: Dictionary) -> bool:
+	# 1. 检查传统过滤器
 	for filter in filters:
 		if not filter.check(target, instigator, context):
 			return false
+	
+	# 2. 检查标签要求（标签系统集成）
+	# 检查阻止标签（免疫检查）
+	if not target_blocked_tags.is_empty():
+		if TagManager.has_any_tag(target, target_blocked_tags):
+			print("GameplayEffect: Target blocked tags found for effect %s" % get_path())
+			return false
+	
+	# 检查必须标签（连携检查）
+	if not target_required_tags.is_empty():
+		if not TagManager.has_all_tags(target, target_required_tags):
+			print("GameplayEffect: Target required tags not found for effect %s" % get_path())
+			return false
+	
 	return true
 
 ## [子类重写] 获取效果描述
