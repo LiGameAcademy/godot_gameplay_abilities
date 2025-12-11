@@ -80,6 +80,10 @@ func get_icon(ability_comp: Node = null) -> Texture:
 	# 默认返回基础图标（开启状态）
 	return super.get_icon(ability_comp)
 
+## ToggleAbility 属于可切换技能（用于避免外部类型判断）
+func is_toggleable() -> bool:
+	return true
+
 func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
 	if not is_instance_valid(ability_comp) or not is_instance_valid(input_target): 
 		return

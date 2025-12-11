@@ -118,6 +118,10 @@ func get_cooldown_duration() -> float:
 func get_animation_name() -> StringName:
 	return &""
 
+## 是否为可切换技能（默认否，供外部避免类型判断）
+func is_toggleable() -> bool:
+	return false
+
 ## [子类可重写] 技能学习时的处理
 ## 默认实现为空，子类可按需重写（如 PassiveAbility 需要应用状态）
 func _on_learned(_ability_comp: Node, _status_comp: Node) -> void: pass

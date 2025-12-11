@@ -241,13 +241,16 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 	
 	# 检查技能是否正在执行
 	if _current_casting_ability_id == ability_id:
-		# 让技能自己处理切换逻辑（符合开闭原则）
-		# ToggleAbility 会在 commit_cast 中处理关闭逻辑
-		# 如果 commit_cast 返回 true，说明切换成功；返回 false，说明不允许重复执行
-		var result = ability_data.commit_cast(self, context)
-		if not result:
-			push_warning("GameplayAbilityComponent: Ability %s is already executing, cannot cast again." % ability_id)
-		return result
+		# 可切换技能：交由技能自身处理切换逻辑
+		if ability_data.is_toggleable():
+			var result = ability_data.commit_cast(self, context)
+			if not result:
+				push_warning("GameplayAbilityComponent: Ability %s toggle-off rejected." % ability_id)
+			return result
+		
+		# 非可切换技能：直接拒绝重复施放，避免连击/引导类重复进入
+		push_warning("GameplayAbilityComponent: Ability %s is already executing, cannot cast again." % ability_id)
+		return false
 	
 	# 正常执行技能：检查消耗
 	if not ability_data.commit_cast(self, context):
@@ -336,8 +339,8 @@ func _end_ability(ability_id: StringName) -> void:
 			"ability_id": ability_id
 		})
 		
-		# 注意：不在这里清除 _current_casting_ability_id
-		# 因为后摇阶段可能还需要这个标记，由 clear_current_casting_ability() 清除
+		# 绝大多数主动技能在完成时应立即清理占用标记
+		clear_current_casting_ability()
 
 ## 清除技能效果
 ## [param] ability_id: StringName 技能ID
