@@ -11,7 +11,6 @@ class_name ActiveAbility
 @export var targeting_strategy: TargetingStrategy = null
 @export var cooldown_duration: float = 0.0  ## 技能冷却时间
 @export var costs: Array[AbilityCostBase] = []  ## 技能消耗器数组（支持多种消耗类型）
-@export var cast_duration: float = 1.0  ## 施法/引导的总时长
 @export var cast_point: float = 0.5  ## 施法前摇时间 (动画关键帧)
 @export var cast_range: float = 8.0  ## 施法距离
 @export var autocast: bool = false  ## 技能是否可以自动施法
@@ -45,9 +44,6 @@ func is_autocast() -> bool:
 
 func toggle_autocast() -> void:
 	_is_autocast = not _is_autocast
-
-func get_cast_duration() -> float:
-	return cast_duration
 
 func get_cast_point() -> float:
 	return cast_point

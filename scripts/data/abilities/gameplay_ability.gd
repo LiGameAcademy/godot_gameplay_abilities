@@ -8,7 +8,7 @@ class_name GameplayAbility
 @export var ability_id: StringName                  ## 技能的唯一ID
 @export var ability_name: String                    ## 技能名称
 @export_multiline var description: String           ## 技能描述
-@export var icon: Texture                         	## 技能图标
+@export var _icon: Texture                         	## 技能图标
 @export var tags: Array[StringName] = []            ## 技能标签
 @export var disabled: bool = false                  ## 技能是否禁用
 @export var targeting_scorer: TargetingScorer = null   ## 目标评分器
@@ -93,10 +93,6 @@ func is_autocast() -> bool:
 func toggle_autocast() -> void:
 	pass
 
-## 获取施法持续时间
-func get_cast_duration() -> float:
-	return 0.0
-
 ## 获取施法前摇时间
 func get_cast_point() -> float:
 	return 0.0
@@ -105,7 +101,7 @@ func get_cast_point() -> float:
 ## [param] ability_comp: Node 技能组件（可选，用于动态图标）
 ## [return] Texture 技能图标
 func get_icon(ability_comp: Node = null) -> Texture:
-	return icon
+	return _icon
 
 ## 获取施法距离
 func get_cast_range() -> float:

@@ -36,4 +36,3 @@ func _on_cast(_ability_comp: Node, _target: Node, _context: Dictionary = {}) -> 
 
 func _clear_cast(_ability_comp: Node, _target: Node) -> void:
 	pass  # 被动技能不需要清除
-
