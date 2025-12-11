@@ -7,7 +7,7 @@ class_name GameplayEffect
 
 @export var filters: Array[GameplayFilterData] = [] 	## 过滤器，如果为空，则不过滤
 
-@export var effects : Array[GameplayEffect] = [] 		## 子效果，支持效果组合
+@export var sub_effects : Array[GameplayEffect] = [] 		## 子效果，支持效果组合
 
 @export_group("Visual Feedback")
 ## 游戏提示（Cue），用于逻辑与表现分离
@@ -15,34 +15,31 @@ class_name GameplayEffect
 @export var cue: GameplayCue = null
 
 @export_group("Effect Lifecycle")
-## 决定该效果是否会阻塞技能的完成流程
-## true: 技能会等待该效果执行完毕（调用 finished_callback）才算结束
-## false: 技能施放即完成（Fire and Forget，即时效果）
-@export var blocks_ability_completion: bool = false
 ## 延迟执行时间（秒）
 ## 如果 > 0，效果会在延迟后执行，而不是立即执行
 ## 适用于：前摇时间、延迟伤害、延迟治疗等场景
 @export var delay: float = 0.0
 
-# 运行时实例标记：模板在调度时会被克隆，克隆后标记为 true
-var _is_runtime_instance: bool = false
+# 标记是否已由子类处理信号发射（异步效果使用）
+var _signal_handled_by_subclass: bool = false
+
+## 效果完成信号
+## 所有效果完成时都会发出此信号
+## Ability 会订阅此信号来判断技能是否完成
+signal effect_completed(effect: GameplayEffect)
 
 ## 应用效果（核心入口）
 ## [param] target: Node 目标节点
 ## [param] instigator: Node 施法者节点
 ## [param] context: Dictionary 上下文信息（可选）
+## 注意：此方法期望接收的是已经克隆的 Effect 实例
+## Effect 的克隆和订阅逻辑由 Ability 负责（见 ActiveAbility._apply_single_effect_to_target）
 func apply(target: Node, instigator: Node, context: Dictionary = {}) -> void:
 	if not _check_filters(target, instigator, context):
+		# 如果被过滤器过滤掉，仍然发出完成信号（避免技能卡死）
+		# 因为 Ability 已经订阅了这个 Effect 的信号，需要通知它已完成
+		effect_completed.emit(self)
 		return
-	
-	# 如果当前是模板（未标记为运行时实例），先克隆再执行，避免共享状态
-	if not _is_runtime_instance:
-		var inst = duplicate(true)
-		if inst is GameplayEffect:
-			var effect_inst: GameplayEffect = inst
-			effect_inst._is_runtime_instance = true
-			effect_inst.apply(target, instigator, context)
-			return
 	
 	# 检查是否有延迟
 	if delay > 0:
@@ -57,36 +54,33 @@ func apply(target: Node, instigator: Node, context: Dictionary = {}) -> void:
 ## [param] instigator: Node 施法者节点
 ## [param] context: Dictionary 上下文信息
 func _apply_immediate(target: Node, instigator: Node, context: Dictionary) -> void:
-	# 1. 获取 AbilityComponent（用于注册/注销阻塞任务）
-	var ability_comp = _find_ability_component(instigator)
-	var current_ability_id: StringName = &""
+	# 重置信号处理标志
+	_signal_handled_by_subclass = false
 	
-	# 2. 如果是阻塞效果，立即向组件"举手"注册
-	if blocks_ability_completion and is_instance_valid(ability_comp):
-		current_ability_id = ability_comp.get_current_casting_ability_id()
-		if not current_ability_id.is_empty():
-			ability_comp.register_blocking_task(current_ability_id)
-	
-	# 3. 执行具体逻辑（子类实现）
+	# 1. 执行具体逻辑（子类实现）
 	_apply(target, instigator, context)
 	
-	# 4. 执行 Cue（逻辑与表现分离）
+	# 2. 执行 Cue（逻辑与表现分离）
 	_execute_cue(target, context)
 	
-	# 5. 异步处理
-	if blocks_ability_completion and is_instance_valid(ability_comp) and not current_ability_id.is_empty():
-		if _is_asynchronous():
-			# 如果是异步，等待子类自己在结束后调用 unregister
-			# 子类需要在完成时调用：ability_comp.unregister_blocking_task(current_ability_id)
-			pass
-		else:
-			# 如果是同步（即时），立即注销
-			ability_comp.unregister_blocking_task(current_ability_id)
+	# 3. 通知完成（信号驱动模式）
+	# 如果子类已经处理了信号发射（异步效果），则不再发射
+	# 否则（同步效果），立即 emit 信号
+	if not _signal_handled_by_subclass:
+		effect_completed.emit(self)
 	
-	# 6. 递归应用子效果（每个子效果会自己去 register/unregister）
-	for effect in effects:
-		if is_instance_valid(effect):
-			effect.apply(target, instigator, context)
+	# 4. 递归应用子效果（每个子效果会自己 emit 信号）
+	# 注意：子效果也需要克隆，避免运行时状态共享
+	for effect in sub_effects:
+		if not is_instance_valid(effect):
+			continue
+		
+		# 克隆子效果实例
+		var sub_effect_inst = effect.duplicate(true) as GameplayEffect
+		if not is_instance_valid(sub_effect_inst):
+			continue
+		
+		sub_effect_inst.apply(target, instigator, context)
 
 ## 延迟应用效果（内部方法）
 ## [param] target: Node 目标节点
@@ -106,34 +100,25 @@ func _apply_delayed(target: Node, instigator: Node, context: Dictionary) -> void
 		_apply_immediate(target, instigator, context)
 		return
 	
-	# 1. 获取 AbilityComponent（用于注册/注销阻塞任务）
-	var ability_comp = _find_ability_component(instigator)
-	var current_ability_id: StringName = &""
-	
-	# 2. 如果是阻塞效果，立即向组件"举手"注册（延迟期间也算阻塞）
-	if blocks_ability_completion and is_instance_valid(ability_comp):
-		current_ability_id = ability_comp.get_current_casting_ability_id()
-		if not current_ability_id.is_empty():
-			ability_comp.register_blocking_task(current_ability_id)
-	
-	# 3. 创建延迟计时器
+	# 1. 创建延迟计时器
 	var timer = scene_tree.create_timer(delay)
 	
-	# 4. 延迟执行回调
+	# 2. 延迟执行回调
 	timer.timeout.connect(func() -> void:
 		# 延迟执行前再次检查目标有效性
 		if not is_instance_valid(target) or not is_instance_valid(instigator):
-			# 如果目标或施法者已失效，注销阻塞任务
-			if blocks_ability_completion and is_instance_valid(ability_comp) and not current_ability_id.is_empty():
-				ability_comp.unregister_blocking_task(current_ability_id)
+			# 如果目标或施法者已失效，emit 信号
+			effect_completed.emit(self)
 			return
 		
 		# 再次检查过滤器（延迟期间可能状态已改变）
 		if not _check_filters(target, instigator, context):
-			# 过滤器不通过，注销阻塞任务
-			if blocks_ability_completion and is_instance_valid(ability_comp) and not current_ability_id.is_empty():
-				ability_comp.unregister_blocking_task(current_ability_id)
+			# 过滤器不通过，emit 信号
+			effect_completed.emit(self)
 			return
+		
+		# 重置信号处理标志
+		_signal_handled_by_subclass = false
 		
 		# 执行具体逻辑（子类实现）
 		_apply(target, instigator, context)
@@ -141,36 +126,25 @@ func _apply_delayed(target: Node, instigator: Node, context: Dictionary) -> void
 		# 执行 Cue（逻辑与表现分离）
 		_execute_cue(target, context)
 		
-		# 异步处理
-		if blocks_ability_completion and is_instance_valid(ability_comp) and not current_ability_id.is_empty():
-			if _is_asynchronous():
-				# 如果是异步，等待子类自己在结束后调用 unregister
-				# 子类需要在完成时调用：ability_comp.unregister_blocking_task(current_ability_id)
-				pass
-			else:
-				# 如果是同步（即时），立即注销
-				ability_comp.unregister_blocking_task(current_ability_id)
+		# 通知完成（信号驱动模式）
+		# 如果子类已经处理了信号发射（异步效果），则不再发射
+		# 否则（同步效果），立即 emit 信号
+		if not _signal_handled_by_subclass:
+			effect_completed.emit(self)
 		
-		# 递归应用子效果（每个子效果会自己去 register/unregister）
-		for effect in effects:
-			if is_instance_valid(effect):
-				effect.apply(target, instigator, context)
+		# 递归应用子效果（每个子效果会自己 emit 信号）
+		# 注意：子效果也需要克隆，避免运行时状态共享
+		for effect in sub_effects:
+			if not is_instance_valid(effect):
+				continue
+			
+			# 克隆子效果实例
+			var sub_effect_inst = effect.duplicate(true) as GameplayEffect
+			if not is_instance_valid(sub_effect_inst):
+				continue
+			
+			sub_effect_inst.apply(target, instigator, context)
 	)
-
-## 辅助查找组件
-## [param] node: Node 节点
-## [return] GameplayAbilityComponent 组件，如果不存在则返回 null
-func _find_ability_component(node: Node) -> GameplayAbilityComponent:
-	if not is_instance_valid(node):
-		return null
-	
-	# 优先使用 GameplayAbilitySystem 查找
-	var comp = GameplayAbilitySystem.get_component_by_interface(node, "GameplayAbilityComponent")
-	if is_instance_valid(comp):
-		return comp as GameplayAbilityComponent
-	
-	# 如果找不到，返回 null
-	return null
 
 ## 移除效果（用于状态型效果）
 ## [param] target: Node 目标节点
@@ -179,14 +153,16 @@ func remove(target: Node, instigator: Node) -> void:
 	_remove(target, instigator)
 	# 停止持续 Cue（如拖尾、持续特效等）
 	_stop_cue(target)
+	# 如果被移除的效果还未完成，emit 信号（避免技能卡死）
+	effect_completed.emit(self)
 	# 递归移除子效果
-	for effect in effects:
+	for effect in sub_effects:
 		effect.remove(target, instigator)
 
 ## 获取效果描述
 func get_description() -> String:
 	var description = _get_description()
-	for effect in effects:
+	for effect in sub_effects:
 		description += effect.get_description() + "\n"
 	return description
 
@@ -196,11 +172,6 @@ func get_description() -> String:
 ## [param] context: Dictionary 上下文信息
 @abstract func _apply(target: Node, instigator: Node, context: Dictionary) -> void
 
-## [子类重写] 是否是异步执行？
-## 如果子类有 Tween 或 Timer，返回 true，并负责手动调用 finished_callback
-## 返回 false 时，基类会在 _apply 后立即调用 finished_callback（防止卡死）
-func _is_asynchronous() -> bool:
-	return false
 
 ## [子类重写] 移除效果的具体实现
 func _remove(_target: Node, _instigator: Node) -> void: 

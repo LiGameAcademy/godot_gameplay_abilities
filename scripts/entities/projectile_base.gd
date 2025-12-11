@@ -198,6 +198,7 @@ func _should_impact(target: Node) -> bool:
 	return true
 
 ## 传递弹头（应用 Effect）
+## 注意：此方法会克隆 Effect 实例，但不会订阅信号（由 Ability 系统管理）
 func _deliver_payload(target: Node) -> void:
 	if not is_instance_valid(target):
 		return
@@ -213,9 +214,14 @@ func _deliver_payload(target: Node) -> void:
 		if not is_instance_valid(effect):
 			continue
 		
-		# 【关键】将 Effect 应用给目标
-		# Effect 会自己处理伤害、状态等逻辑
-		effect.apply(target, instigator, context)
+		# 克隆 Effect 实例（避免运行时状态共享）
+		var effect_inst = effect.duplicate(true) as GameplayEffect
+		if not is_instance_valid(effect_inst):
+			push_warning("ProjectileBase: Effect instance is not valid for projectile %s" % name)
+			continue
+		
+		# 应用效果（注意：不订阅信号，由 Ability 系统管理）
+		effect_inst.apply(target, instigator, context)
 
 ## 初始化速度向量
 ## 应该在 apply_to_projectile() 之后调用，确保 speed 已正确设置

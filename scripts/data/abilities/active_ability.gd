@@ -42,9 +42,6 @@ func can_autocast() -> bool:
 func is_autocast() -> bool:
 	return _is_autocast
 
-func toggle_autocast() -> void:
-	_is_autocast = not _is_autocast
-
 func get_cast_point() -> float:
 	return cast_point
 
@@ -93,12 +90,6 @@ func get_effects_description() -> String:
 		descriptions.append("[状态] %s" % status_to_apply.status_display_name)
 	
 	return "\n".join(descriptions)
-
-func _on_learned(_ability_comp: Node, _status_comp: Node) -> void:
-	pass
-
-func _on_forgotten(_ability_comp: Node, _status_comp: Node) -> void:
-	pass
 
 ## 检查是否可以施法
 func _can_cast(ability_comp: Node, target: Node = null, context: Dictionary = {}) -> bool:
@@ -174,11 +165,97 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 		# 如果有回调，不仅要在这里结束，可能还需要处理空放的逻辑
 		# 这里的处理比较微妙，如果是阻塞技能，没目标可能需要立即结束
 		# 但通常 caster_effects 里的冲锋可能才是阻塞源
+		# 检查是否所有效果都已完成（如果没有目标效果，但可能有施法者效果）
+		_check_ability_completion()
 		return
 	
 	# 4. 应用目标效果 (Target Effects)
 	var effects_to_apply = target_effects if not target_effects.is_empty() else effects
 	_apply_effects_to_targets(effects_to_apply, instigator, final_targets, context)
+	
+	# 5. 检查是否所有效果都已完成（如果没有效果被应用，立即完成技能）
+	# 注意：如果没有任何 Effect 被订阅（比如没有目标、效果被过滤器过滤掉），
+	# _pending_effects 会保持为空，此时应该立即发出完成信号
+	_check_ability_completion()
+
+## [新增] 应用施法者效果
+func _apply_caster_effects(instigator: Node, context: Dictionary) -> void:
+	for effect in caster_effects:
+		if not is_instance_valid(effect):
+			push_warning("ActiveAbility: Effect is not valid for ability %s" % ability_id)
+			continue
+		
+		# 施法者既是 instigator 也是 target
+		_apply_single_effect_to_target(effect, instigator, instigator, context)
+
+## 应用效果到目标列表（带基础过滤）
+## [param] effects_to_apply: Array[GameplayEffect]
+## [param] instigator: Node 施法者
+## [param] targets: Array[Node] 目标列表
+## [param] context: Dictionary 上下文
+func _apply_effects_to_targets(effects_to_apply: Array, instigator: Node, targets: Array, context: Dictionary) -> void:
+	if effects_to_apply.is_empty():
+		return
+	
+	for target in targets:
+		if not is_instance_valid(target):
+			continue
+		# 阵营或自我过滤可在调用前或这里扩展
+		for effect in effects_to_apply:
+			if not is_instance_valid(effect):
+				continue
+			
+			_apply_single_effect_to_target(effect, target, instigator, context)
+
+## 为单个单位应用单个效果（内部方法）
+## 负责：克隆 Effect 实例、订阅信号、应用效果
+## [param] effect: GameplayEffect 要应用的效果模板
+## [param] target: Node 目标单位
+## [param] instigator: Node 施法者
+## [param] context: Dictionary 上下文
+func _apply_single_effect_to_target(effect: GameplayEffect, target: Node, instigator: Node, context: Dictionary) -> void:
+	if not is_instance_valid(effect):
+		push_warning("ActiveAbility: Effect is not valid for ability %s" % ability_id)
+		return
+	
+	if not is_instance_valid(target):
+		return
+	
+	# 1. 克隆 Effect 实例（避免运行时状态共享）
+	var effect_inst = effect.duplicate(true) as GameplayEffect
+	if not is_instance_valid(effect_inst):
+		push_warning("ActiveAbility: Effect instance is not valid for ability %s" % ability_id)
+		return
+	
+	# 2. 订阅完成信号（在应用前订阅，避免信号丢失）
+	_subscribe_effect_completion(effect_inst)
+	
+	# 3. 应用效果
+	effect_inst.apply(target, instigator, context)
+
+#region ========== 目标筛选与应用（供子类/其他能力复用）==========
+
+## 使用策略对目标进行筛选，并与原始目标求交集
+## [param] targets: Array 原始目标列表（比如检测器或信号给出的）
+## [param] instigator: Node 施法者
+## [param] context: Dictionary 上下文
+## [param] strategy: TargetingStrategy 可选策略
+## [param] input_target: Node 可选的直接输入目标（单体命中时使用）
+## [return] Array 筛选后的目标
+func _filter_targets_with_strategy(targets: Array, instigator: Node, context: Dictionary, strategy: TargetingStrategy, input_target: Node = null) -> Array:
+	if targets.is_empty():
+		print("ActiveAbility: No targets detected for ability %s" % ability_id)
+		return []
+	if not is_instance_valid(strategy):
+		print("ActiveAbility: Strategy is not valid for ability %s" % ability_id)
+		return targets
+	
+	var resolved = strategy.resolve_targets(instigator, input_target, context)
+	var filtered: Array[Node] = []
+	for target in resolved:
+		if target in targets:
+			filtered.append(target)
+	return filtered
 
 ## 封装目标获取逻辑
 ## 【重构】优先使用 TargetingStrategy，回退到枚举（向后兼容）
@@ -210,57 +287,6 @@ func _resolve_targets_by_enum(instigator: Node, input_target: Node, context: Dic
 		return targets
 
 	return targets
-
-## [新增] 应用施法者效果
-func _apply_caster_effects(instigator: Node, context: Dictionary) -> void:
-	for effect in caster_effects:
-		if is_instance_valid(effect):
-			# 施法者既是 instigator 也是 target
-			# 注意：Effect 会自己注册/注销阻塞任务
-			effect.apply(instigator, instigator, context)
-
-#region ========== 目标筛选与应用（供子类/其他能力复用）==========
-
-## 使用策略对目标进行筛选，并与原始目标求交集
-## [param] targets: Array 原始目标列表（比如检测器或信号给出的）
-## [param] instigator: Node 施法者
-## [param] context: Dictionary 上下文
-## [param] strategy: TargetingStrategy 可选策略
-## [param] input_target: Node 可选的直接输入目标（单体命中时使用）
-## [return] Array 筛选后的目标
-func _filter_targets_with_strategy(targets: Array, instigator: Node, context: Dictionary, strategy: TargetingStrategy, input_target: Node = null) -> Array:
-	if targets.is_empty():
-		print("ActiveAbility: No targets detected for ability %s" % ability_id)
-		return []
-	if not is_instance_valid(strategy):
-		print("ActiveAbility: Strategy is not valid for ability %s" % ability_id)
-		return targets
-	
-	var resolved = strategy.resolve_targets(instigator, input_target, context)
-	var filtered: Array[Node] = []
-	for target in resolved:
-		if target in targets:
-			filtered.append(target)
-	return filtered
-
-## 应用效果到目标列表（带基础过滤）
-## [param] effects_to_apply: Array[GameplayEffect]
-## [param] instigator: Node 施法者
-## [param] targets: Array[Node] 目标列表
-## [param] context: Dictionary 上下文
-func _apply_effects_to_targets(effects_to_apply: Array, instigator: Node, targets: Array, context: Dictionary) -> void:
-	if effects_to_apply.is_empty():
-		return
-	
-	for target in targets:
-		if not is_instance_valid(target):
-			continue
-		# 阵营或自我过滤可在调用前或这里扩展
-		for effect in effects_to_apply:
-			if not is_instance_valid(effect):
-				continue
-			effect.apply(target, instigator, context)
-
 #endregion
 
 func _clear_cast(_ability_comp: Node, target: Node) -> void:

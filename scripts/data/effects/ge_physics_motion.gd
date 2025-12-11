@@ -33,45 +33,34 @@ enum DirectionType {
 
 # 运行时状态（本效果实例内，不再跨实例共享）
 var _tween: Tween = null
-var _ability_comp: GameplayAbilityComponent = null
-var _ability_id: StringName = &""
 var _state: Dictionary = {}
 var _target_body: CharacterBody3D = null
 var _instigator_ref: Node = null
 
 func _init() -> void:
 	# 这是一个持续效果，技能需要等待它完成
-	blocks_ability_completion = true
+	# 注意：现在所有效果都会 emit 完成信号，不再需要 blocks_ability_completion
+	pass
 
-func _is_asynchronous() -> bool:
-	return true
 
 func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
+	# 标记为异步效果，信号由子类自己处理
+	_signal_handled_by_subclass = true
+	
 	# 1. 守卫：必须是物理实体
 	var body = target as CharacterBody3D
 	if not body:
 		push_warning("GE_PhysicsMotion: Target is not CharacterBody3D")
-		# 如果是阻塞效果但目标无效，需要注销阻塞任务
-		var ability_comp = _find_ability_component(instigator)
-		if is_instance_valid(ability_comp):
-			var ability_id = ability_comp.get_current_casting_ability_id()
-			if not ability_id.is_empty():
-				ability_comp.unregister_blocking_task(ability_id)
+		# 如果目标无效，立即通知完成
+		effect_completed.emit(self)
 		return
 	
-	# 2. 获取 AbilityComponent 和当前技能ID（用于完成时注销）
-	_ability_comp = _find_ability_component(instigator)
-	_ability_id = &""
-	if is_instance_valid(_ability_comp):
-		_ability_id = _ability_comp.get_current_casting_ability_id()
-	
-	# 3. 计算方向（这是冲锋瞬间锁定的，过程不可变）
+	# 2. 计算方向（这是冲锋瞬间锁定的，过程不可变）
 	var move_dir = _resolve_direction(body, context)
 	if move_dir == Vector3.ZERO:
 		push_warning("GE_PhysicsMotion: Cannot resolve direction")
-		# 注销阻塞任务
-		if is_instance_valid(_ability_comp) and not _ability_id.is_empty():
-			_ability_comp.unregister_blocking_task(_ability_id)
+		# 如果方向无效，立即通知完成
+		effect_completed.emit(self)
 		return
 	
 	# 4. 准备 Tween（必须在 Physics Process 运行以保证碰撞稳定）
@@ -96,7 +85,7 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 		0.0, 1.0, duration
 	)
 	
-	# 8. 完成回调
+	# 8. 完成回调（在 Tween 完成时 emit 信号）
 	_tween.finished.connect(func():
 		_on_motion_finished()
 	)
@@ -228,6 +217,9 @@ func _resolve_direction(body: Node3D, context: Dictionary) -> Vector3:
 ## 位移完成回调
 ## [param] instance_id: String 实例ID
 func _on_motion_finished() -> void:
+	# 通知 Effect 完成（信号驱动模式）
+	effect_completed.emit(self)
+	
 	if is_instance_valid(_target_body) and is_instance_valid(_instigator_ref):
 		remove(_target_body, _instigator_ref)
 
@@ -239,9 +231,8 @@ func _remove(target: Node, instigator: Node) -> void:
 	if is_instance_valid(_tween):
 		_tween.kill()
 	
-	# 注销阻塞任务（被取消时也需要注销，避免技能卡死）
-	if is_instance_valid(_ability_comp) and not _ability_id.is_empty():
-		_ability_comp.unregister_blocking_task(_ability_id)
+	# 通知 Effect 完成（被取消时也需要通知，避免技能卡死）
+	effect_completed.emit(self)
 	
 	# 清理运行时状态
 	_tween = null

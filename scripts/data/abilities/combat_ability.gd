@@ -136,20 +136,34 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 	context["combo_index"] = _current_combo_index
 	context["combo_count"] = _combo_abilities.size()
 	
+	# 连接子技能的完成信号，在技能完成时推进连击
+	# 注意：应该订阅子技能的 ability_completed 信号，而不是 Component 的信号
+	if is_instance_valid(current_ability):
+		# 使用一次性连接，避免重复连接
+		if not current_ability.ability_completed.is_connected(_on_combo_segment_completed):
+			current_ability.ability_completed.connect(_on_combo_segment_completed)
+
 	# 执行当前连击能力
 	current_ability.cast(ability_comp, input_target, context)
 	
-	# 连接技能完成信号，在技能完成时推进连击
-	if is_instance_valid(ability_comp) and ability_comp.has_signal("ability_completed"):
-		# 使用一次性连接，避免重复连接
-		if not ability_comp.ability_completed.is_connected(_on_combo_segment_completed):
-			ability_comp.ability_completed.connect(_on_combo_segment_completed)
-
 ## 连击段完成回调（在技能完成时推进连击）
-func _on_combo_segment_completed(completed_id: StringName) -> void:
-	# 只处理当前连击技能的完成事件
-	if completed_id == ability_id:
+## [param] completed_ability: GameplayAbility 完成的技能实例
+func _on_combo_segment_completed(completed_ability: GameplayAbility) -> void:
+	if not is_instance_valid(completed_ability):
+		return
+	
+	# 检查是否是当前连击段完成
+	var current_ability = _get_current_combo_ability()
+	if is_instance_valid(current_ability) and completed_ability == current_ability:
+		# 断开信号连接（一次性连接）
+		if completed_ability.ability_completed.is_connected(_on_combo_segment_completed):
+			completed_ability.ability_completed.disconnect(_on_combo_segment_completed)
+		
+		# 推进连击
 		_advance_combo()
+		
+		# 发出 CombatAbility 自己的完成信号，通知 Component
+		ability_completed.emit(self)
 
 ## 获取当前连击对应的能力
 func _get_current_combo_ability() -> ActiveAbility:

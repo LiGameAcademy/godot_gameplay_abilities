@@ -37,9 +37,6 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 	# 记录输入动作，供"按住维持"模式检测
 	var input_action: String = context.get("input_action", "")
 	
-	# 注册阻塞任务，防止技能过早结束
-	ability_comp.register_blocking_task(ability_id)
-	
 	# 打上引导标签（如需与状态系统交互，可在外部根据 TAG_CHANNELING 处理）
 	context["channeling"] = true
 	
@@ -126,9 +123,9 @@ func _interrupt_channeling(ability_comp: Node = null, completed: bool = false) -
 	if is_instance_valid(duration_timer):
 		duration_timer.queue_free()
 	
-	# 清理阻塞任务
-	if is_instance_valid(ability_comp) and ability_comp.has_method("unregister_blocking_task"):
-		ability_comp.unregister_blocking_task(ability_id)
+	# 通知技能完成（引导结束时）
+	if is_instance_valid(ability_comp):
+		ability_completed.emit(self)
 	
 	# 停止施法者效果的 Cue（清理持续特效）
 	var instigator = _channeling_state.get("instigator", null)
@@ -154,7 +151,7 @@ func _perform_tick(ability_comp: Node, instigator: Node, input_target: Node, con
 			push_warning("ChannelingAbility: Tick cost pay failed for ability %s" % ability_id)
 			return false
 	
-	# 应用 Tick 效果
+	# 应用 Tick 效果（会自动订阅阻塞 Effect）
 	if not tick_effects.is_empty():
 		var targets = _resolve_targets(instigator, input_target, context)
 		_apply_effects_to_targets(tick_effects, instigator, targets, context)
@@ -176,6 +173,7 @@ func can_toggle_off(ability_comp: Node, context: Dictionary = {}) -> bool:
 func _toggle_off(ability_comp: Node, context: Dictionary = {}) -> void:
 	# 调用父类方法（会触发 cancel_ability）
 	super(ability_comp, context)
+
 
 ## 技能被取消时的处理
 func _on_cancel(ability_comp: Node, context: Dictionary = {}) -> void:
@@ -213,7 +211,7 @@ func _on_duration_timeout() -> void:
 		_interrupt_channeling(ability_comp, false)
 		return
 	
-	# 应用完成效果
+	# 应用完成效果（会自动订阅阻塞 Effect）
 	if not completion_effects.is_empty():
 		var final_targets = _resolve_targets(instigator, input_target, context)
 		_apply_effects_to_targets(completion_effects, instigator, final_targets, context)
