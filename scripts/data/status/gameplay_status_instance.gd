@@ -64,6 +64,9 @@ func apply(context: Dictionary = {}) -> void:
 	
 	# 4. 应用状态标签（标签系统集成）
 	_apply_status_tags()
+	
+	# 5. 执行状态 Cue（视觉反馈）
+	_execute_status_cue()
 
 ## 状态被移除时，移除所有效果
 func remove() -> void:
@@ -90,6 +93,9 @@ func remove() -> void:
 	
 	# 5. 移除状态标签（标签系统集成）
 	_remove_status_tags()
+	
+	# 6. 停止状态 Cue（清理视觉反馈）
+	_stop_status_cue()
 
 ## 处理事件（用于事件监听型效果）
 ## 此方法用于处理通过统一事件系统触发的事件
@@ -260,3 +266,33 @@ func _remove_status_tags() -> void:
 	for tag_id in status_data.tags:
 		if tag_id != &"":
 			TagManager.remove_tag(target, tag_id)
+
+## 执行状态 Cue（视觉反馈）
+func _execute_status_cue() -> void:
+	if not is_instance_valid(status_data) or not is_instance_valid(status_data.cue):
+		return
+	
+	var target = get_target_entity()
+	if not is_instance_valid(target):
+		return
+	
+	# 执行 Cue（Manager 会处理挂点计算）
+	GameplayCueManager.execute_cue(status_data.cue, target, {})
+
+## 停止状态 Cue（清理视觉反馈）
+func _stop_status_cue() -> void:
+	if not is_instance_valid(status_data) or not is_instance_valid(status_data.cue):
+		return
+	
+	var target = get_target_entity()
+	if not is_instance_valid(target):
+		return
+	
+	# 遍历所有 Cue 组件并停止持续效果
+	for cue_component in status_data.cue.cues:
+		if not is_instance_valid(cue_component):
+			continue
+		
+		# 如果 Cue 组件实现了 stop 方法，调用它
+		if cue_component.has_method("stop"):
+			cue_component.stop(target)

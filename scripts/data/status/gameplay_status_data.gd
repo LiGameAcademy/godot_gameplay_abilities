@@ -48,6 +48,12 @@ enum StackingPolicy {
 ## 当新状态与旧状态冲突时，优先级高的状态会替换优先级低的状态
 @export var priority: int = 0
 
+@export_group("Visual Feedback")
+## 游戏提示（Cue），用于逻辑与表现分离
+## 当状态应用时，会执行此 Cue 来播放表现（特效、音效等）
+## 状态移除时，会自动停止持续 Cue（如附加粒子特效）
+@export var cue: GameplayCue = null
+
 ## 检查此状态是否可以被指定事件触发
 func can_trigger_on_event(event_type: StringName) -> bool:
 	return trigger_on_events.has(event_type)
