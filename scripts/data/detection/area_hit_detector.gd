@@ -108,6 +108,7 @@ func _get_targets(caster: Node3D, context: Dictionary = {}) -> Array[Node]:
 	var shape: Shape3D
 	if detection_shape:
 		shape = detection_shape
+		shape.radius = radius
 	else:
 		shape = SphereShape3D.new()
 		shape.radius = radius

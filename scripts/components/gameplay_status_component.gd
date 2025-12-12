@@ -72,7 +72,7 @@ func apply_status(gsd: GameplayStatusData, instigator: Node, stacks: int = 1, co
 	else:
 		# 【新实例逻辑】
 		var instance = GameplayStatusInstance.new(gsd, self, instigator, stacks)
-		if gsd.duration > 0.0:
+		if gsd.duration != 0.0:
 			_active_statuses[gsd.status_id] = instance
 		# 先应用状态（执行效果）
 		instance.apply(context)

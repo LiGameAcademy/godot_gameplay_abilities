@@ -302,10 +302,18 @@ func cancel_ability(ability_id: StringName = &"", context: Dictionary = {}) -> v
 	if not is_instance_valid(instigator):
 		return
 	
-	# 调用所有效果的 remove 方法（这会触发持续效果的清理，如停止 Tween）
-	for effect in ability_data.effects:
-		if is_instance_valid(effect):
-			effect.remove(instigator, instigator)
+	# 移除由该技能应用的所有状态（新架构：技能通过 Status 系统应用效果）
+	if not is_instance_valid(_status_comp):
+		# 如果状态组件无效，尝试通过接口查询
+		_status_comp = GameplayAbilitySystem.get_component_by_interface(instigator, "GameplayStatusComponent")
+	
+	if is_instance_valid(_status_comp):
+		# 遍历技能配置的所有状态，移除它们
+		for status_data in ability_data.statuses:
+			if not is_instance_valid(status_data):
+				continue
+			# 通过状态ID移除状态
+			_status_comp.remove_status(status_data.status_id)
 	
 	# 强制重置状态
 	if _current_casting_ability_id == target_id:
