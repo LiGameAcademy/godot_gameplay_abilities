@@ -53,7 +53,7 @@ func apply_to_projectile(projectile: ProjectileBase) -> void:
 	projectile.piercing = piercing
 	projectile.max_pierce_count = max_pierce_count
 	
-	projectile.payload_statuses = payload_statuses
+	projectile.payload_statuses = payload_statuses.duplicate()
 
 	# 应用移动策略（如果设置了）
 	if is_instance_valid(movement_strategy):

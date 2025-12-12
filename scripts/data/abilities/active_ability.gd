@@ -203,8 +203,7 @@ func _apply_status(instigator: Node, status_data: GameplayStatusData, context: D
 		push_warning("ActiveAbility: Instigator %s has no GameplayStatusComponent, cannot apply status %s" % [instigator.name, status_data.status_id])
 		return
 	
-	# 应用状态（状态系统会处理目标检测、筛选和应用效果）
-	# Status 通过 target_mode 决定应用到自己、检测到的目标，或两者
+	# 应用状态（状态只应用到自己，不处理目标检测）
 	# 注意：不再订阅 Status 完成信号，技能完成由执行时间控制
 	status_comp.apply_status(status_data, instigator, 1, context)
 

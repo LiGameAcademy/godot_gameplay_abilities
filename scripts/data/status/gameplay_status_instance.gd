@@ -54,13 +54,13 @@ func apply(context: Dictionary = {}) -> void:
 	# 保存初始上下文（用于周期性效果，如魔法场引用）
 	_initial_context = context.duplicate()
 	
-	# 1. 检测目标（如果配置了目标检测）
-	var targets_to_apply: Array[Node] = _resolve_targets(context)
+	# 获取目标实体（状态只应用到自己）
+	var target_entity = get_target_entity()
+	if not is_instance_valid(target_entity):
+		return
 	
-	# 2. 对每个目标应用效果
-	for target in targets_to_apply:
-		if is_instance_valid(target):
-			_apply_all_effects_to_target(target, context)
+	# 应用效果到目标实体
+	_apply_all_effects_to_target(target_entity, context)
 	
 	# 3. 如果是瞬时效果（duration = 0），立即移除并发出完成信号
 	if status_data.duration == 0.0:
@@ -133,11 +133,8 @@ func handle_event(event_id: StringName, context: Dictionary) -> void:
 	
 	# 检查是否是状态级别的事件监听
 	if status_data.event_to_listen == event_id:
-		# 事件触发时也需要重新检测目标
-		var targets_to_apply: Array[Node] = _resolve_targets(context)
-		for target_node in targets_to_apply:
-			if is_instance_valid(target_node):
-				_apply_all_effects_to_target(target_node, context)
+		# 事件触发时应用效果到目标实体（状态只应用到自己）
+		_apply_all_effects_to_target(target, context)
 
 ## 统一游戏事件系统的回调
 ## 当任何游戏事件发生时，此方法会被调用
@@ -227,75 +224,6 @@ func _create_duration_timer() -> void:
 	owner_component.add_child(_duration_timer)
 	_duration_timer.start()
 
-## 解析目标（根据配置的目标检测和筛选逻辑）
-## [param] context: Dictionary 上下文信息
-## [return] Array[Node] 要应用效果的目标列表
-func _resolve_targets(context: Dictionary) -> Array[Node]:
-	var target_entity = get_target_entity()
-	if not is_instance_valid(target_entity):
-		return []
-	
-	var targets_to_apply: Array[Node] = []
-	
-	# 1. 获取 hit_detector（优先使用 Status 配置的，如果没有则使用上下文传递的）
-	var detector_to_use: HitDetectorBase = null
-	if is_instance_valid(status_data.hit_detector):
-		detector_to_use = status_data.hit_detector
-	elif context.has("hit_detector") and is_instance_valid(context["hit_detector"]):
-		detector_to_use = context["hit_detector"] as HitDetectorBase
-	
-	# 2. 检测目标（如果配置了 hit_detector）
-	var detected_targets: Array[Node] = []
-	if is_instance_valid(detector_to_use) and target_entity is Node3D:
-		# 使用检测器检测目标
-		detected_targets = detector_to_use.get_targets(
-			target_entity as Node3D,
-			context
-		)
-		
-		# 使用策略进一步筛选目标（如果配置了）
-		if is_instance_valid(status_data.targeting_strategy):
-			var strategy_targets = status_data.targeting_strategy.resolve_targets(
-				instigator,
-				context.get("input_target", null),
-				context
-			)
-			# 求交集（只保留同时出现在两个列表中的目标）
-			var filtered_targets: Array[Node] = []
-			for target in detected_targets:
-				if target in strategy_targets:
-					filtered_targets.append(target)
-			detected_targets = filtered_targets
-
-	# 3. 根据 target_mode 决定应用目标
-	match status_data.target_mode:
-		0:  # TargetApplicationMode.SELF
-			# 只应用到自己
-			targets_to_apply = [target_entity]
-		1:  # TargetApplicationMode.DETECTED_TARGETS
-			# 只应用到检测到的目标
-			targets_to_apply = detected_targets.duplicate()
-			
-			# 如果没有检测到目标，尝试使用上下文中的 input_target
-			if targets_to_apply.is_empty() and context.has("input_target"):
-				var input_target = context["input_target"]
-				if is_instance_valid(input_target):
-					targets_to_apply = [input_target]
-		2:  # TargetApplicationMode.BOTH
-			# 同时应用到自己和检测到的目标
-			targets_to_apply = detected_targets.duplicate()
-			if target_entity not in targets_to_apply:
-				targets_to_apply.append(target_entity)
-	
-	# 如果没有检测到目标且模式是 DETECTED_TARGETS，返回空列表
-	if status_data.target_mode == 1 and targets_to_apply.is_empty():  # TargetApplicationMode.DETECTED_TARGETS
-		return []
-	
-	# 如果最终没有目标，默认应用到自己（向后兼容）
-	if targets_to_apply.is_empty():
-		targets_to_apply = [target_entity]
-	
-	return targets_to_apply
 
 ## 对单个目标应用所有效果（状态应用时触发）
 ## 区分需要存储的效果（属性修改器）和不需要存储的效果（瞬时效果）
@@ -380,15 +308,7 @@ func _on_periodic_effect() -> void:
 	var context = _initial_context.duplicate()
 	context["stacks"] = stacks
 	
-	# 检查是否是魔法场效果（通过 context["field"] 判断）
-	var magic_field = context.get("field", null) as MagicFieldBase
-	if is_instance_valid(magic_field):
-		# 魔法场效果：由魔法场自己处理周期性效果的应用
-		# 魔法场会根据配置选择目标并应用效果
-		magic_field.apply_periodic_effects(status_data.periodic_effects, instigator, context)
-		return
-	
-	# 普通周期性效果：直接应用到状态的目标实体
+	# 获取目标实体（状态只应用到自己）
 	var target_entity = get_target_entity()
 	if not is_instance_valid(target_entity):
 		return

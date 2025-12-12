@@ -60,7 +60,7 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 		var projectile = _spawn_projectile(
 			instigator, 
 			spawn_transform, 
-			projectile_data, 
+			projectile_data.duplicate(), 
 			target_for_homing, 
 			context
 		)
@@ -90,7 +90,7 @@ func _connect_projectile_signals(
 	projectile.impact_triggered.connect(_on_projectile_impact.bind(ability_comp, context))
 	
 	# 连接超时信号（如果配置了 timeout_status）
-	if is_instance_valid(projectile_data) and is_instance_valid(projectile_data.timeout_status):
+	if is_instance_valid(projectile_data):
 		projectile.timeout_triggered.connect(_on_projectile_timeout.bind(ability_comp, context))
 
 ## 处理投射物撞击事件
@@ -139,7 +139,7 @@ func _on_projectile_timeout(
 		timeout_context: Dictionary,
 		ability_comp: Node,
 		context: Dictionary) -> void:
-	if not is_instance_valid(projectile_data) or not is_instance_valid(projectile_data.timeout_status):
+	if not is_instance_valid(projectile_data):
 		return
 	
 	var instigator = ability_comp.get_parent()

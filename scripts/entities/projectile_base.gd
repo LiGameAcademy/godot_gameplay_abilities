@@ -71,12 +71,6 @@ func _ready() -> void:
 		instigator.name if is_instance_valid(instigator) else "null"
 	])
 	
-	# 注意：速度初始化延迟到 apply_to_projectile() 之后
-	# 因为 speed 可能在 _ready() 之后才被设置
-	# 如果 speed 已经设置，则立即初始化
-	if speed > 0.0:
-		initialize_velocity()
-
 func _physics_process(delta: float) -> void:
 	# 1. 生命周期检查
 	_timer += delta
@@ -174,16 +168,16 @@ func _deliver_payload(target: Node, hit_position: Vector3, hit_direction: Vector
 	}
 	
 	# 应用状态（弹头）
-	for status_data in payload_statuses:
+	for status_data in payload_statuses.duplicate():
 		if not is_instance_valid(status_data):
 			continue
 		
 		# 获取 instigator 的状态组件（状态会应用到 instigator，但会检测 hit_position 周围的目标）
-		var status_comp = GameplayAbilitySystem.get_component_by_interface(instigator, "GameplayStatusComponent")
+		var status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
 		if is_instance_valid(status_comp):
 			# 应用状态（状态系统会处理目标检测、筛选和应用效果）
 			# 状态会通过 context["hit_position"] 和 context["detection_position"] 检测周围的目标
-			status_comp.apply_status(status_data, instigator, 1, context)
+			status_comp.apply_status(status_data.duplicate(), instigator, 1, context)
 		else:
 			push_warning("ProjectileBase: Instigator %s has no GameplayStatusComponent, cannot apply status %s" % [instigator.name, status_data.status_id])
 	
