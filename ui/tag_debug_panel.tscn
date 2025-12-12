@@ -1,0 +1,148 @@
+[gd_scene load_steps=2 format=3 uid="uid://dak7x2m5oap5r"]
+
+[ext_resource type="Script" uid="uid://cw72sg17x0s6m" path="res://addons/godot_gameplay_abilities/ui/tag_debug_panel.gd" id="1_06b37"]
+
+[node name="TagDebugPanel" type="MarginContainer"]
+offset_right = 396.0
+offset_bottom = 439.0
+script = ExtResource("1_06b37")
+
+[node name="Panel" type="Panel" parent="."]
+layout_mode = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="HeaderContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_constants/separation = 8
+
+[node name="TitleLabel" type="Label" parent="MarginContainer/VBoxContainer/HeaderContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 20
+text = "标签调试面板"
+horizontal_alignment = 1
+
+[node name="RefreshButton" type="Button" parent="MarginContainer/VBoxContainer/HeaderContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+text = "刷新实体列表"
+
+[node name="HSeparator" type="HSeparator" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 0
+
+[node name="HBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 16
+
+[node name="LeftPanel" type="VBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="EntityListLabel" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/LeftPanel"]
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 16
+text = "实体列表"
+
+[node name="EntityList" type="ItemList" parent="MarginContainer/VBoxContainer/HBoxContainer/LeftPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 128)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="MiddlePanel" type="VBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="TagContainerLabel" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/MiddlePanel"]
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 16
+text = "当前标签"
+
+[node name="TagCountLabel" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/MiddlePanel"]
+unique_name_in_owner = true
+modulate = Color(0.8, 0.8, 0.8, 1)
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 12
+text = "标签数量: 0"
+
+[node name="ScrollContainer" type="ScrollContainer" parent="MarginContainer/VBoxContainer/HBoxContainer/MiddlePanel"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="TagContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer/MiddlePanel/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="ControlPanel" type="VBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 8
+theme_override_constants/separation = 8
+
+[node name="ControlLabel" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/ControlPanel"]
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 16
+text = "标签控制"
+
+[node name="TagIdInput" type="LineEdit" parent="MarginContainer/VBoxContainer/HBoxContainer/ControlPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 0
+placeholder_text = "输入标签ID (如: State.Stunned, Status.Buff)"
+
+[node name="ButtonContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer/ControlPanel"]
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_constants/separation = 4
+alignment = 2
+
+[node name="ClearAllTagsButton" type="Button" parent="MarginContainer/VBoxContainer/HBoxContainer/ControlPanel/ButtonContainer"]
+unique_name_in_owner = true
+modulate = Color(1, 0.6, 0.6, 1)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+text = "清除所有标签"
+
+[node name="ForceRemoveTagButton" type="Button" parent="MarginContainer/VBoxContainer/HBoxContainer/ControlPanel/ButtonContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+text = "强制移除标签"
+
+[node name="RemoveTagButton" type="Button" parent="MarginContainer/VBoxContainer/HBoxContainer/ControlPanel/ButtonContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+text = "移除标签"
+
+[node name="AddTagButton" type="Button" parent="MarginContainer/VBoxContainer/HBoxContainer/ControlPanel/ButtonContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+text = "添加标签"
