@@ -26,16 +26,6 @@ class_name ActiveAbility
 ## 如果施法者拥有任意一个阻止标签，技能无法施放
 @export var caster_blocked_tags: Array[StringName] = []
 
-@export_group("Targeting & Effects")
-## [新增] 施法者效果：技能施放成功时，立即对施法者应用的效果
-## 适用：自身Buff、消耗生命值、后坐力、冲锋位移
-@export var caster_effects: Array[GameplayEffect] = []
-
-## [重命名] 目标效果：对筛选出的目标应用的效果
-## 适用：伤害、控制、Debuff
-## 注意：为了向后兼容，如果 target_effects 为空，会回退使用基类的 effects
-@export var target_effects: Array[GameplayEffect] = []
-
 @export_group("Hit Detection")
 ## 命中检测器（用于动画关键帧触发时的目标检测）
 ## 如果设置了此检测器，能力系统会在动画关键帧时主动调用它来获取目标
@@ -79,24 +69,13 @@ func get_costs_description() -> String:
 func get_effects_description() -> String:
 	var descriptions: Array[String] = []
 	
-	if not caster_effects.is_empty():
-		descriptions.append("[自身]")
-		for effect in caster_effects:
-			if is_instance_valid(effect):
-				descriptions.append(effect.get_description())
-	
-	# 获取目标效果（向后兼容）
-	var effects_to_show = target_effects if not target_effects.is_empty() else effects
-	if not effects_to_show.is_empty():
-		descriptions.append("[目标]")
-		for effect in effects_to_show:
-			if is_instance_valid(effect):
-				descriptions.append(effect.get_description())
-	
-	# 状态效果
-	if is_instance_valid(status_to_apply):
-		descriptions.append("[状态] %s" % status_to_apply.status_display_name)
-	
+	# 新架构：状态效果
+	if not statuses.is_empty():
+		descriptions.append("[状态]")
+		for status_data in statuses:
+			if is_instance_valid(status_data):
+				descriptions.append("- %s" % status_data.status_display_name)
+				descriptions.append("  %s" % status_data.get_effects_description())
 	return "\n".join(descriptions)
 
 ## 检查是否可以施法
@@ -162,52 +141,53 @@ func _commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
 	return true
 
 ## [核心重构] 施放技能
-## 逻辑流：支付消耗 -> 对己效果 -> 获取目标 -> 对敌效果
+## 逻辑流：支付消耗 -> 对己状态/效果 -> 对敌状态/效果
+## [新架构] 优先使用 Status 系统，回退到 Effect 系统（向后兼容）
 func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
 	var instigator = ability_comp.get_parent()
 	if not is_instance_valid(instigator):
 		push_warning("ActiveAbility: Cannot cast, instigator is not valid")
 		return
 	
-	# 1. 立即应用施法者效果 (Caster Effects)
-	# 比如：冲锋技能在这里触发 GE_PhysicsMotion，或者获得一个"施法中"的Tag
-	_apply_caster_effects(instigator, context)
-	
-	# 2. 解析目标 (Resolve Targets)
-	# 将复杂的 if-else 逻辑封装出去
-	# 将 hit_detector 传递到 context 中，供策略使用
+	# 传递上下文信息（包括 input_target，供 Status 的目标检测使用）
+	var status_context = context.duplicate()
+	status_context["input_target"] = input_target
+	status_context["ability_id"] = ability_id
 	if hit_detector:
-		context["hit_detector"] = hit_detector
-	var final_targets = _resolve_targets(instigator, input_target, context)
+		status_context["hit_detector"] = hit_detector
 	
-	# 3. 如果没有目标且必须要有目标，则不再继续执行目标效果
-	# (视具体设计而定，有时候没打中人也算释放成功)
-	if final_targets.is_empty():
-		# 如果有回调，不仅要在这里结束，可能还需要处理空放的逻辑
-		# 这里的处理比较微妙，如果是阻塞技能，没目标可能需要立即结束
-		# 但通常 caster_effects 里的冲锋可能才是阻塞源
-		# 检查是否所有效果都已完成（如果没有目标效果，但可能有施法者效果）
+	# 1. 应用状态（新架构）
+	# 优先使用基类的 statuses，Status 系统会自己处理目标检测和筛选
+	if not statuses.is_empty():
+		for status_data in statuses:
+			if is_instance_valid(status_data):
+				_apply_status(instigator, status_data, status_context)
+		# 检查是否所有效果都已完成
 		_check_ability_completion()
 		return
-	
-	# 4. 应用目标效果 (Target Effects)
-	var effects_to_apply = target_effects if not target_effects.is_empty() else effects
-	_apply_effects_to_targets(effects_to_apply, instigator, final_targets, context)
-	
-	# 5. 检查是否所有效果都已完成（如果没有效果被应用，立即完成技能）
-	# 注意：如果没有任何 Effect 被订阅（比如没有目标、效果被过滤器过滤掉），
-	# _pending_effects 会保持为空，此时应该立即发出完成信号
+
+	# 3. 检查是否所有效果都已完成
+	# 注意：Status 系统是异步的，但瞬时 Status（duration = 0）会立即完成
+	# Effect 系统会通过信号通知完成
 	_check_ability_completion()
 
-## [新增] 应用施法者效果
-func _apply_caster_effects(instigator: Node, context: Dictionary) -> void:
-	for effect in caster_effects:
-		if not is_instance_valid(effect):
-			push_warning("ActiveAbility: Effect is not valid for ability %s" % ability_id)
-			continue
-		
-		# 施法者既是 instigator 也是 target
-		_apply_single_effect_to_target(effect, instigator, instigator, context)
+## 应用状态（新架构）
+## [param] instigator: Node 施法者
+## [param] status_data: GameplayStatusData 状态数据
+## [param] context: Dictionary 上下文信息
+func _apply_status(instigator: Node, status_data: GameplayStatusData, context: Dictionary) -> void:
+	if not is_instance_valid(status_data):
+		return
+	
+	# 获取施法者的状态组件
+	var status_comp = GameplayAbilitySystem.get_component_by_interface(instigator, "GameplayStatusComponent")
+	if not is_instance_valid(status_comp):
+		push_warning("ActiveAbility: Instigator %s has no GameplayStatusComponent, cannot apply status %s" % [instigator.name, status_data.status_id])
+		return
+	
+	# 应用状态（状态系统会处理目标检测、筛选和应用效果）
+	# Status 通过 target_mode 决定应用到自己、检测到的目标，或两者
+	status_comp.apply_status(status_data, instigator, 1, context)
 
 ## 应用效果到目标列表（带基础过滤）
 ## [param] effects_to_apply: Array[GameplayEffect]
@@ -316,19 +296,16 @@ func _clear_cast(_ability_comp: Node, target: Node) -> void:
 	
 	var instigator = _ability_comp.get_parent() if _ability_comp.has_method("get_parent") else null
 	
-	# 1. 移除目标效果（如果有需要移除的效果）
-	var effects_to_remove = target_effects if not target_effects.is_empty() else effects
-	for effect in effects_to_remove:
-		if is_instance_valid(effect):
-			effect.remove(target, instigator)
+	# 1. 移除效果（向后兼容，基类属性）
+	var base_effects = get("effects")
+	if base_effects:
+		for effect in base_effects:
+			if is_instance_valid(effect):
+				effect.remove(target, instigator)
 	
-	# 2. 移除施法者效果（如果有需要移除的效果）
-	for effect in caster_effects:
-		if is_instance_valid(effect):
-			effect.remove(instigator, instigator)
-	
-	# 3. 移除状态（可选，向后兼容）
-	if is_instance_valid(status_to_apply):
+	# 2. 移除状态（向后兼容：status_to_apply，基类属性）
+	var base_status = get("status_to_apply")
+	if is_instance_valid(base_status):
 		var target_status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
 		if is_instance_valid(target_status_comp) and target_status_comp.has_method("remove_status"):
-			target_status_comp.remove_status(status_to_apply.status_id)
+			target_status_comp.remove_status(base_status.status_id)

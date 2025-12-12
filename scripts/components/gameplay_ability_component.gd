@@ -153,13 +153,24 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 		push_error("GameplayAbilityComponent: Ability %s not found." % ability_id)
 		return false
 	
-	# 检查技能是否正在执行
-	if _current_casting_ability_id == ability_id:
+	# 检查技能是否正在执行，或者可切换技能是否已经开启
+	# 注意：对于可切换技能，即使 _current_casting_ability_id 被清除（如通过 ability_completed 信号），
+	# 技能可能仍然处于开启状态（如 ChannelingAbility 的 _is_active）
+	var is_currently_executing = _current_casting_ability_id == ability_id
+	var is_toggleable_and_on = false
+	
+	if ability_data.is_toggleable():
+		# 检查技能是否已经开启（通过技能自己的状态检查）
+		if ability_data.has_method("is_toggled_on"):
+			is_toggleable_and_on = ability_data.is_toggled_on()
+	
+	if is_currently_executing or is_toggleable_and_on:
 		# 可切换技能：交由技能自身处理切换逻辑
 		if ability_data.is_toggleable():
 			var result = ability_data.commit_cast(self, context)
 			if not result:
 				push_warning("GameplayAbilityComponent: Ability %s toggle-off rejected." % ability_id)
+			# 直接返回结果（关闭操作会返回 true，但不会继续执行后续逻辑）
 			return result
 		
 		# 非可切换技能：直接拒绝重复施放，避免连击/引导类重复进入

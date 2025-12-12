@@ -5,27 +5,26 @@ class_name GameplayAbility
 ## 技能数据基类（抽象类）
 ## 定义技能的所有属性和行为
 
-@export var ability_id: StringName                  ## 技能的唯一ID
-@export var ability_name: String                    ## 技能名称
-@export_multiline var description: String           ## 技能描述
-@export var _icon: Texture                         	## 技能图标
-@export var tags: Array[StringName] = []            ## 技能标签
-@export var disabled: bool = false                  ## 技能是否禁用
-@export var targeting_scorer: TargetingScorer = null   ## 目标评分器
+@export var ability_id: StringName                  	## 技能的唯一ID
+@export var ability_name: String                    	## 技能名称
+@export_multiline var description: String           	## 技能描述
+@export var _icon: Texture                         		## 技能图标
+@export var tags: Array[StringName] = []            	## 技能标签
+@export var disabled: bool = false                  	## 技能是否禁用
+@export var targeting_scorer: TargetingScorer = null   	## 目标评分器
 
 @export_group("Effects")
-## 技能直接应用的效果（组合模式）
-## 这些效果会立即应用到目标，不需要通过状态
-@export var effects: Array[GameplayEffect] = []
 
-@export_group("Status (Optional)")
-## 技能应用的状态（可选，用于需要持续时间的 Buff/Debuff）
-## 如果同时设置了 effects 和 status_to_apply，两者都会生效
-@export var status_to_apply: GameplayStatusData = null
+@export_group("Status")
+## 技能应用的状态列表（新架构）
+## Status 系统会处理目标检测、筛选和应用效果
+## 每个 Status 可以通过 target_mode 决定应用到自己、检测到的目标，或两者
+## 适用：所有效果（瞬时、周期性、永久）
+@export var statuses: Array[GameplayStatusData] = []
 
 ## 运行时 Effect 列表（用于跟踪所有 Effect，等待它们完成）
 ## 格式：{effect_instance: true}
-var _pending_effects: Dictionary = {}
+var _pending_effects: Dictionary[GameplayEffect, bool] = {}
 
 ## 冷却剩余时间（秒，由技能自己管理）
 var _cooldown_remaining: float = 0.0
@@ -89,13 +88,7 @@ func handle_cancel(ability_comp: Node, context: Dictionary = {}) -> void:
 
 ## 获取效果描述
 func get_effects_description() -> String:
-	var descriptions: Array[String] = []
-	for effect in effects:
-		if is_instance_valid(effect):
-			descriptions.append(effect.get_description())
-	if is_instance_valid(status_to_apply):
-		descriptions.append("Apply status: %s" % status_to_apply.status_display_name)
-	return "\n".join(descriptions)
+	return ""
 
 ## 获取消耗描述（用于UI显示）
 ## [return] String 消耗描述文本
@@ -122,7 +115,7 @@ func get_cast_point() -> float:
 ## 获取技能图标
 ## [param] ability_comp: Node 技能组件（可选，用于动态图标）
 ## [return] Texture 技能图标
-func get_icon(ability_comp: Node = null) -> Texture:
+func get_icon() -> Texture:
 	return _icon
 
 ## 获取施法距离

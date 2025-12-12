@@ -45,16 +45,24 @@ func get_target_entity() -> Node:
 
 ## 状态被施加时，应用所有效果
 func apply(context: Dictionary = {}) -> void:
-	# 1. 应用所有效果（立即生效的）
-	# 注意：不区分"状态型效果"，所有效果都应用
-	# 如果效果需要在特定时机触发，由效果自己决定（通过 delay 等）
-	_apply_all_effects(context)
+	# 1. 检测目标（如果配置了目标检测）
+	var targets_to_apply: Array[Node] = _resolve_targets(context)
 	
-	# 2. 注册周期性效果（使用状态级别的 period）
+	# 2. 对每个目标应用效果
+	for target in targets_to_apply:
+		if is_instance_valid(target):
+			_apply_all_effects_to_target(target, context)
+	
+	# 3. 如果是瞬时效果（duration = 0），立即移除
+	if status_data.duration == 0.0:
+		remove()
+		return
+	
+	# 4. 注册周期性效果（使用状态级别的 period）
 	if status_data.period > 0.0:
 		_create_periodic_timer()
 	
-	# 3. 连接到统一游戏事件系统
+	# 5. 连接到统一游戏事件系统
 	# 如果状态配置了 trigger_on_events 或 event_to_listen，需要连接事件总线
 	if not _is_connected_to_event_bus:
 		var needs_event_bus = not status_data.trigger_on_events.is_empty() or status_data.event_to_listen != &""
@@ -62,10 +70,10 @@ func apply(context: Dictionary = {}) -> void:
 			AbilityEventBus.game_event_occurred.connect(_on_game_event_occurred)
 			_is_connected_to_event_bus = true
 	
-	# 4. 应用状态标签（标签系统集成）
+	# 6. 应用状态标签（标签系统集成）
 	_apply_status_tags()
 	
-	# 5. 执行状态 Cue（视觉反馈）
+	# 7. 执行状态 Cue（视觉反馈）
 	_execute_status_cue()
 
 ## 状态被移除时，移除所有效果
@@ -110,8 +118,11 @@ func handle_event(event_id: StringName, context: Dictionary) -> void:
 	
 	# 检查是否是状态级别的事件监听
 	if status_data.event_to_listen == event_id:
-		# 应用所有效果
-		_apply_all_effects(context)
+		# 事件触发时也需要重新检测目标
+		var targets_to_apply: Array[Node] = _resolve_targets(context)
+		for target_node in targets_to_apply:
+			if is_instance_valid(target_node):
+				_apply_all_effects_to_target(target_node, context)
 
 ## 统一游戏事件系统的回调
 ## 当任何游戏事件发生时，此方法会被调用
@@ -192,9 +203,66 @@ func _create_duration_timer() -> void:
 	owner_component.add_child(_duration_timer)
 	_duration_timer.start()
 
-## 应用所有效果（统一入口，所有效果都克隆）
-func _apply_all_effects(context: Dictionary) -> void:
-	var target = get_target_entity()
+## 解析目标（根据配置的目标检测和筛选逻辑）
+## [param] context: Dictionary 上下文信息
+## [return] Array[Node] 要应用效果的目标列表
+func _resolve_targets(context: Dictionary) -> Array[Node]:
+	var target_entity = get_target_entity()
+	if not is_instance_valid(target_entity):
+		return []
+	
+	var targets_to_apply: Array[Node] = []
+	
+	# 1. 检测目标（如果配置了 hit_detector）
+	var detected_targets: Array[Node] = []
+	if is_instance_valid(status_data.hit_detector) and target_entity is Node3D:
+		# 使用检测器检测目标
+		detected_targets = status_data.hit_detector.get_targets(
+			target_entity as Node3D,
+			context
+		)
+		
+		# 使用策略进一步筛选目标（如果配置了）
+		if is_instance_valid(status_data.targeting_strategy):
+			var strategy_targets = status_data.targeting_strategy.resolve_targets(
+				instigator,
+				null,
+				context
+			)
+			# 求交集（只保留同时出现在两个列表中的目标）
+			var filtered_targets: Array[Node] = []
+			for target in detected_targets:
+				if target in strategy_targets:
+					filtered_targets.append(target)
+			detected_targets = filtered_targets
+
+	# 2. 根据 target_mode 决定应用目标
+	match status_data.target_mode:
+		0:  # TargetApplicationMode.SELF
+			# 只应用到自己
+			targets_to_apply = [target_entity]
+		1:  # TargetApplicationMode.DETECTED_TARGETS
+			# 只应用到检测到的目标（已设置）
+			pass
+		2:  # TargetApplicationMode.BOTH
+			# 同时应用到自己和检测到的目标
+			if target_entity not in targets_to_apply:
+				targets_to_apply.append(target_entity)
+	
+	# 如果没有检测到目标且模式是 DETECTED_TARGETS，返回空列表
+	if status_data.target_mode == 1 and targets_to_apply.is_empty():  # TargetApplicationMode.DETECTED_TARGETS
+		return []
+	
+	# 如果最终没有目标，默认应用到自己（向后兼容）
+	if targets_to_apply.is_empty():
+		targets_to_apply = [target_entity]
+	
+	return targets_to_apply
+
+## 对单个目标应用所有效果（统一入口，所有效果都克隆）
+## [param] target: Node 目标实体
+## [param] context: Dictionary 上下文信息
+func _apply_all_effects_to_target(target: Node, context: Dictionary) -> void:
 	if not is_instance_valid(target):
 		return
 	
@@ -217,6 +285,16 @@ func _apply_all_effects(context: Dictionary) -> void:
 		# 存储克隆，以便移除时调用 remove()
 		# 注意：所有效果都存储，移除时统一调用 remove()
 		stateful_effects.append(effect_clone)
+
+## 应用所有效果（统一入口，所有效果都克隆）
+## [已弃用] 使用 _apply_all_effects_to_target 替代
+## 保留此方法以保持向后兼容
+func _apply_all_effects(context: Dictionary) -> void:
+	var target = get_target_entity()
+	if not is_instance_valid(target):
+		return
+	
+	_apply_all_effects_to_target(target, context)
 
 ## 移除所有效果
 func _remove_all_effects() -> void:
@@ -243,7 +321,11 @@ func _on_duration_timer_timeout() -> void:
 ## 周期性效果到期时，应用所有效果
 func _on_periodic_effect() -> void:
 	var context = {"stacks": stacks}
-	_apply_all_effects(context)
+	# 周期性效果也需要重新检测目标（因为目标可能已经改变）
+	var targets_to_apply: Array[Node] = _resolve_targets(context)
+	for target_node in targets_to_apply:
+		if is_instance_valid(target_node):
+			_apply_all_effects_to_target(target_node, context)
 
 ## 应用状态标签（标签系统集成）
 func _apply_status_tags() -> void:

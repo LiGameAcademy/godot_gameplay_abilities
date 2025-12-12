@@ -11,4 +11,3 @@ func _apply(_target: Node, _instigator: Node, _context: Dictionary) -> void:
 
 func _get_description() -> String:
 	return "视觉提示效果"
-
