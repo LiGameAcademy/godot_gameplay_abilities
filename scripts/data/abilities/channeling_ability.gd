@@ -1,248 +1,169 @@
 extends ActiveAbility
 class_name ChannelingAbility
 
-## 引导类技能（持续施法，周期触发）
-## 设计目标：
-## - 支持持续时间 / 周期 Tick / 完成效果
-## - 支持每 Tick 消耗、结束消耗跳过（由 context 控制）
-## - 可配置是否允许移动、按键松开是否中断
-## - 使用状态系统管理 tick 效果和资源消耗
-## - 整合 ToggleAbility 的切换功能
+## 引导/切换技能模式
+enum ChannelingMode {
+    HOLD_TO_CHANNEL, ## 按住施法：松开按键时停止 (如：暴风雪、吸血)
+    TOGGLE           ## 切换式：再次按下按键时停止 (如：开启光环、魔法盾)
+}
 
-const TAG_CHANNELING: StringName = &"state.casting.channeling"
+#Group: Channeling Core Rules
+## 技能模式
+@export var channeling_mode: ChannelingMode = ChannelingMode.HOLD_TO_CHANNEL
+## 最大持续时间（秒）。
+## 如果 <= 0，则视为无限持续，直到被动或主动中断。
+## 对于 Toggle 技能，通常设置为 0。
+@export var max_duration: float = 5.0
+## 周期触发间隔（秒）
+@export var tick_interval: float = 0.5
 
-@export_group("Channeling Settings")
-## 引导状态（包含 tick 效果、资源消耗、完成效果）
-## 状态系统会负责管理周期性触发和资源消耗
-@export var channeling_status: GameplayStatusData = null
-## 引导持续时间（如果状态未设置 duration，使用此值）
-@export var channel_duration: float = 0.0
-## 是否允许移动引导（false 时移动视为打断）
-@export var is_mobile: bool = false
-## 是否按住维持（true 时松开输入即打断，false 时为切换式引导）
-@export var stop_on_input_release: bool = true
+#Group: Channeling Costs & Effects
+## [新] 引导期间给自己打上的标签（如 State.Channeling）
+## 用于动画状态机，或防止释放其他互斥技能。
+@export var self_channeling_tags: Array[StringName] = []
 
-@export_group("Toggle Ability")
-## 关闭状态的图标
-@export var toggled_off_icon: Texture2D = null
-## 关闭状态时应用的状态（可选）
-@export var toggled_off_status_to_apply: GameplayStatusData = null
+## [新] 被动中断标签
+## 如果施法者拥有数组中任意一个标签（如 Stunned, Silenced），引导将立即中断。
+@export var interrupt_tags: Array[StringName] = []
 
-## 引导状态（运行时数据）
-var _channeling_state: Dictionary = {}  ## 存储引导状态：ability_comp, instigator, input_target, context, input_action
-var _is_active: bool = false:  ## 引导是否处于激活状态
-	set(value):
-		_is_active = value
+## 每次 Tick 需要支付的消耗 (资源不足将导致中断)
+@export var tick_costs: Array[AbilityCostBase] = []
 
-## 每帧更新（检查中断条件）
-func update(delta: float) -> void:
-	if not _is_active:
-		return
-	
-	var instigator = _channeling_state.get("instigator", null)
-	var input_action: String = _channeling_state.get("input_action", "")
-	var shortcut_checker: Callable = _channeling_state.get("shortcut_checker", Callable())
-	
-	# 有效性检查
-	if not is_instance_valid(instigator):
-		_interrupt_channeling(false)
-		return
-	
-	# 中断条件：按键松开（支持 Input Action 和快捷键 Callable）
-	if stop_on_input_release:
-		var is_pressed = false
-		
-		# 检查 Input Action
-		if input_action != "":
-			is_pressed = Input.is_action_pressed(input_action)
-		
-		# 检查快捷键（通过 Callable）
-		if not is_pressed and shortcut_checker.is_valid():
-			is_pressed = shortcut_checker.call()
-		
-		# 如果按键已松开，中断引导
-		if not is_pressed:
-			_interrupt_channeling(false)
-			return
-	
-	# 中断条件：不允许移动且角色在移动（需角色实现 is_moving）
-	if not is_mobile and instigator.has_method("is_moving") and instigator.is_moving():
-		_interrupt_channeling(false)
-		return
+## 每次 Tick 要应用的状态列表 (应用给目标)
+## 注意：基类的 'statuses' 用于引导开始时的瞬间效果。
+@export var tick_statuses: Array[GameplayStatusData] = []
 
-	super(delta)
+## [新] 引导正常结束或被中断时应用的状态列表
+@export var end_statuses: Array[GameplayStatusData] = []
 
-## 检查技能是否处于开启状态
-func is_toggled_on() -> bool:
-	return _is_active
+#Group: Runtime State (运行时状态，不对外暴露)
+var _is_active: bool = false
+var _current_duration: float = 0.0
+var _tick_timer: SceneTreeTimer = null
 
-## 检查是否可以关闭技能
-## 切换式引导（stop_on_input_release = false）可以主动关闭
-## 按住维持式引导（stop_on_input_release = true）只能被动关闭（松开按键）
-func can_toggle_off(_context: Dictionary = {}) -> bool:
-	# 只有切换式引导（stop_on_input_release = false）可以主动关闭
-	return not stop_on_input_release
+# 缓存运行时数据，用于异步 Tick 和结束处理
+var _cached_ability_comp: Node = null
+var _cached_input_target: Node = null
+var _cached_context: Dictionary = {}
 
-## ToggleAbility 属于可切换技能（用于避免外部类型判断）
-func is_toggleable() -> bool:
-	return true
+## 停止引导统一入口
+## [param] reason: 停止原因调试信息
+func stop_channeling(reason: String = "manual") -> void:
+    if not _is_active: return
+    _is_active = false
+    
+    # 1. 清理计时器
+    if _tick_timer and is_instance_valid(_tick_timer):
+        _tick_timer.timeout.disconnect(_process_tick)
+        _tick_timer = null
+        
+    var instigator = _cached_ability_comp.get_parent()
+    if is_instance_valid(instigator):
+        # 2. 移除引导标签
+        if not self_channeling_tags.is_empty():
+            TagManager.remove_tags(instigator, self_channeling_tags)
+            
+        # 3. 应用结束状态 (End Statuses)
+        if not end_statuses.is_empty():
+            var end_context = _cached_context.duplicate()
+            end_context["finish_reason"] = reason
+            for status_data in end_statuses:
+                _apply_status(instigator, status_data, end_context)
+            
+    print("Ability %s stopped channeling. Reason: %s" % [ability_id, reason])
+    
+    # 4. 【关键】手动通知 AbilityComponent 技能结束
+    # 这会触发冷却计算并清理当前激活技能的引用
+    notify_ability_ended()
 
-## 施放入口
-func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
-	var instigator = ability_comp.get_parent()
-	if not is_instance_valid(instigator):
-		push_warning("ChannelingAbility: Cannot cast, instigator is not valid")
-		return
-	
-	# 如果已经在引导，先取消之前的引导（这种情况不应该发生，因为关闭时会清空状态）
-	# 但为了安全起见，保留这个检查
-	if _is_active:
-		_interrupt_channeling(false)
-		# 如果是在关闭后立即重新开启，这里已经清理了状态，可以继续执行
-	
-	# 记录输入动作，供"按住维持"模式检测
-	var input_action: String = context.get("input_action", "")
-	
-	# 获取快捷键检查器（Callable，用于检查快捷键是否按下）
-	# 如果 context 中提供了 shortcut_checker，使用它；否则尝试从外部获取
-	var shortcut_checker: Callable = context.get("shortcut_checker", Callable())
-
-	# 打上引导标签（如需与状态系统交互，可在外部根据 TAG_CHANNELING 处理）
-	context["channeling"] = true
-	
-	# 存储引导状态
-	_channeling_state = {
-		"ability_comp": ability_comp,
-		"instigator": instigator,
-		"input_target": input_target,
-		"context": context,
-		"input_action": input_action,
-		"shortcut_checker": shortcut_checker
-	}
-	_is_active = true
-	
-	# 应用引导状态（状态系统会负责管理 tick 效果和资源消耗）
-	if is_instance_valid(channeling_status):
-		var status_comp = GameplayAbilitySystem.get_component_by_interface(instigator, "GameplayStatusComponent")
-		if is_instance_valid(status_comp):
-			# 如果状态未设置 duration，使用 channel_duration
-			# 注意：我们需要克隆状态数据以避免修改资源
-			var status_to_apply = channeling_status
-			if channeling_status.duration <= 0.0 and channel_duration > 0.0:
-				# 克隆状态数据并设置 duration
-				status_to_apply = channeling_status.duplicate(true) as GameplayStatusData
-				status_to_apply.duration = channel_duration
-			
-			# 订阅状态移除事件，用于处理完成效果
-			if not status_comp.status_removed.is_connected(_on_channeling_status_removed):
-				status_comp.status_removed.connect(_on_channeling_status_removed)
-			
-			# 存储状态ID，用于后续移除
-			_channeling_state["status_id"] = status_to_apply.status_id
-			
-			status_comp.apply_status(status_to_apply, instigator, 1, context)
-		else:
-			push_warning("ChannelingAbility: Instigator has no GameplayStatusComponent!")
-	else:
-		push_warning("ChannelingAbility: channeling_status is not set for ability %s" % ability_id)
-	
-	# 检查是否所有效果都已完成（如果没有效果被应用，立即完成技能）
-	_check_ability_completion()
-
-## 中断引导（内部方法）
-## [param] completed: bool 是否正常完成（true 表示完成，false 表示中断）
-func _interrupt_channeling(completed: bool = false) -> void:
-	# 如果已经不在激活状态，直接返回（避免重复调用）
-	if not _is_active:
-		return
-	
-	_is_active = false
-	
-	# 标记是否正常完成（用于后续处理完成效果）
-	_channeling_state["completed"] = completed
-	
-	# 移除引导状态（状态系统会负责清理效果和资源消耗）
-	# 注意：状态移除会触发 _on_channeling_status_removed，在那里处理完成效果
-	var instigator = _channeling_state.get("instigator", null)
-	if is_instance_valid(instigator):
-		var status_id = _channeling_state.get("status_id", "")
-		if status_id != "":
-			var status_comp = GameplayAbilitySystem.get_component_by_interface(instigator, "GameplayStatusComponent")
-			if is_instance_valid(status_comp):
-				status_comp.remove_status(status_id)
-
-	# 通知技能完成（引导结束时）
-	ability_completed.emit(self)
-	
-	# 清空状态
-	_channeling_state.clear()
-	_is_active = false
-
-## 关闭技能
-func _toggle_off(ability_comp: Node, context: Dictionary = {}) -> void:
-	# 先中断引导（清理状态和 Cue）
-	_interrupt_channeling(false)
-	
-	# 处理关闭状态（如果需要）
-	var instigator = ability_comp.get_parent() if ability_comp.has_method("get_parent") else null
-	if is_instance_valid(instigator):
-		var target_status_comp = GameplayAbilitySystem.get_component_by_interface(instigator, "GameplayStatusComponent")
-		if is_instance_valid(target_status_comp):
-			## 移除开启状态（如果使用了 status_to_apply）
-			#if is_instance_valid(status_to_apply):
-				#target_status_comp.remove_status(status_to_apply.status_id)
-			# 应用关闭状态（如果需要）
-			if is_instance_valid(toggled_off_status_to_apply):
-				target_status_comp.apply_status(toggled_off_status_to_apply, instigator)
-	
-	# 取消技能执行
-	ability_comp.cancel_ability(ability_id, context)
-
-func _can_cast(ability_comp: Node, target: Node = null, context: Dictionary = {}) -> bool:
-	# 如果已经开启，可以关闭（跳过冷却和消耗检查）
-	if is_toggled_on() and can_toggle_off(context):
-		return true
-	# 否则检查正常施法条件
-	return super(ability_comp, target, context)
-
+## [关键重写] 提交施法
+## 我们需要接管技能的生命周期，因此不能让基类启动自动完成计时器。
 func _commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
-	# 如果已经开启，关闭技能（跳过消耗和冷却）
-	if is_toggled_on() and can_toggle_off(context):
-		# 调用关闭逻辑（_toggle_off 内部会调用 cancel_ability 来取消计时器和清除状态）
-		_toggle_off(ability_comp, context)
-		
-		# 返回 true 表示操作成功（关闭操作也是成功的操作）
-		return true
-	
-	# 否则正常开启技能
-	return super(ability_comp, context)
+    # 1. 执行基类的初始扣费逻辑 (复制自 ActiveAbility)
+    if not context.get("skip_cost", false):
+        var instigator = ability_comp.get_parent()
+        if not is_instance_valid(instigator): return false
+        
+        # 检查并支付所有初始消耗
+        for cost in costs:
+            if not is_instance_valid(cost): continue
+            if not cost.try_pay(ability_comp, instigator):
+                # 如果支付失败（理论上 _can_cast 已经检查过了，但以防万一）
+                return false
+    
+    # 2. 【重点】直接返回 true，表明提交成功。
+    # 不调用 super._commit_cast()，也不启动 _start_execution_timer()。
+    # 技能的结束将由我们自己的逻辑手动管理。
+    return true
 
-## 技能被取消时的处理
-func _on_cancel(ability_comp: Node, context: Dictionary = {}) -> void:
-	# 如果已经在 _toggle_off 中调用了 _interrupt_channeling，这里会直接返回（避免重复调用）
-	_interrupt_channeling(false)
+## [重写] 施法开始
+func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
+    # 1. 调用基类方法，应用初始的 statuses (引导开始效果)
+    # 基类会处理初始 Status 的应用，这正合我意。
+    super._on_cast(ability_comp, input_target, context)
+    
+    # 2. 缓存数据，供后续 Tick 使用
+    _cached_ability_comp = ability_comp
+    _cached_input_target = input_target
+    _cached_context = context.duplicate()
+    var instigator = ability_comp.get_parent()
 
-## 引导状态移除回调（用于处理完成效果）
-## [param] status_id: StringName 被移除的状态ID
-func _on_channeling_status_removed(status_id: StringName) -> void:
-	# 检查是否是我们的引导状态
-	if not is_instance_valid(channeling_status) or status_id != channeling_status.status_id:
-		return
-	
-	# 检查是否正常完成（需要应用完成效果）
-	# 注意：完成效果应该配置在引导状态中，通过状态移除事件触发
-	# 或者通过 GE_ApplyStatus 在状态中应用另一个状态来实现
-	# 这里暂时不处理，完成效果应该在引导状态中配置
-	pass
+    # 3. 启动引导核心逻辑
+    _start_channeling(instigator)
 
-## 重写：获取技能图标
-## 根据切换状态返回不同的图标
-func _get_icon() -> Texture:
-	# 如果技能处于开启状态，显示关闭状态图标（表示按下会关闭）
-	if is_toggled_on():
-		if is_instance_valid(toggled_off_icon):
-			return toggled_off_icon
-	# 如果技能处于关闭状态，显示开启状态图标（表示按下会开启）
-	# 这里返回默认图标即可
-	# 默认返回基础图标（开启状态）
-	return super()
+func _start_channeling(instigator: Node) -> void:
+    _is_active = true
+    _current_duration = 0.0
+    
+    # 1. 给自己打上引导标签
+    if not self_channeling_tags.is_empty():
+        TagManager.add_tags(instigator, self_channeling_tags)
+        
+    # 2. 启动 Tick 循环
+    _schedule_next_tick()
+    
+    print("Ability %s started channeling (%s mode)" % [ability_id, ChannelingMode.keys()[channeling_mode]])
+
+func _schedule_next_tick() -> void:
+    if not _is_active or tick_interval <= 0.0: return
+    var tree = _cached_ability_comp.get_tree()
+    if not is_instance_valid(tree): return
+    
+    # 使用 SceneTreeTimer 创建递归循环
+    _tick_timer = tree.create_timer(tick_interval)
+    _tick_timer.timeout.connect(_process_tick)
+
+func _process_tick() -> void:
+    if not _is_active: return
+    var instigator = _cached_ability_comp.get_parent()
+    if not is_instance_valid(instigator):
+        stop_channeling("instigator_invalid")
+        return
+        
+    # 1. 被动中断检查：是否拥有打断标签 (如眩晕)
+    if not interrupt_tags.is_empty() and TagManager.has_any_tag(instigator, interrupt_tags):
+        stop_channeling("interrupted_by_tag")
+        return
+
+    # 2. 最大持续时间检查
+    _current_duration += tick_interval
+    if max_duration > 0 and _current_duration >= max_duration:
+        stop_channeling("duration_expired")
+        return
+        
+    # 3. 资源检查与扣费 (Tick Cost)
+    if not _pay_tick_costs(instigator):
+        stop_channeling("out_of_resource")
+        return
+        
+    # 4. 应用 Tick 状态
+    # 复用基类现成的 _apply_status 方法，完美兼容新架构
+    if not tick_statuses.is_empty():
+        var tick_context = _cached_context.duplicate()
+        # TODO: 如果需要，这里可以更新 tick_context 中的目标位置
+        for status_data in tick_statuses:
+             # 调用基类方法应用状态
+            _apply_status(instigator, status_data, tick_context)
+            
+    # 5. 继续下一次循环
+    _schedule_next_tick()
