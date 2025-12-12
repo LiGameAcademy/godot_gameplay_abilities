@@ -146,17 +146,8 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 	if not current_ability.ability_completed.is_connected(_on_combo_segment_completed):
 		current_ability.ability_completed.connect(_on_combo_segment_completed)
 
-	# 使用 execute_ability_direct 直接执行子技能（跳过冷却和消耗检查）
-	# 因为 CombatAbility 已经检查过冷却和消耗，子技能不需要再次检查
-	# 注意：不调用父类的 _on_cast()，因为 CombatAbility 不执行自己的效果（没有 statuses）
-	if ability_comp.has_method("execute_ability_direct"):
-		# 标记跳过冷却和消耗，因为 CombatAbility 已经检查过了
-		context["skip_cooldown"] = true
-		context["skip_cost"] = true
-		ability_comp.execute_ability_direct(current_ability, input_target, context)
-	else:
-		# 回退：直接调用子技能的 cast（但子技能可能会检查冷却和消耗）
-		current_ability.cast(ability_comp, input_target, context)
+	# 直接调用子技能的 cast（但子技能可能会检查冷却和消耗）
+	current_ability.cast(ability_comp, input_target, context)
 	
 ## 连击段完成回调（在技能完成时推进连击）
 ## [param] completed_ability: GameplayAbility 完成的技能实例
