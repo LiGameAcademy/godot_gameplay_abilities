@@ -91,6 +91,9 @@ func get_effects_description() -> String:
 ## 重写：检查是否可以施法
 ## CombatAbility 只检查自己的冷却和消耗
 ## 不检查子技能的冷却和消耗，因为子技能不会被 Component 直接调用
+## 
+## 如果连击技能正在执行（_current_casting_ability_id == ability_id），
+## 检查连击窗口是否还在有效期内，决定是否可以继续连击
 func _can_cast(ability_comp: Node, target: Node = null, context: Dictionary = {}) -> bool:
 	# 检查是否有连击能力配置
 	if _combo_abilities.is_empty():
@@ -102,6 +105,13 @@ func _can_cast(ability_comp: Node, target: Node = null, context: Dictionary = {}
 	if not is_instance_valid(current_ability):
 		push_warning("CombatAbility: Current combo ability is not valid")
 		return false
+	
+	# 【关键】如果连击技能正在执行，检查连击窗口是否还在有效期内
+	# 如果连击窗口已超时，重置连击索引，允许重新开始连击
+	if _combo_reset_timer >= _combo_reset_time:
+		# 连击窗口已超时，重置连击索引
+		_reset_combo()
+		# 重置后，继续检查冷却和消耗（允许重新开始连击）
 	
 	# 只检查 CombatAbility 自己的条件（冷却、消耗等）
 	# 不检查子技能，因为子技能不会被 Component 直接调用

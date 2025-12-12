@@ -139,17 +139,13 @@ func can_cast(ability_id: StringName, target: Node = null, context: Dictionary =
 		print("GameplayAbilityComponent: Ability %s is disabled." % ability_id)
 		return false  # 技能禁用
 	
-	# 【关键】连击系统与 _current_casting_ability_id 解耦
-	# 连击技能通过自己的状态（_current_combo_index 和 _combo_reset_timer）管理连击窗口
-	# 每一段攻击结束后都会立即清理 _current_casting_ability_id，不占用该变量
-	# 所以对于连击技能，不检查 _current_casting_ability_id
-	if ability_data is CombatAbility:
-		# 连击技能：不检查 _current_casting_ability_id，继续检查冷却和技能自身条件
-		# 连击窗口由 CombatAbility 自己管理
-		pass
-	elif _current_casting_ability_id == ability_id:
-		# 非连击技能：如果技能正在执行，让技能自己判断是否可以关闭（符合开闭原则）
-		# ToggleAbility 会在 can_cast 中处理切换逻辑
+	# 【关键】如果技能正在执行，让技能自己判断是否可以继续/关闭（符合开闭原则）
+	# 这适用于所有技能类型：
+	# - ToggleAbility：会在 can_cast 中处理切换逻辑
+	# - CombatAbility：会在 can_cast 中检查连击窗口，决定是否可以继续连击
+	# - ChannelingAbility：会在 can_cast 中处理切换逻辑
+	if _current_casting_ability_id == ability_id:
+		# 技能正在执行，让技能自己判断是否可以继续/关闭
 		return ability_data.can_cast(self, target, context)
 	
 	if not is_cooldown_ready(ability_id):
