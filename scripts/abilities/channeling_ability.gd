@@ -69,27 +69,45 @@ func _commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
 		# 返回 false 表示不继续执行后续的施法逻辑（如冷却、消耗）
 		# 但实际上关闭操作是成功的。这里返回 false 是为了告诉组件不要进入 _on_cast
 		return false
+	
+	# 2. 检查是否已经激活（防止重复扣除费用）
+	# 如果技能已经被激活，说明费用已经扣除过了，直接返回 true
+	# 这种情况可能发生在：技能被取消后，用户继续按住按键，导致再次触发 commit_cast
+	if _is_active:
+		# 技能已经激活，跳过费用扣除，直接返回成功
+		# 注意：这里不调用 super，因为费用已经在第一次激活时扣除了
+		return true
 		
-	# 2. 正常开启逻辑：调用基类处理初始消耗
+	# 3. 正常开启逻辑：调用基类处理初始消耗
 	# 注意：基类的 _commit_cast 会启动 _start_execution_timer()，但引导技能会自己管理生命周期
 	# 所以我们需要阻止基类启动计时器，通过重写 _start_execution_timer() 来实现
+	# 【关键】引导技能在开启时不进入冷却，在关闭时才开始冷却
+	# 所以我们需要跳过冷却检查（通过 context 传递 skip_cooldown）
+	# 注意：直接修改 context，让 GameplayAbilityComponent.commit_cast 能读取到 skip_cooldown
+	context["skip_cooldown"] = true
+	# 【关键】引导技能自己管理生命周期，不应该启动逻辑计时器（cast_point_timer）
+	# 设置此标志，让 GameplayAbilityComponent 跳过计时器启动，直接应用效果
+	context["skip_cast_point_timer"] = true
 	var result = super(ability_comp, context)
 	if not result:
 		return false
 	
-	# 3. 【关键】引导技能不依赖基类的 execution_duration，生命周期由自己管理
+	# 4. 【关键】引导技能不依赖基类的 execution_duration，生命周期由自己管理
 	# 基类已经启动了 _start_execution_timer()，但我们在 _start_execution_timer() 中会阻止它
 	return true
 
 ## [重写] 施法开始
+## 引导技能自己管理生命周期，不依赖基类的执行计时器
 func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
-	# 1. 应用初始状态（如前摇效果），复用基类逻辑
-	# 注意：基类会应用 statuses，这些状态可以配置 period 和 periodic_effects 来实现周期性效果
-	super(ability_comp, input_target, context)
-	
 	var instigator = ability_comp.get_parent()
-	if not is_instance_valid(instigator): 
+	if not is_instance_valid(instigator):
+		push_warning("ChannelingAbility: Cannot cast, instigator is not valid")
 		return
+	
+	# 1. 应用初始状态（如前摇效果），复用基类的状态应用逻辑
+	# 注意：使用基类的 _apply_initial_statuses() 方法，而不是 super._on_cast()
+	# 因为 super._on_cast() 会启动执行计时器，但引导技能自己管理生命周期
+	_apply_initial_statuses(instigator, input_target, context)
 	
 	# 2. 缓存数据
 	_cached_ability_comp = ability_comp
@@ -152,13 +170,29 @@ func stop_channeling(reason: String = "manual") -> void:
 	if is_instance_valid(_cached_instigator) and not self_channeling_tags.is_empty():
 		TagManager.remove_tags(_cached_instigator, self_channeling_tags)
 	
-	# 3. 清理缓存
+	# 3. 移除由该技能应用的所有状态
+	if is_instance_valid(_cached_instigator) and is_instance_valid(_cached_ability_comp):
+		var status_comp = GameplayAbilitySystem.get_component_by_interface(_cached_instigator, "GameplayStatusComponent")
+		if is_instance_valid(status_comp):
+			# 遍历技能配置的所有状态，移除它们
+			for status_data in statuses:
+				if not is_instance_valid(status_data):
+					continue
+				# 通过状态ID移除状态
+				status_comp.remove_status(status_data.status_id)
+	
+	# 4. 开始冷却时间（引导技能在关闭时才开始冷却）
+	var cooldown = get_cooldown_duration()
+	if cooldown > 0.0:
+		start_cooldown(cooldown)
+	
+	# 5. 清理缓存
 	_cached_ability_comp = null
 	_cached_instigator = null
 			
 	print("ChannelingAbility: Stopped %s. Reason: %s" % [ability_id, reason])
 	
-	# 4. 【关键】通知 AbilityComponent 技能结束
+	# 6. 【关键】通知 AbilityComponent 技能结束
 	# 对于 Toggle 技能，这会触发冷却计算（如果配置了冷却）
 	# 对于引导技能，这会释放 _current_casting_ability_id 并触发冷却
 	_check_ability_completion()
@@ -230,3 +264,10 @@ func _pay_tick_costs() -> bool:
 			cost.try_pay(_cached_ability_comp, _cached_instigator)
 		
 	return true
+
+func _on_cancel(_ability_comp: Node, _context: Dictionary = {}) -> void:
+	# 如果技能已经激活，停止引导
+	# 注意：这里调用 stop_channeling 会清除 _is_active，但不会清除 _current_casting_ability_id
+	# 这样可以防止用户继续按住时重复扣除费用
+	if _is_active:
+		stop_channeling("cancelled")

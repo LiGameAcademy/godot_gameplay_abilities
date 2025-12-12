@@ -134,14 +134,36 @@ func _commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
 	return true
 
 ## [核心重构] 施放技能
-## 逻辑流：支付消耗 -> 应用状态 -> 启动执行计时器
+## 职责：应用状态，不负责完成检查
+## 逻辑流：应用状态 -> （由子类或执行计时器负责完成检查）
 ## [新架构] 使用 Status 系统，通过执行时间自动完成技能
+## 
+## 设计原则：
+## - _on_cast() 只负责应用状态，保持职责单一
+## - 完成检查由 _start_execution_timer() 或子类自己管理
+## - 子类可以重写此方法，但建议调用 _apply_initial_statuses() 来应用状态
 func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
 	var instigator = ability_comp.get_parent()
 	if not is_instance_valid(instigator):
 		push_warning("ActiveAbility: Cannot cast, instigator is not valid")
 		return
 	
+	# 1. 应用初始状态（提取为独立方法，便于子类复用）
+	_apply_initial_statuses(instigator, input_target, context)
+	
+	# 2. 启动执行计时器（如果配置了执行时间）
+	# 注意：执行计时器会在时间到期时自动调用 _check_ability_completion()
+	if execution_duration > 0.0:
+		_start_execution_timer(ability_comp)
+	elif execution_duration == 0.0:
+		# 瞬时技能：立即完成
+		_check_ability_completion()
+
+## 应用初始状态（提取为独立方法，便于子类复用）
+## [param] instigator: Node 施法者
+## [param] input_target: Node 输入目标
+## [param] context: Dictionary 上下文信息
+func _apply_initial_statuses(instigator: Node, input_target: Node, context: Dictionary) -> void:
 	# 传递上下文信息（包括 input_target，供 Status 的目标检测使用）
 	var status_context = context.duplicate()
 	status_context["input_target"] = input_target
@@ -149,18 +171,18 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 	if hit_detector:
 		status_context["hit_detector"] = hit_detector
 	
-	# 1. 应用状态（新架构）
+	# 应用状态（新架构）
 	# Status 系统会自己处理目标检测、筛选和应用效果
 	if not statuses.is_empty():
 		for status_data in statuses:
 			if is_instance_valid(status_data):
 				_apply_status(instigator, status_data, status_context)
 
-	if execution_duration <= 0.0:
-		_check_ability_completion()
-
 ## 启动执行计时器（自动完成技能）
 ## [param] ability_comp: Node 技能组件
+## 
+## 职责：启动计时器，在时间到期时自动完成技能
+## 子类可以重写此方法来阻止自动完成（如 ChannelingAbility）
 func _start_execution_timer(ability_comp: Node) -> void:
 	# 计算执行时间：max(execution_duration, cast_point)
 	var exec_time = max(execution_duration, cast_point) if execution_duration > 0.0 else cast_point

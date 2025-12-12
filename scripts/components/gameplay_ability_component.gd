@@ -13,7 +13,9 @@ var _cast_point_timers: Dictionary[StringName, SceneTreeTimer] = {}  ## 施法�
 var _cast_contexts: Dictionary[StringName, Dictionary] = {}  ## 存储施法上下文（target, context）
 var _learned_abilities: Dictionary[StringName, GameplayAbility] = {}  ## 已学会的技能
 ## 当前正在执行的技能ID（用于后摇可取消机制）
-var _current_casting_ability_id: StringName = &""
+var _current_casting_ability_id: StringName = &"":
+	set(value):
+		_current_casting_ability_id = value
 ## 是否允许中断当前攻击（用于后摇取消机制）
 var can_interrupt_current: bool = false
 
@@ -39,17 +41,9 @@ func _process(delta: float) -> void:
 		if is_instance_valid(ability_data):
 			ability_data.update(delta)
 	
-	# 检查连击技能：如果连击窗口已超时且当前正在执行，清理占用标记
-	if _current_casting_ability_id != &"":
-		var current_ability = get_ability_data(_current_casting_ability_id)
-		if is_instance_valid(current_ability) and current_ability is CombatAbility:
-			var combat_ability = current_ability as CombatAbility
-			# 如果连击索引已重置到第一段且连击计时器已超时，清理占用标记
-			# 注意：CombatAbility 的 update 会在连击窗口超时时调用 _reset_combo()
-			# 如果连击索引是 0 且计时器 >= 重置时间，说明连击窗口已超时
-			if combat_ability._current_combo_index == 0 and combat_ability._combo_reset_timer >= combat_ability._combo_reset_time:
-				# 连击窗口已超时，清理占用标记
-				clear_current_casting_ability()
+	# 注意：连击系统与 _current_casting_ability_id 解耦
+	# 连击技能通过自己的状态（_current_combo_index 和 _combo_reset_timer）管理连击窗口
+	# 每一段攻击结束后都会立即清理 _current_casting_ability_id，不占用该变量
 
 ## 学习技能
 ## [param] ability_data: GameplayAbility 技能数据
@@ -145,10 +139,17 @@ func can_cast(ability_id: StringName, target: Node = null, context: Dictionary =
 		print("GameplayAbilityComponent: Ability %s is disabled." % ability_id)
 		return false  # 技能禁用
 	
-	# 如果技能正在执行，让技能自己判断是否可以关闭（符合开闭原则）
-	# ToggleAbility 会在 can_cast 中处理切换逻辑
-	if _current_casting_ability_id == ability_id:
-		# 直接调用 can_cast，让技能自己判断（ToggleAbility 会返回 true 如果可以关闭）
+	# 【关键】连击系统与 _current_casting_ability_id 解耦
+	# 连击技能通过自己的状态（_current_combo_index 和 _combo_reset_timer）管理连击窗口
+	# 每一段攻击结束后都会立即清理 _current_casting_ability_id，不占用该变量
+	# 所以对于连击技能，不检查 _current_casting_ability_id
+	if ability_data is CombatAbility:
+		# 连击技能：不检查 _current_casting_ability_id，继续检查冷却和技能自身条件
+		# 连击窗口由 CombatAbility 自己管理
+		pass
+	elif _current_casting_ability_id == ability_id:
+		# 非连击技能：如果技能正在执行，让技能自己判断是否可以关闭（符合开闭原则）
+		# ToggleAbility 会在 can_cast 中处理切换逻辑
 		return ability_data.can_cast(self, target, context)
 	
 	if not is_cooldown_ready(ability_id):
@@ -165,35 +166,42 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 		push_error("GameplayAbilityComponent: Ability %s not found." % ability_id)
 		return false
 	
-	# 检查技能是否正在执行，或者可切换技能是否已经开启
-	# 注意：对于可切换技能，即使 _current_casting_ability_id 被清除（如通过 ability_completed 信号），
-	# 技能可能仍然处于开启状态（如 ChannelingAbility 的 _is_active）
-	var is_currently_executing = _current_casting_ability_id == ability_id
-	var is_toggleable_and_on = false
-	
-	if ability_data.is_toggleable():
-		# 检查技能是否已经开启（通过技能自己的状态检查）
-		if ability_data.has_method("is_toggled_on"):
-			is_toggleable_and_on = ability_data.is_toggled_on()
-	
-	if is_currently_executing or is_toggleable_and_on:
-		# 可切换技能：交由技能自身处理切换逻辑
-		if ability_data.is_toggleable():
-			var result = ability_data.commit_cast(self, context)
-			if not result:
-				push_warning("GameplayAbilityComponent: Ability %s toggle-off rejected." % ability_id)
-			# 直接返回结果（关闭操作会返回 true，但不会继续执行后续逻辑）
-			return result
+	# 【关键】连击系统与 _current_casting_ability_id 解耦
+	# 连击技能通过自己的状态（_current_combo_index 和 _combo_reset_timer）管理连击窗口
+	# 每一段攻击结束后都会立即清理 _current_casting_ability_id，不占用该变量
+	# 所以对于连击技能，不检查 _current_casting_ability_id，而是检查连击窗口
+	if ability_data is CombatAbility:
+		var combat_ability = ability_data as CombatAbility
+		# 检查连击窗口是否还在有效期内
+		if combat_ability._combo_reset_timer >= combat_ability._combo_reset_time:
+			# 连击窗口已超时，重置连击索引
+			combat_ability._reset_combo()
+		# 连击窗口检查通过，继续执行后续逻辑（检查消耗、冷却等）
+		# 注意：不检查 _current_casting_ability_id，因为连击系统不占用该变量
+	else:
+		# 非连击技能：检查是否正在执行
+		if ability_id == _current_casting_ability_id:
+			# 检查是否是可切换技能
+			if ability_data.is_toggleable():
+				# 可切换技能：交由技能自身处理切换逻辑
+				var result = ability_data.commit_cast(self, context)
+				if not result:
+					push_warning("GameplayAbilityComponent: Ability %s toggle-off rejected." % ability_id)
+				# 直接返回结果（关闭操作会返回 true，但不会继续执行后续逻辑）
+				return result
+			else:
+				# 非可切换技能：直接拒绝重复施放
+				push_warning("GameplayAbilityComponent: Ability %s is already executing, cannot cast again." % ability_id)
+				return false
 		
-		# 连击技能：允许继续连击（在连击窗口内）
-		# 连击技能的子技能完成后会推进连击索引，允许继续施放下一段
-		if ability_data is CombatAbility:
-			# 继续执行后续逻辑（检查消耗、冷却等）
-			pass
-		else:
-			# 非可切换技能：直接拒绝重复施放，避免连击/引导类重复进入
-			push_warning("GameplayAbilityComponent: Ability %s is already executing, cannot cast again." % ability_id)
-			return false
+		# 检查可切换技能是否已经开启（即使 _current_casting_ability_id 被清除）
+		if ability_data.is_toggleable():
+			if ability_data.has_method("is_toggled_on") and ability_data.is_toggled_on():
+				# 可切换技能已经开启，交由技能自身处理切换逻辑
+				var result = ability_data.commit_cast(self, context)
+				if not result:
+					push_warning("GameplayAbilityComponent: Ability %s toggle-off rejected." % ability_id)
+				return result
 	
 	# 正常执行技能：检查消耗
 	if not ability_data.commit_cast(self, context):
@@ -226,7 +234,11 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 	var cast_point_time = ability_data.get_cast_point()
 	
 	# 3. 【分支】瞬发 vs 延迟生效
-	if cast_point_time <= 0.001:
+	# 检查是否跳过逻辑计时器（用于引导技能等自己管理生命周期的技能）
+	if context.get("skip_cast_point_timer", false):
+		# 跳过计时器，直接应用效果（引导技能自己管理生命周期）
+		apply_ability_effect(ability_id, target, context)
+	elif cast_point_time <= 0.001:
 		# 瞬发：直接生效
 		apply_ability_effect(ability_id, target, context)
 	else:
@@ -322,8 +334,7 @@ func cancel_ability(ability_id: StringName = &"", context: Dictionary = {}) -> v
 	print("GameplayAbilityComponent: Ability cancelled: ", target_id)
 	
 	# 发送中断信号（如果组件有 gameplay_event 信号）
-	if has_signal("gameplay_event"):
-		emit_signal("gameplay_event", &"ability_cancelled", {"ability_id": target_id})
+	AbilityEventBus.trigger_game_event(&"ability_cancelled", {"ability_id": target_id})
 
 ## 获取技能数据
 ## [param] ability_id: StringName 技能ID
@@ -461,14 +472,11 @@ func _end_ability(ability_id: StringName) -> void:
 			"ability_id": ability_id
 		})
 		
-		# 检查是否是连击技能
-		var ability_data = get_ability_data(ability_id)
-		var is_combat_ability = is_instance_valid(ability_data) and ability_data is CombatAbility
-		
-		# 连击技能：不立即清理占用标记，允许继续连击
-		# 其他技能：立即清理占用标记
-		if not is_combat_ability:
-			clear_current_casting_ability()
+		# 【关键】连击系统与 _current_casting_ability_id 解耦
+		# 连击技能的子技能完成后会立即清理 _current_casting_ability_id
+		# 连击窗口通过 CombatAbility 自己的状态（_current_combo_index 和 _combo_reset_timer）管理
+		# 所有技能完成后都立即清理占用标记
+		clear_current_casting_ability()
 
 ## 取消施法计时器
 ## [param] ability_id: StringName 技能ID
