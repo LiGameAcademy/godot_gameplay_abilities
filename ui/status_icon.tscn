@@ -1,0 +1,30 @@
+[gd_scene load_steps=2 format=3 uid="uid://b5k7x2m5oap4r"]
+
+[ext_resource type="Script" uid="uid://cbc07fwsu8h4w" path="res://addons/godot_gameplay_abilities/ui/status_icon.gd" id="1_status_icon"]
+
+[node name="StatusIcon" type="MarginContainer"]
+custom_minimum_size = Vector2(64, 64)
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("1_status_icon")
+
+[node name="Panel" type="Panel" parent="."]
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="TextureRect" type="TextureRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 4
+
+[node name="StackLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 12
+horizontal_alignment = 2
+vertical_alignment = 2

@@ -4,6 +4,8 @@ class_name GameplayStatusComponent
 ## 状态组件（采用鸭子类型设计，不继承基类）
 ## 管理实体的所有状态（Buff/Debuff）
 
+const GROUP_NAME := "StatusEntities"
+
 var _active_statuses: Dictionary[StringName, GameplayStatusInstance] = {}
 var _health_comp: Node = null  ## 用于订阅伤害事件（采用鸭子类型）
 
@@ -12,6 +14,11 @@ signal status_removed(status_id: StringName)
 signal status_stacked(status_id: StringName, new_stacks: int)
 
 func _ready() -> void:
+	# 将父节点（实体）添加到状态实体组，方便调试面板等工具查询
+	var entity = get_parent()
+	if is_instance_valid(entity) and not entity.is_in_group(GROUP_NAME):
+		entity.add_to_group(GROUP_NAME)
+	
 	# 使用鸭子类型查询HealthComponent
 	_health_comp = GameplayAbilitySystem.get_component_by_interface(get_parent(), "HealthComponent")
 	
@@ -31,6 +38,19 @@ func apply_status(gsd: GameplayStatusData, instigator: Node, stacks: int = 1, co
 		return
 	
 	var status_id = gsd.status_id
+	
+	# 【优先级检查】：如果新状态优先级更高，替换旧状态
+	if _active_statuses.has(status_id):
+		var existing_instance = _active_statuses[status_id]
+		var existing_priority = existing_instance.status_data.priority
+		
+		if gsd.priority > existing_priority:
+			# 新状态优先级更高，移除旧状态
+			remove_status(status_id)
+		elif gsd.priority < existing_priority:
+			# 旧状态优先级更高，忽略新状态
+			return
+		# 如果优先级相同，继续执行堆叠逻辑
 	
 	# 【核心堆叠逻辑】
 	if _active_statuses.has(status_id):

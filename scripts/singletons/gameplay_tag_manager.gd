@@ -8,8 +8,6 @@ extends Node
 ## Meta 数据前缀，防止冲突
 const META_PREFIX: String = "tag_ref_"
 
-## 默认标签资源目录
-const DEFAULT_TAG_DIR: String = "res://data/tags/"
 
 ## Groups 命名空间前缀（避免污染）
 ## 所有标签组都会使用此前缀，确保不会与游戏逻辑的 Groups 冲突
@@ -55,49 +53,80 @@ signal tag_removed(target: Node, tag_id: StringName)
 #endregion
 
 func _ready() -> void:
-	# 初始化时加载所有标签资源
-	_scan_and_load_tags(DEFAULT_TAG_DIR)
+	# 标签系统现在需要手动注册，不再自动扫描
+	# 请在主场景的 _ready() 中调用 register_tags_from_directory() 或 register_tag()
+	pass
 
-#region ========== 初始化 ==========
+#region ========== 标签注册 API ==========
 
-## 扫描并加载标签资源
-## [param] dir_path: String 标签资源目录路径
-func _scan_and_load_tags(dir_path: String) -> void:
+## 注册单个标签资源
+## [param] tag: GameplayTag 标签资源
+## [returns] bool 是否注册成功
+func register_tag(tag: GameplayTag) -> bool:
+	if not is_instance_valid(tag):
+		push_warning("TagManager: Cannot register invalid tag resource")
+		return false
+	
+	if tag.id == &"":
+		push_warning("TagManager: Cannot register tag with empty ID")
+		return false
+	
+	if _tag_db.has(tag.id):
+		push_warning("TagManager: Tag [%s] is already registered" % tag.id)
+		return false
+	
+	_tag_db[tag.id] = tag
+	print("TagManager: Registered tag [%s]" % tag.id)
+	
+	# 如果已初始化，需要重建关系缓存
 	if _initialized:
-		return
+		_build_tag_relation_caches()
+	
+	return true
+
+## 注册多个标签资源
+## [param] tags: Array[GameplayTag] 标签资源数组
+## [returns] int 成功注册的数量
+func register_tags(tags: Array[GameplayTag]) -> int:
+	var count = 0
+	for tag in tags:
+		if register_tag(tag):
+			count += 1
+	return count
+
+## 从目录扫描并注册所有标签资源
+## [param] dir_path: String 标签资源目录路径（支持 res:// 路径）
+## [param] recursive: bool 是否递归扫描子目录（默认 true）
+## [returns] int 成功注册的数量
+func register_tags_from_directory(dir_path: String, recursive: bool = true) -> int:
+	# 确保路径以 / 结尾
+	if not dir_path.ends_with("/"):
+		dir_path += "/"
 	
 	var dir = DirAccess.open(dir_path)
 	if not dir:
-		push_warning("TagManager: Cannot open tag directory: %s (will try to create it)" % dir_path)
-		# 尝试创建目录（如果不存在）
-		DirAccess.make_dir_recursive_absolute(dir_path)
-		dir = DirAccess.open(dir_path)
-		if not dir:
-			push_warning("TagManager: Failed to create tag directory: %s" % dir_path)
-			_initialized = true
-			return
+		push_warning("TagManager: Cannot open tag directory: %s" % dir_path)
+		return 0
 	
 	var error = dir.list_dir_begin()
 	if error != OK:
 		push_warning("TagManager: Failed to list directory: %s (error: %d)" % [dir_path, error])
-		_initialized = true
-		return
+		return 0
 	
+	var count = 0
 	var file_name = dir.get_next()
 	
 	while file_name != "":
-		if dir.current_is_dir() and not file_name.begins_with("."):
+		if dir.current_is_dir() and not file_name.begins_with(".") and recursive:
 			# 递归扫描子目录
-			_scan_and_load_tags(dir_path.path_join(file_name))
+			var sub_dir_path = dir_path.path_join(file_name)
+			count += register_tags_from_directory(sub_dir_path, recursive)
 		elif file_name.ends_with(".tres"):
 			var full_path = dir_path.path_join(file_name)
 			var resource = load(full_path) as GameplayTag
 			if resource and resource.id != &"":
-				if _tag_db.has(resource.id):
-					push_warning("TagManager: Duplicate tag ID [%s] found at %s (already exists)" % [resource.id, full_path])
-				else:
-					_tag_db[resource.id] = resource
-					print("TagManager: Loaded tag [%s] from %s" % [resource.id, full_path])
+				if register_tag(resource):
+					count += 1
 			else:
 				push_warning("TagManager: Invalid tag resource at %s" % full_path)
 		
@@ -106,58 +135,48 @@ func _scan_and_load_tags(dir_path: String) -> void:
 	dir.list_dir_end()
 	
 	# 构建继承和互斥关系缓存
-	_build_tag_relation_caches()
+	if not _initialized:
+		_build_tag_relation_caches()
+		_initialized = true
+		print("TagManager: Initialized with %d tags" % _tag_db.size())
 	
-	_initialized = true
-	print("TagManager: Initialized with %d tags" % _tag_db.size())
+	return count
 
-## 构建标签关系缓存（继承和互斥）
-func _build_tag_relation_caches() -> void:
+## 注销标签资源
+## [param] tag_id: StringName 标签ID
+## [returns] bool 是否注销成功
+func unregister_tag(tag_id: StringName) -> bool:
+	if not _tag_db.has(tag_id):
+		push_warning("TagManager: Tag [%s] is not registered" % tag_id)
+		return false
+	
+	_tag_db.erase(tag_id)
+	print("TagManager: Unregistered tag [%s]" % tag_id)
+	
+	# 重建关系缓存（因为可能有其他标签依赖此标签）
+	if _initialized:
+		_build_tag_relation_caches()
+	
+	return true
+
+## 注销多个标签资源
+## [param] tag_ids: Array[StringName] 标签ID数组
+## [returns] int 成功注销的数量
+func unregister_tags(tag_ids: Array[StringName]) -> int:
+	var count = 0
+	for tag_id in tag_ids:
+		if unregister_tag(tag_id):
+			count += 1
+	return count
+
+## 清除所有已注册的标签资源（不影响已应用到实体的标签）
+func clear_all_tag_resources() -> void:
+	_tag_db.clear()
 	_tag_inheritance_cache.clear()
 	_tag_exclusion_cache.clear()
-	
-	# 构建继承关系缓存
-	for tag_id in _tag_db:
-		var tag = _tag_db[tag_id]
-		var parent_chain: Array[StringName] = []
-		var current_tag_id = tag_id
-		
-		# 递归查找所有父标签
-		while true:
-			var current_tag = _tag_db.get(current_tag_id)
-			if not is_instance_valid(current_tag) or current_tag.parent_tag_id == &"":
-				break
-			
-			var parent_id = current_tag.parent_tag_id
-			if not _tag_db.has(parent_id):
-				push_warning("TagManager: Parent tag [%s] not found for tag [%s]" % [parent_id, current_tag_id])
-				break
-			
-			parent_chain.append(parent_id)
-			current_tag_id = parent_id
-		
-		_tag_inheritance_cache[tag_id] = parent_chain
-	
-	# 构建互斥关系缓存（包括继承的互斥）
-	for tag_id in _tag_db:
-		var tag = _tag_db[tag_id]
-		var exclusion_set: Array[StringName] = []
-		
-		# 添加直接互斥标签
-		for excl_tag_id in tag.mutually_exclusive_tags:
-			if _tag_db.has(excl_tag_id):
-				exclusion_set.append(excl_tag_id)
-		
-		# 添加父标签的互斥标签（继承互斥关系）
-		var parent_chain = _tag_inheritance_cache.get(tag_id, [])
-		for parent_id in parent_chain:
-			var parent_tag = _tag_db.get(parent_id)
-			if is_instance_valid(parent_tag):
-				for excl_tag_id in parent_tag.mutually_exclusive_tags:
-					if _tag_db.has(excl_tag_id) and not exclusion_set.has(excl_tag_id):
-						exclusion_set.append(excl_tag_id)
-		
-		_tag_exclusion_cache[tag_id] = exclusion_set
+	_query_cache.clear()
+	_initialized = false
+	print("TagManager: Cleared all tag resources")
 
 ## 获取标签的完整继承链（包括自身）
 ## [param] tag_id: StringName 标签ID
@@ -184,35 +203,6 @@ func tag_inherits_from(tag_id: StringName, parent_tag_id: StringName) -> bool:
 	
 	var inheritance_chain = get_tag_inheritance_chain(tag_id)
 	return inheritance_chain.has(parent_tag_id)
-
-## 验证标签是否已注册
-## [param] tag_id: StringName 标签ID
-## [returns] bool 是否有效
-func _validate_tag(tag_id: StringName) -> bool:
-	if not _tag_db.has(tag_id):
-		push_warning("TagManager: Tag [%s] not found in database" % tag_id)
-		return false
-	return true
-
-## 获取标签的 Groups 名称（带前缀，避免污染）
-## [param] tag_id: StringName 标签ID
-## [returns] String Groups 名称
-func _get_tag_group_name(tag_id: StringName) -> String:
-	return TAG_GROUP_PREFIX + str(tag_id)
-
-## 验证 Groups 是否为标签组
-## [param] group_name: String Groups 名称
-## [returns] bool 是否为标签组
-func _is_tag_group(group_name: String) -> bool:
-	return group_name.begins_with(TAG_GROUP_PREFIX)
-
-## 从 Groups 名称提取标签ID
-## [param] group_name: String Groups 名称
-## [returns] StringName 标签ID，如果不是标签组则返回空
-func _extract_tag_id_from_group(group_name: String) -> StringName:
-	if not _is_tag_group(group_name):
-		return &""
-	return group_name.substr(TAG_GROUP_PREFIX.length()) as StringName
 
 ## 清除查询缓存（针对特定目标或全部）
 ## [param] target: Node 目标节点（如果为 null，清除所有缓存）
@@ -244,7 +234,7 @@ func add_tag(target: Node, tag_id: StringName) -> void:
 		if has_tag(target, excl_tag_id):
 			force_remove_tag(target, excl_tag_id)
 	
-	var key: String = META_PREFIX + str(tag_id)
+	var key: String = _get_meta_key(tag_id)
 	var count: int = target.get_meta(key, 0)
 	
 	count += 1
@@ -279,7 +269,7 @@ func remove_tag(target: Node, tag_id: StringName) -> void:
 	if not _validate_tag(tag_id):
 		return
 	
-	var key: String = META_PREFIX + str(tag_id)
+	var key: String = _get_meta_key(tag_id)
 	var count: int = target.get_meta(key, 0)
 	
 	if count > 0:
@@ -316,7 +306,7 @@ func force_remove_tag(target: Node, tag_id: StringName) -> void:
 	if not _validate_tag(tag_id):
 		return
 	
-	var key: String = META_PREFIX + str(tag_id)
+	var key: String = _get_meta_key(tag_id)
 	if target.has_meta(key):
 		var group_name = _get_tag_group_name(tag_id)
 		target.remove_from_group(group_name)
@@ -347,7 +337,7 @@ func clear_all_tags(target: Node) -> void:
 	for group in groups:
 		if _is_tag_group(group):
 			var tag_id = _extract_tag_id_from_group(group)
-			if tag_id != &"" and target.has_meta(META_PREFIX + str(tag_id)):
+			if tag_id != &"" and target.has_meta(_get_meta_key(tag_id)):
 				tags_to_remove.append(tag_id)
 	
 	# 批量移除
@@ -385,10 +375,12 @@ func has_tag(target: Node, tag_id: StringName, include_inherited: bool = true) -
 	if not is_instance_valid(target):
 		return false
 	
+	# 计算缓存键（需要在函数作用域内定义）
+	var cache_key: String = tag_id if include_inherited else (tag_id as String + "_direct")
+	
 	# 检查查询缓存
 	if _cache_enabled:
 		var target_id = target.get_instance_id()
-		var cache_key = tag_id if include_inherited else (tag_id as String + "_direct")
 		if _query_cache.has(target_id) and _query_cache[target_id].has(cache_key):
 			return _query_cache[target_id][cache_key]
 	
@@ -466,7 +458,7 @@ func get_tag_count(target: Node, tag_id: StringName) -> int:
 	if not is_instance_valid(target):
 		return 0
 	
-	var key: String = META_PREFIX + str(tag_id)
+	var key: String = _get_meta_key(tag_id)
 	return target.get_meta(key, 0)
 
 ## 获取目标的所有标签ID列表（只返回直接标签，不包括继承）
@@ -483,7 +475,7 @@ func get_all_tags(target: Node) -> Array[StringName]:
 		if _is_tag_group(group):
 			var tag_id = _extract_tag_id_from_group(group)
 			if tag_id != &"":
-				var key: String = META_PREFIX + str(tag_id)
+				var key: String = _get_meta_key(tag_id)
 				if target.has_meta(key):
 					result.append(tag_id)
 	
@@ -584,3 +576,87 @@ func print_debug_status(target: Node) -> void:
 
 #endregion
 
+## 构建标签关系缓存（继承和互斥）
+func _build_tag_relation_caches() -> void:
+	_tag_inheritance_cache.clear()
+	_tag_exclusion_cache.clear()
+	
+	# 构建继承关系缓存
+	for tag_id in _tag_db:
+		var tag = _tag_db[tag_id]
+		var parent_chain: Array[StringName] = []
+		var current_tag_id = tag_id
+		
+		# 递归查找所有父标签
+		while true:
+			var current_tag = _tag_db.get(current_tag_id)
+			if not is_instance_valid(current_tag) or current_tag.parent_tag_id == &"":
+				break
+			
+			var parent_id = current_tag.parent_tag_id
+			if not _tag_db.has(parent_id):
+				push_warning("TagManager: Parent tag [%s] not found for tag [%s]" % [parent_id, current_tag_id])
+				break
+			
+			parent_chain.append(parent_id)
+			current_tag_id = parent_id
+		
+		_tag_inheritance_cache[tag_id] = parent_chain
+	
+	# 构建互斥关系缓存（包括继承的互斥）
+	for tag_id in _tag_db:
+		var tag = _tag_db[tag_id]
+		var exclusion_set: Array[StringName] = []
+		
+		# 添加直接互斥标签
+		for excl_tag_id in tag.mutually_exclusive_tags:
+			if _tag_db.has(excl_tag_id):
+				exclusion_set.append(excl_tag_id)
+		
+		# 添加父标签的互斥标签（继承互斥关系）
+		var parent_chain = _tag_inheritance_cache.get(tag_id, [])
+		for parent_id in parent_chain:
+			var parent_tag = _tag_db.get(parent_id)
+			if is_instance_valid(parent_tag):
+				for excl_tag_id in parent_tag.mutually_exclusive_tags:
+					if _tag_db.has(excl_tag_id) and not exclusion_set.has(excl_tag_id):
+						exclusion_set.append(excl_tag_id)
+		
+		_tag_exclusion_cache[tag_id] = exclusion_set
+
+## 验证标签是否已注册
+## [param] tag_id: StringName 标签ID
+## [returns] bool 是否有效
+func _validate_tag(tag_id: StringName) -> bool:
+	if not _tag_db.has(tag_id):
+		push_warning("TagManager: Tag [%s] not found in database" % tag_id)
+		return false
+	return true
+
+## 获取标签的 Groups 名称（带前缀，避免污染）
+## [param] tag_id: StringName 标签ID
+## [returns] String Groups 名称
+func _get_tag_group_name(tag_id: StringName) -> String:
+	return TAG_GROUP_PREFIX + str(tag_id)
+
+## 获取标签的元数据键名（将点号替换为下划线，确保是有效的标识符）
+## [param] tag_id: StringName 标签ID
+## [returns] String 元数据键名
+func _get_meta_key(tag_id: StringName) -> String:
+	# 将点号替换为下划线，确保是有效的 ASCII 标识符
+	var safe_id = str(tag_id).replace(".", "_")
+	return META_PREFIX + safe_id
+
+## 验证 Groups 是否为标签组
+## [param] group_name: String Groups 名称
+## [returns] bool 是否为标签组
+func _is_tag_group(group_name: String) -> bool:
+	return group_name.begins_with(TAG_GROUP_PREFIX)
+
+## 从 Groups 名称提取标签ID
+## [param] group_name: String Groups 名称
+## [returns] StringName 标签ID，如果不是标签组则返回空
+func _extract_tag_id_from_group(group_name: String) -> StringName:
+	if not _is_tag_group(group_name):
+		return &""
+	return group_name.substr(TAG_GROUP_PREFIX.length()) as StringName

@@ -1,0 +1,105 @@
+[gd_scene load_steps=2 format=3 uid="uid://cy0dcmicruxib"]
+
+[ext_resource type="Script" uid="uid://cxv8s5e0pkmnp" path="res://addons/godot_gameplay_abilities/ui/attribute_dashboard.gd" id="1_va7it"]
+
+[node name="AttributeDashboard" type="MarginContainer"]
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+script = ExtResource("1_va7it")
+
+[node name="Panel" type="Panel" parent="."]
+layout_mode = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 2
+theme_override_constants/margin_left = 5
+theme_override_constants/margin_top = 5
+theme_override_constants/margin_right = 5
+theme_override_constants/margin_bottom = 5
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="HeaderContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="TitleLabel" type="Label" parent="MarginContainer/VBoxContainer/HeaderContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 20
+text = "属性面板"
+horizontal_alignment = 1
+
+[node name="PointsLabel" type="Label" parent="MarginContainer/VBoxContainer/HeaderContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_colors/font_color = Color(1, 0.843137, 0, 1)
+theme_override_font_sizes/font_size = 16
+text = "可用点数: 0"
+horizontal_alignment = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 16
+
+[node name="PrimarySection" type="VBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="SectionTitle" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/PrimarySection"]
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 16
+text = "基础属性"
+horizontal_alignment = 1
+
+[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/VBoxContainer/HBoxContainer/PrimarySection"]
+layout_mode = 2
+
+[node name="Panel" type="Panel" parent="MarginContainer/VBoxContainer/HBoxContainer/PrimarySection/MarginContainer"]
+custom_minimum_size = Vector2(200, 300)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PrimaryContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer/PrimarySection/MarginContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 4
+
+[node name="SecondarySection" type="VBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="SectionTitle" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/SecondarySection"]
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 16
+text = "衍生属性"
+horizontal_alignment = 1
+
+[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/VBoxContainer/HBoxContainer/SecondarySection"]
+layout_mode = 2
+
+[node name="Panel" type="Panel" parent="MarginContainer/VBoxContainer/HBoxContainer/SecondarySection/MarginContainer"]
+custom_minimum_size = Vector2(200, 300)
+layout_mode = 2
+
+[node name="SecondaryContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer/SecondarySection/MarginContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 4

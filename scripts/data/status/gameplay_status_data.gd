@@ -43,6 +43,11 @@ enum StackingPolicy {
 @export var stacking_policy: StackingPolicy = StackingPolicy.REFRESH_DURATION
 @export var max_stacks: int = 1
 
+@export_group("Status Relations")
+## 状态优先级（数字越大优先级越高）
+## 当新状态与旧状态冲突时，优先级高的状态会替换优先级低的状态
+@export var priority: int = 0
+
 ## 检查此状态是否可以被指定事件触发
 func can_trigger_on_event(event_type: StringName) -> bool:
 	return trigger_on_events.has(event_type)
