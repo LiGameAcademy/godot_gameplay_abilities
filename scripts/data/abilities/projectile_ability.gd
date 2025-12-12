@@ -101,6 +101,9 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 	
 	# 注意：投射物是"发射即不管"（Fire and Forget），所以这里不需要阻塞
 	# 如果投射物需要阻塞技能完成，可以在 ProjectileBase 中实现
+	# 但是，由于投射物的效果是在命中时应用的（不在 _on_cast 中应用），
+	# 所以 _pending_effects 会保持为空，需要立即检查并发出完成信号
+	_check_ability_completion()
 
 ## 连接投射物信号
 ## [param] projectile: ProjectileBase 投射物实例
