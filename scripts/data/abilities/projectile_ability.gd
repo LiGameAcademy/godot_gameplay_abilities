@@ -31,6 +31,7 @@ class_name ProjectileAbility
 ## - "body": 身体中心
 @export var muzzle_attachment_point: StringName = &"body"
 
+
 ## [重写] 施放技能
 ## 逻辑：生成投射物，并把 statuses 中的效果作为"弹头"传递给投射物
 func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
@@ -94,8 +95,8 @@ func _connect_projectile_signals(
 		projectile.timeout_triggered.connect(_on_projectile_timeout.bind(ability_comp, context))
 
 ## 处理投射物撞击事件
-## 当投射物撞击时，投射物已经自己应用了弹头（状态/效果）
-## Ability 只需要处理穿透逻辑和销毁决策
+## 当投射物撞击时，投射物已经自己应用了弹头（状态/效果）并处理了穿透逻辑
+## Ability 可以在这里处理特殊逻辑（如播放特效、触发额外效果等）
 ## [param] hit_position: Vector3 撞击位置
 ## [param] direct_hit_target: Node 直接命中的目标（可选）
 ## [param] impact_context: Dictionary 撞击上下文（来自 ProjectileBase）
@@ -107,25 +108,14 @@ func _on_projectile_impact(
 		impact_context: Dictionary,
 		ability_comp: Node,
 		context: Dictionary) -> void:
-	var projectile = impact_context.get("projectile", null) as ProjectileBase
-	if not is_instance_valid(projectile):
-		return
-	
-	# 处理穿透逻辑（由 Ability 决定是否消耗本次撞击）
-	var should_consume = true  # 默认消耗
-	if is_instance_valid(projectile_data) and projectile_data.piercing:
-		# 检查穿透次数（使用投射物实例的 pierce_count 属性）
-		var max_pierce = projectile_data.max_pierce_count
-		
-		if max_pierce < 0 or projectile.pierce_count < max_pierce:
-			# 可以继续穿透
-			should_consume = false
-			projectile.pierce_count += 1
-			print("ProjectileAbility: Piercing through (count: %d)" % projectile.pierce_count)
-	
-	# 如果应该消耗，销毁投射物
-	if should_consume:
-		projectile.destroy()
+	# 投射物已经自己处理了穿透逻辑和销毁决策
+	# Ability 可以在这里处理特殊逻辑（如播放特效、触发额外效果等）
+	# impact_context["consumed"] 表示投射物是否已被销毁
+	var consumed = impact_context.get("consumed", true)
+	if consumed:
+		print("ProjectileAbility: Projectile consumed after impact")
+	else:
+		print("ProjectileAbility: Projectile piercing through")
 
 ## 处理投射物超时事件
 ## 当投射物生命周期结束时，在超时位置应用 timeout_status（如果配置了）
@@ -150,18 +140,6 @@ func _on_projectile_timeout(
 	if not is_instance_valid(projectile):
 		return
 	
-	# 准备状态应用的上下文
-	# 注意：状态会应用到 instigator 上，但状态可以通过 hit_detector 检测超时位置周围的目标
-	# AreaHitDetector 支持通过 context["hit_position"] 或 context["detection_position"] 指定检测位置
-	var status_context = context.duplicate()
-	status_context["timeout_position"] = position
-	status_context["hit_position"] = position  # 供 AreaHitDetector 使用（如果 detection_position_source = HIT_POSITION）
-	status_context["detection_position"] = position  # 供 AreaHitDetector 使用（如果 detection_position_source = DETECTION_POSITION）
-	status_context["ability_id"] = ability_id
-	
-	# 超时后销毁投射物
-	projectile.destroy()
-
 ## 生成投射物
 ## [param] instigator: Node 施法者
 ## [param] spawn_transform: Transform3D 发射变换

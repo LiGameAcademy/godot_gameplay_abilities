@@ -45,6 +45,11 @@ var velocity: Vector3 = Vector3.ZERO
 var pierce_count: int = 0
 var _timer: float = 0.0
 
+## 销毁时产生的魔法阵
+var on_destory_magic_field_data : MagicFieldData
+## 是否只在撞击时产生
+var spawn_on_hit : bool = false
+
 # ========== 信号系统 ==========
 ## 投射物撞击时触发
 ## [param] hit_position: Vector3 撞击位置
@@ -76,9 +81,10 @@ func _physics_process(delta: float) -> void:
 	_timer += delta
 	if _timer >= max_lifetime:
 		print("ProjectileBase: Lifetime expired (%.2f >= %.2f)" % [_timer, max_lifetime])
-		# 发射超时信号，让外部系统（如技能系统）处理
-		# 注意：不自动销毁，由外部系统决定是否销毁
+		# 发射超时信号，让外部系统（如技能系统）处理超时状态
 		timeout_triggered.emit(global_position, {"projectile": self})
+		# 投射物自己管理销毁
+		destroy()
 		return
 	
 	# 2. 运动逻辑（策略模式）
@@ -117,7 +123,13 @@ func initialize_velocity() -> void:
 
 ## 销毁投射物（公共方法，由外部系统调用）
 ## 投射物不自动销毁，必须由外部系统（如 ProjectileAbility）调用此方法
-func destroy() -> void:
+## [param] on_hit: bool 是否因撞击而销毁（用于判断是否生成撞击魔法场）
+func destroy(on_hit: bool = false) -> void:
+	# 生成销毁时的魔法场（如果配置了）
+	if is_instance_valid(on_destory_magic_field_data) and is_instance_valid(instigator):
+		if not spawn_on_hit or on_hit:
+			_spawn_impact_field(instigator, global_position, on_destory_magic_field_data, {})
+
 	# 清理引用
 	instigator = null
 	target_reference = null
@@ -143,12 +155,27 @@ func _handle_impact(target: Node) -> void:
 	# 3. 传递弹头（Payload）：将携带的状态和效果应用给目标
 	_deliver_payload(target, hit_pos, hit_dir)
 	
-	# 4. 发射撞击信号，让外部系统（如技能系统）决定是否销毁、处理穿透等
-	# 注意：不自动销毁，由外部系统决定
+	# 4. 处理穿透逻辑
+	var should_consume = true  # 默认消耗（销毁）
+	if piercing:
+		# 检查穿透次数
+		if max_pierce_count < 0 or pierce_count < max_pierce_count:
+			# 可以继续穿透
+			should_consume = false
+			pierce_count += 1
+			print("ProjectileBase: Piercing through (count: %d)" % pierce_count)
+	
+	# 5. 发射撞击信号，通知外部系统（如技能系统）
+	# 注意：投射物已经自己处理了穿透逻辑和销毁决策
 	impact_triggered.emit(hit_pos, target, {
 		"hit_direction": hit_dir,
-		"projectile": self
+		"projectile": self,
+		"consumed": should_consume  # 告知外部系统是否已销毁
 	})
+	
+	# 6. 如果应该消耗，销毁投射物
+	if should_consume:
+		destroy(true)
 
 ## 传递弹头（Payload）：将携带的状态和效果应用给目标
 ## [param] target: Node 目标实体（直接命中的目标）
@@ -158,28 +185,27 @@ func _deliver_payload(target: Node, hit_position: Vector3, hit_direction: Vector
 	if not is_instance_valid(target) or not is_instance_valid(instigator):
 		return
 	
-	# 准备上下文信息（供 Status 的目标检测使用）
+	# 准备上下文信息
 	var context = {
 		"hit_position": hit_position,
-		"detection_position": hit_position,  # 供 AreaHitDetector 使用
 		"hit_direction": hit_direction,
 		"projectile": self,
 		"input_target": target  # 直接命中的目标
 	}
 	
 	# 应用状态（弹头）
-	for status_data in payload_statuses.duplicate():
+	# 注意：状态会应用到目标，不处理目标检测（Status 只应用到自己）
+	for status_data in payload_statuses:
 		if not is_instance_valid(status_data):
 			continue
 		
-		# 获取 instigator 的状态组件（状态会应用到 instigator，但会检测 hit_position 周围的目标）
+		# 获取目标的状态组件
 		var status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
 		if is_instance_valid(status_comp):
-			# 应用状态（状态系统会处理目标检测、筛选和应用效果）
-			# 状态会通过 context["hit_position"] 和 context["detection_position"] 检测周围的目标
-			status_comp.apply_status(status_data.duplicate(), instigator, 1, context)
+			# 应用状态（状态只应用到自己）
+			status_comp.apply_status(status_data, instigator, 1, context)
 		else:
-			push_warning("ProjectileBase: Instigator %s has no GameplayStatusComponent, cannot apply status %s" % [instigator.name, status_data.status_id])
+			push_warning("ProjectileBase: Target %s has no GameplayStatusComponent, cannot apply status %s" % [target.name, status_data.status_id])
 	
 ## 检查是否应该撞击此目标
 func _should_impact(target: Node) -> bool:
@@ -204,6 +230,48 @@ func _should_impact(target: Node) -> bool:
 			return false
 	
 	return true
+
+## 生成撞击魔法场（爆炸）
+## 这个方法的逻辑实际上是复用了 MagicFieldAbility 的核心生成逻辑
+## 但我们不需要依赖 MagicFieldAbility 类，只需要依赖 MagicFieldData 和 MagicFieldBase 即可
+func _spawn_impact_field(
+		instigator: Node, 
+		spawn_position: Vector3, 
+		data: MagicFieldData, 
+		context: Dictionary) -> void:
+			
+	if not is_instance_valid(data) or not is_instance_valid(data.magic_field_scene):
+		push_warning("ProjectileBase: Cannot spawn impact field, data or scene is invalid.")
+		return
+	
+	if not is_instance_valid(instigator):
+		push_warning("ProjectileBase: Cannot spawn impact field, instigator is invalid.")
+		return
+
+	# 1. 实例化载具
+	var magic_field = data.magic_field_scene.instantiate()
+	if not magic_field is MagicFieldBase:
+		magic_field.queue_free()
+		return
+	var magic_field_base = magic_field as MagicFieldBase
+	
+	# 2. 添加到场景
+	var level_root = instigator.get_tree().current_scene
+	if not is_instance_valid(level_root):
+		push_warning("ProjectileBase: Cannot find current scene root, cannot spawn impact field.")
+		magic_field_base.queue_free()
+		return
+	
+	level_root.add_child(magic_field_base)
+		
+	# 3. 配置载具
+	magic_field_base.global_position = spawn_position
+	magic_field_base.instigator = instigator
+	
+	# 4. 装载弹头（应用数据配置）
+	data.apply_to_magic_field(magic_field_base)
+	
+	# print("ProjectileAbility: Spawned impact field at %s" % spawn_position)
 
 ## 处理碰撞（Area）
 func _on_area_entered(area: Area3D) -> void:

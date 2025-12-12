@@ -34,8 +34,14 @@ class_name ProjectileData
 ## 场景是投射物的核心定义，属于数据配置的一部分
 @export var projectile_scene: PackedScene = null
 ## 携带的状态列表（弹头）
-## 当目标进入区域或周期性触发时，会将此列表中的状态应用给目标
+## 当投射物击中目标时，会将此列表中的状态应用给目标
 @export var payload_statuses: Array[GameplayStatusData] = []
+
+@export_group("On Destory Spawns")
+## 销毁时产生的魔法阵
+@export var on_destory_magic_field_data : MagicFieldData
+## 是否只在撞击时产生
+@export var spawn_on_hit : bool = false
 
 ## 应用数据到投射物实例
 ## [param] projectile: ProjectileBase 投射物实例
@@ -54,6 +60,9 @@ func apply_to_projectile(projectile: ProjectileBase) -> void:
 	projectile.max_pierce_count = max_pierce_count
 	
 	projectile.payload_statuses = payload_statuses.duplicate()
+
+	projectile.on_destory_magic_field_data = on_destory_magic_field_data
+	projectile.spawn_on_hit = spawn_on_hit
 
 	# 应用移动策略（如果设置了）
 	if is_instance_valid(movement_strategy):

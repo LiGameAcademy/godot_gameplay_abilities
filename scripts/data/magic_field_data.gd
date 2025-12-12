@@ -28,12 +28,15 @@ enum TargetSelectionMode {
 ##   不进行周期性触发
 @export var periodic_trigger_interval: float = 0.0
 
-@export_group("Periodic Effect")
-## 周期性效果的目标选择模式（仅在 periodic_trigger_interval > 0 时有效）
-## 当魔法场周期性触发时，会根据此模式选择目标并应用 payload_statuses
-@export var periodic_target_selection_mode: TargetSelectionMode = TargetSelectionMode.ALL
-## 周期性效果的目标数量（-1 为全部，仅在 RANDOM 和 NEAREST 模式下有效）
-@export var periodic_target_count: int = -1
+@export_group("Target Selection")
+## 目标选择模式（适用于所有触发模式）
+## 当魔法场应用状态时，会根据此模式选择目标并应用 payload_statuses
+## - ALL: 对所有目标应用（默认）
+## - RANDOM: 随机选择指定数量的目标
+## - NEAREST: 选择最近的指定数量的目标
+@export var target_selection_mode: TargetSelectionMode = TargetSelectionMode.ALL
+## 目标数量（-1 为全部，仅在 RANDOM 和 NEAREST 模式下有效）
+@export var target_count: int = -1
 
 @export_group("Scene")
 ## 魔法场场景（必须继承自 MagicFieldBase）
@@ -56,9 +59,9 @@ func apply_to_magic_field(magic_field: MagicFieldBase) -> void:
 	# 应用触发模式配置
 	magic_field.periodic_trigger_interval = periodic_trigger_interval
 	
-	# 应用周期性效果配置
-	magic_field.periodic_target_selection_mode = periodic_target_selection_mode
-	magic_field.periodic_target_count = periodic_target_count
+	# 应用目标选择配置
+	magic_field.target_selection_mode = target_selection_mode
+	magic_field.target_count = target_count
 
 	# 应用弹头配置
-	magic_field.payload_statuses = payload_statuses
+	magic_field.payload_statuses = payload_statuses.duplicate()
