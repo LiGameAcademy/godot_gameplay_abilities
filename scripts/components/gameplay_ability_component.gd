@@ -104,6 +104,22 @@ func forget_ability(ability_id: StringName) -> void:
 		"ability_id": ability_id
 	})
 
+## 禁用技能
+## [param] ability_id: StringName 技能ID
+func disable_ability(ability_id: StringName) -> void:
+	var ability_data = get_ability_data(ability_id)
+	if not is_instance_valid(ability_data):
+		return
+	ability_data.disabled = true
+
+## 启用技能
+## [param] ability_id: StringName 技能ID
+func enable_ability(ability_id: StringName) -> void:
+	var ability_data = get_ability_data(ability_id)
+	if not is_instance_valid(ability_data):
+		return
+	ability_data.disabled = false
+
 ## 检查是否可以施法
 ## [param] ability_id: StringName 技能ID
 ## [param] target: Node 目标
@@ -126,22 +142,6 @@ func can_cast(ability_id: StringName, target: Node = null, context: Dictionary =
 	if not is_cooldown_ready(ability_id):
 		return false  # 技能冷却中
 	return ability_data.can_cast(self, target, context)
-
-## 禁用技能
-## [param] ability_id: StringName 技能ID
-func disable_ability(ability_id: StringName) -> void:
-	var ability_data = get_ability_data(ability_id)
-	if not is_instance_valid(ability_data):
-		return
-	ability_data.disabled = true
-
-## 启用技能
-## [param] ability_id: StringName 技能ID
-func enable_ability(ability_id: StringName) -> void:
-	var ability_data = get_ability_data(ability_id)
-	if not is_instance_valid(ability_data):
-		return
-	ability_data.disabled = false
 
 ## 提交施法（消耗资源，让技能进入冷却）
 ## [param] ability_id: StringName 技能ID

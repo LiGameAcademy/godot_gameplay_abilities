@@ -30,9 +30,11 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 		push_warning("ChannelingAbility: Cannot cast, instigator is not valid")
 		return
 	
-	# 如果已经在引导，先取消之前的引导
+	# 如果已经在引导，先取消之前的引导（这种情况不应该发生，因为关闭时会清空状态）
+	# 但为了安全起见，保留这个检查
 	if _channeling_state.get("is_active", false):
 		_interrupt_channeling(ability_comp, false)
+		# 如果是在关闭后立即重新开启，这里已经清理了状态，可以继续执行
 	
 	# 记录输入动作，供"按住维持"模式检测
 	var input_action: String = context.get("input_action", "")
@@ -76,6 +78,12 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 		ability_comp.add_child(duration_timer)
 		duration_timer.start()
 		_channeling_state["duration_timer"] = duration_timer
+	
+	# 调用父类的 _on_cast（处理状态系统，如果需要）
+	# 注意：_on_cast() 只在开启时调用，所以父类会应用开启状态
+	# 只有在 stop_on_input_release = false（切换式）时，才需要状态系统支持
+	# 但为了保持一致性，总是调用父类方法
+	super(ability_comp, input_target, context)
 
 ## 每帧更新（检查中断条件）
 func update(delta: float) -> void:
@@ -105,6 +113,7 @@ func update(delta: float) -> void:
 ## [param] ability_comp: Node 技能组件（可选，如果不提供则从状态中获取）
 ## [param] completed: bool 是否正常完成（true 表示完成，false 表示中断）
 func _interrupt_channeling(ability_comp: Node = null, completed: bool = false) -> void:
+	# 如果已经不在激活状态，直接返回（避免重复调用）
 	if not _channeling_state.get("is_active", false):
 		return
 	
@@ -124,6 +133,8 @@ func _interrupt_channeling(ability_comp: Node = null, completed: bool = false) -
 		duration_timer.queue_free()
 	
 	# 通知技能完成（引导结束时）
+	# 注意：在 _toggle_off 中，这会在 cancel_ability 之后调用，此时 _current_casting_ability_id 已被清空
+	# 所以 _on_ability_completed 会直接返回（因为 _current_casting_ability_id != ability_id），不会触发 _end_ability
 	if is_instance_valid(ability_comp):
 		ability_completed.emit(self)
 	
@@ -171,12 +182,22 @@ func can_toggle_off(ability_comp: Node, context: Dictionary = {}) -> bool:
 
 ## 重写：关闭技能
 func _toggle_off(ability_comp: Node, context: Dictionary = {}) -> void:
-	# 调用父类方法（会触发 cancel_ability）
-	super(ability_comp, context)
+	# 先中断引导（清理状态和 Cue）
+	# 注意：必须在 cancel_ability 之前调用，因为 cancel_ability 会调用 _on_cancel，而 _on_cancel 也会调用 _interrupt_channeling
+	# 但由于 _interrupt_channeling 有保护机制（检查 is_active），所以不会重复执行
+	_interrupt_channeling(ability_comp, false)
+	
+	# 然后调用父类方法（会处理状态系统，并触发 cancel_ability，清空 _current_casting_ability_id）
+	# 注意：此时 _channeling_state["is_active"] 已经是 false，所以 _on_cancel 中的 _interrupt_channeling 会直接返回
+	super._toggle_off(ability_comp, context)
 
 
 ## 技能被取消时的处理
 func _on_cancel(ability_comp: Node, context: Dictionary = {}) -> void:
+	# 如果已经在 _toggle_off 中调用了 _interrupt_channeling，这里会直接返回（避免重复调用）
+	# 注意：_toggle_off 会先调用 super（cancel_ability），然后调用 _interrupt_channeling
+	# 所以这里调用 _interrupt_channeling 时，_toggle_off 中的 _interrupt_channeling 还没有执行
+	# 但 _interrupt_channeling 有保护机制，如果 is_active 已经是 false，会直接返回
 	_interrupt_channeling(ability_comp, false)
 
 ## Tick Timer 回调

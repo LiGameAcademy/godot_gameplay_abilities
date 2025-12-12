@@ -36,31 +36,6 @@ func can_toggle_off(ability_comp: Node, context: Dictionary = {}) -> bool:
 	# 默认实现：如果技能正在执行，可以关闭
 	return is_toggled_on(ability_comp)
 
-func _can_cast(ability_comp: Node, target: Node = null, context: Dictionary = {}) -> bool:
-	# 如果已经开启，可以关闭（跳过冷却和消耗检查）
-	if is_toggled_on(ability_comp) and can_toggle_off(ability_comp, context):
-		return true
-	# 否则检查正常施法条件
-	return super._can_cast(ability_comp, target, context)
-
-func _commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
-	# 如果已经开启，关闭技能（跳过消耗和冷却）
-	if is_toggled_on(ability_comp) and can_toggle_off(ability_comp, context):
-		# 调用关闭逻辑
-		_toggle_off(ability_comp, context)
-		return true
-	
-	# 否则正常开启技能
-	return super(ability_comp, context)
-
-## 关闭技能（虚方法，子类可以重写）
-## [param] ability_comp: Node 技能组件
-## [param] context: Dictionary 上下文信息
-func _toggle_off(ability_comp: Node, context: Dictionary = {}) -> void:
-	# 默认实现：取消技能执行
-	if ability_comp.has_method("cancel_ability"):
-		ability_comp.cancel_ability(ability_id, context)
-
 ## 重写：获取技能图标
 ## 根据切换状态返回不同的图标
 ## 按钮图标反映"按下会发生什么"：
@@ -84,27 +59,58 @@ func get_icon(ability_comp: Node = null) -> Texture:
 func is_toggleable() -> bool:
 	return true
 
+func _can_cast(ability_comp: Node, target: Node = null, context: Dictionary = {}) -> bool:
+	# 如果已经开启，可以关闭（跳过冷却和消耗检查）
+	if is_toggled_on(ability_comp) and can_toggle_off(ability_comp, context):
+		return true
+	# 否则检查正常施法条件
+	return super._can_cast(ability_comp, target, context)
+
+func _commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
+	# 如果已经开启，关闭技能（跳过消耗和冷却）
+	if is_toggled_on(ability_comp) and can_toggle_off(ability_comp, context):
+		# 调用关闭逻辑
+		_toggle_off(ability_comp, context)
+		return true
+	
+	# 否则正常开启技能
+	return super(ability_comp, context)
+
 func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
+	# _on_cast() 只在开启时调用，关闭逻辑在 _commit_cast 中通过 _toggle_off() 处理
+	# 所以这里只需要处理开启时的状态应用
 	if not is_instance_valid(ability_comp) or not is_instance_valid(input_target): 
 		return
 	
 	# 使用鸭子类型查询GameplayStatusComponent
 	var target_status_comp = GameplayAbilitySystem.get_component_by_interface(input_target, "GameplayStatusComponent")
 	if not is_instance_valid(target_status_comp):
-		push_error("ToggleAbility: GameplayStatusComponent not found")
+		# 如果没有状态组件，直接返回（不是所有切换技能都需要状态系统）
 		return
 	
 	var instigator = ability_comp.get_parent() if ability_comp.has_method("get_parent") else null
 	
-	# 根据切换状态应用不同的状态
-	if not is_toggled_on(ability_comp):
-		# 关闭：移除开启状态，应用关闭状态
-		if is_instance_valid(status_to_apply) and target_status_comp.has_method("remove_status"):
-			target_status_comp.remove_status(status_to_apply.status_id)
-		if is_instance_valid(toggled_off_status_to_apply) and target_status_comp.has_method("apply_status"):
-			target_status_comp.apply_status(toggled_off_status_to_apply, instigator)
-	else:
-		# 开启：应用开启状态
-		if is_instance_valid(status_to_apply) and target_status_comp.has_method("apply_status"):
-			target_status_comp.apply_status(status_to_apply, instigator)
+	# 开启：应用开启状态
+	# 注意：_on_cast() 只在开启时调用，所以这里总是应用开启状态
+	if is_instance_valid(status_to_apply) and target_status_comp.has_method("apply_status"):
+		target_status_comp.apply_status(status_to_apply, instigator)
 
+## 关闭技能（虚方法，子类可以重写）
+## [param] ability_comp: Node 技能组件
+## [param] context: Dictionary 上下文信息
+func _toggle_off(ability_comp: Node, context: Dictionary = {}) -> void:
+	# 移除开启状态，应用关闭状态（如果需要）
+	var instigator = ability_comp.get_parent() if ability_comp.has_method("get_parent") else null
+	if is_instance_valid(instigator):
+		var target_status_comp = GameplayAbilitySystem.get_component_by_interface(instigator, "GameplayStatusComponent")
+		if is_instance_valid(target_status_comp):
+			# 移除开启状态
+			if is_instance_valid(status_to_apply) and target_status_comp.has_method("remove_status"):
+				target_status_comp.remove_status(status_to_apply.status_id)
+			# 应用关闭状态（如果需要）
+			if is_instance_valid(toggled_off_status_to_apply) and target_status_comp.has_method("apply_status"):
+				target_status_comp.apply_status(toggled_off_status_to_apply, instigator)
+	
+	# 取消技能执行
+	if ability_comp.has_method("cancel_ability"):
+		ability_comp.cancel_ability(ability_id, context)
