@@ -61,9 +61,9 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 	if not is_instance_valid(instigator):
 		push_warning("ProjectileAbility: Cannot cast, instigator is not valid")
 		return
-	# 1. 应用自身效果（后坐力、耗蓝等）
-	_apply_caster_effects(instigator, context)
-	
+	## 1. 应用自身效果（后坐力、耗蓝等）
+	#_apply_caster_effects(instigator, context)
+	#
 	# 2. 检查投射物场景
 	if not projectile_scene:
 		push_warning("ProjectileAbility: projectile_scene is not set for ability %s" % ability_id)
@@ -78,27 +78,27 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 	var spawn_transform = _get_muzzle_transform(instigator, context)
 	
 	# 5. 获取要传递的效果列表（弹头）
-	var payload_effects = target_effects if not target_effects.is_empty() else effects
-	if payload_effects.is_empty():
-		push_warning("ProjectileAbility: No effects configured for ability %s. Projectile will spawn but won't deal damage. Please configure target_effects or effects in the ability resource." % ability_id)
-		# 注意：即使没有效果，也允许生成投射物（用于测试和视觉效果）
-		# payload_effects = []  # 保持为空数组
-	
-	# 调试日志
-	print("ProjectileAbility: Casting %s with %d effect(s)" % [ability_id, payload_effects.size()])
-	
+	#var payload_effects = target_effects if not target_effects.is_empty() else effects
+	#if payload_effects.is_empty():
+		#push_warning("ProjectileAbility: No effects configured for ability %s. Projectile will spawn but won't deal damage. Please configure target_effects or effects in the ability resource." % ability_id)
+		## 注意：即使没有效果，也允许生成投射物（用于测试和视觉效果）
+		## payload_effects = []  # 保持为空数组
+	#
+	## 调试日志
+	#print("ProjectileAbility: Casting %s with %d effect(s)" % [ability_id, payload_effects.size()])
+	#
 	# 6. 获取追踪目标（用于投射物追踪）
 	# 符合开闭原则：通过 context 传递追踪目标，或使用 input_target
 	# 业务层可以在 context 中设置 "homing_target" 来指定追踪目标
 	var target_for_homing: Node3D = _get_homing_target(instigator, input_target, context)
 	
 	# 7. 循环生成投射物
-	for i in range(projectile_count):
-		var projectile = _spawn_projectile(instigator, spawn_transform, projectile_data, target_for_homing, payload_effects, context)
-		# 8. 连接信号（如果配置了魔法阵技能）
-		if is_instance_valid(projectile) and (is_instance_valid(impact_magic_circle_ability) or trigger_magic_circle_on_timeout):
-			_connect_projectile_signals(projectile, ability_comp, payload_effects, context)
-	
+	#for i in range(projectile_count):
+		#var projectile = _spawn_projectile(instigator, spawn_transform, projectile_data, target_for_homing, payload_effects, context)
+		## 8. 连接信号（如果配置了魔法阵技能）
+		#if is_instance_valid(projectile) and (is_instance_valid(impact_magic_circle_ability) or trigger_magic_circle_on_timeout):
+			#_connect_projectile_signals(projectile, ability_comp, payload_effects, context)
+	#
 	# 注意：投射物是"发射即不管"（Fire and Forget），所以这里不需要阻塞
 	# 如果投射物需要阻塞技能完成，可以在 ProjectileBase 中实现
 	# 但是，由于投射物的效果是在命中时应用的（不在 _on_cast 中应用），
@@ -151,10 +151,10 @@ func _on_projectile_impact(
 	# 先用技能的 targeting_strategy 进行筛选，决定是否对命中目标直接应用效果
 	impact_context["target_unit"] = direct_hit_target
 	var filtered_targets = _filter_targets_with_strategy([direct_hit_target], instigator, impact_context, targeting_strategy, direct_hit_target)
-	if not filtered_targets.is_empty():
-		var effects_to_apply = target_effects if not target_effects.is_empty() else effects
-		_apply_effects_to_targets(effects_to_apply, instigator, filtered_targets, impact_context)
-	
+	#if not filtered_targets.is_empty():
+		#var effects_to_apply = target_effects if not target_effects.is_empty() else effects
+		#_apply_effects_to_targets(effects_to_apply, instigator, filtered_targets, impact_context)
+	#
 	# 命中发生即消耗本次撞击（不让弹体继续飞行），无论是否直伤命中
 	impact_context["consume_hit"] = true
 	

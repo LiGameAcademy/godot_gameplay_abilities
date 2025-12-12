@@ -13,8 +13,6 @@ class_name GameplayAbility
 @export var disabled: bool = false                  	## 技能是否禁用
 @export var targeting_scorer: TargetingScorer = null   	## 目标评分器
 
-@export_group("Effects")
-
 @export_group("Status")
 ## 技能应用的状态列表（新架构）
 ## Status 系统会处理目标检测、筛选和应用效果
@@ -22,15 +20,17 @@ class_name GameplayAbility
 ## 适用：所有效果（瞬时、周期性、永久）
 @export var statuses: Array[GameplayStatusData] = []
 
-## 运行时 Effect 列表（用于跟踪所有 Effect，等待它们完成）
-## 格式：{effect_instance: true}
-var _pending_effects: Dictionary[GameplayEffect, bool] = {}
+## 运行时 Status 列表（用于跟踪所有 Status，等待它们完成）
+## 格式：{status_instance: true}
+## 注意：在新架构中，Ability 通过 Status 系统应用效果，因此跟踪 Status 完成而非 Effect 完成
+## 使用 Variant 作为键类型以支持向后兼容（旧架构的 Effect 跟踪）
+var _pending_statuses: Dictionary = {}
 
 ## 冷却剩余时间（秒，由技能自己管理）
 var _cooldown_remaining: float = 0.0
 
 ## 技能完成信号
-## 当所有 Effect 完成时，会发出此信号
+## 当所有 Status 完成时，会发出此信号
 ## Component 会订阅此信号来判断技能是否完成
 signal ability_completed(ability: GameplayAbility)
 
@@ -64,8 +64,8 @@ func commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
 ## [param] target: Node 目标节点
 ## [param] context: Dictionary 上下文信息（可选）
 func cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> void:
-	# 清理之前的 Effect（防止重复）
-	_clear_effects()
+	# 清理之前的 Status（防止重复）
+	_clear_statuses()
 	_on_cast(ability_comp, target, context)
 
 ## [子类可重写] 每帧更新（用于需要持续更新的技能，如连击计时器、引导技能）
@@ -100,14 +100,6 @@ func get_costs_description() -> String:
 func clear_cast(ability_comp: Node, target: Node) -> void:
 	_clear_cast(ability_comp, target)
 
-## 是否可以自动施法
-func can_autocast() -> bool:
-	return false
-
-## 是否正在自动施法
-func is_autocast() -> bool:
-	return false
-
 ## 获取施法前摇时间
 func get_cast_point() -> float:
 	return 0.0
@@ -133,39 +125,44 @@ func get_animation_name() -> StringName:
 func is_toggleable() -> bool:
 	return false
 
-## 订阅 Effect 完成信号（由 Ability 自己管理）
-## [param] effect: GameplayEffect 要订阅的效果实例
-func _subscribe_effect_completion(effect: GameplayEffect) -> void:
-	if not is_instance_valid(effect):
+## 订阅 Status 完成信号（由 Ability 自己管理）
+## [param] status_instance: GameplayStatusInstance 要订阅的状态实例
+func _subscribe_status_completion(status_instance: GameplayStatusInstance) -> void:
+	if not is_instance_valid(status_instance):
 		return
 	
 	# 如果已经订阅过，跳过
-	if _pending_effects.has(effect):
+	if _pending_statuses.has(status_instance):
 		return
 	
-	# 添加到 Effect 列表
-	_pending_effects[effect] = true
+	# 添加到 Status 列表
+	_pending_statuses[status_instance] = true
 	
 	# 订阅完成信号
-	# 注意：信号已经传递了 effect 参数，不需要 bind
-	if not effect.effect_completed.is_connected(_on_effect_completed):
-		effect.effect_completed.connect(_on_effect_completed)
+	# 注意：信号已经传递了 status_instance 参数，不需要 bind
+	if not status_instance.status_completed.is_connected(_on_status_completed):
+		status_instance.status_completed.connect(_on_status_completed)
 
-## 检查技能是否完成（所有 Effect 都完成时调用）
+## 检查技能是否完成（所有 Status 都完成时调用）
 func _check_ability_completion() -> void:
-	# 如果还有 Effect，不完成
-	if not _pending_effects.is_empty():
+	# 如果还有 Status，不完成
+	if not _pending_statuses.is_empty():
 		return
 	
 	# 发出技能完成信号
 	ability_completed.emit(self)
 
-## 清理所有 Effect 订阅（技能取消或结束时调用）
+## 清理所有 Status 订阅（技能取消或结束时调用）
+func _clear_statuses() -> void:
+	for status_instance in _pending_statuses.keys():
+		if is_instance_valid(status_instance) and status_instance.status_completed.is_connected(_on_status_completed):
+			status_instance.status_completed.disconnect(_on_status_completed)
+	_pending_statuses.clear()
+
+## [已弃用] 清理所有 Effect 订阅
+## 保留此方法以保持向后兼容，但新架构应使用 _clear_statuses()
 func _clear_effects() -> void:
-	for effect in _pending_effects.keys():
-		if is_instance_valid(effect) and effect.effect_completed.is_connected(_on_effect_completed):
-			effect.effect_completed.disconnect(_on_effect_completed)
-	_pending_effects.clear()
+	_clear_statuses()
 
 ## [子类必须重写] 施放技能（应用效果）
 ## 这是技能系统的核心方法，所有子类都必须实现
@@ -194,8 +191,8 @@ func _clear_cast(_ability_comp: Node, _target: Node) -> void: pass
 ## [子类可重写] 技能被取消时的处理
 ## 默认实现为空，子类可按需重写（如需要清理持续效果、停止计时器等）
 func _on_cancel(ability_comp: Node, context: Dictionary = {}) -> void:
-	# 清理 Effect 订阅
-	_clear_effects()
+	# 清理 Status 订阅
+	_clear_statuses()
 
 ## 检查冷却是否就绪
 ## [return] bool 冷却是否就绪
@@ -221,18 +218,52 @@ func get_cooldown_progress() -> float:
 		return 0.0
 	return _cooldown_remaining / total_cooldown
 
-## 处理 Effect 完成信号
-## [param] effect: GameplayEffect 完成的效果实例
-func _on_effect_completed(effect: GameplayEffect) -> void:
-	if not _pending_effects.has(effect):
+## 处理 Status 完成信号
+## [param] status_instance: GameplayStatusInstance 完成的状态实例
+func _on_status_completed(status_instance: GameplayStatusInstance) -> void:
+	if not _pending_statuses.has(status_instance):
 		return
 	
-	# 从 Effect 列表中移除
-	_pending_effects.erase(effect)
+	# 从 Status 列表中移除
+	_pending_statuses.erase(status_instance)
+	
+	# 断开信号连接
+	if is_instance_valid(status_instance) and status_instance.status_completed.is_connected(_on_status_completed):
+		status_instance.status_completed.disconnect(_on_status_completed)
+	
+	# 检查是否所有 Status 都完成了
+	_check_ability_completion()
+
+## [已弃用] 订阅 Effect 完成信号
+## 保留此方法以保持向后兼容（旧架构直接应用 Effect）
+## 新架构应使用 _subscribe_status_completion()
+func _subscribe_effect_completion(effect: GameplayEffect) -> void:
+	if not is_instance_valid(effect):
+		return
+	
+	# 向后兼容：将 Effect 添加到 Status 字典中（使用临时键）
+	# 注意：这里使用一个临时的 Status 实例包装 Effect，仅用于向后兼容
+	# 实际上，旧架构的 Effect 完成应该直接触发 ability_completed
+	# 但为了保持 API 一致性，我们仍然跟踪它
+	var temp_key = effect as Variant
+	if not _pending_statuses.has(temp_key):
+		_pending_statuses[temp_key] = true
+		if not effect.effect_completed.is_connected(_on_effect_completed):
+			effect.effect_completed.connect(_on_effect_completed)
+
+## [已弃用] 处理 Effect 完成信号
+## 保留此方法以保持向后兼容，但新架构应使用 _on_status_completed()
+func _on_effect_completed(effect: GameplayEffect) -> void:
+	var temp_key = effect as Variant
+	if not _pending_statuses.has(temp_key):
+		return
+	
+	# 从 Status 列表中移除（向后兼容）
+	_pending_statuses.erase(temp_key)
 	
 	# 断开信号连接
 	if is_instance_valid(effect) and effect.effect_completed.is_connected(_on_effect_completed):
 		effect.effect_completed.disconnect(_on_effect_completed)
 	
-	# 检查是否所有 Effect 都完成了
+	# 检查是否所有 Status 都完成了
 	_check_ability_completion()

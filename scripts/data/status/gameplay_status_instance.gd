@@ -16,6 +16,11 @@ var _duration_timer: Timer = null  # 用于自动移除的计时器
 var _periodic_timer: Timer = null  # 周期性效果计时器（状态只有一个 period）
 var _is_connected_to_event_bus: bool = false  # 是否已连接到统一事件系统
 
+## 状态完成信号
+## 当状态完成时（瞬时状态立即完成，持续状态在移除时完成）发出此信号
+## Ability 会订阅此信号来判断技能是否完成
+signal status_completed(status_instance: GameplayStatusInstance)
+
 func _init(
 		p_data: GameplayStatusData = null, 
 		p_owner_component: Node = null, 
@@ -53,9 +58,11 @@ func apply(context: Dictionary = {}) -> void:
 		if is_instance_valid(target):
 			_apply_all_effects_to_target(target, context)
 	
-	# 3. 如果是瞬时效果（duration = 0），立即移除
+	# 3. 如果是瞬时效果（duration = 0），立即移除并发出完成信号
 	if status_data.duration == 0.0:
 		remove()
+		# 发出完成信号（瞬时状态在应用完成后立即完成）
+		status_completed.emit(self)
 		return
 	
 	# 4. 注册周期性效果（使用状态级别的 period）
@@ -104,6 +111,9 @@ func remove() -> void:
 	
 	# 6. 停止状态 Cue（清理视觉反馈）
 	_stop_status_cue()
+	
+	# 7. 发出完成信号（持续状态在移除时完成）
+	status_completed.emit(self)
 
 ## 处理事件（用于事件监听型效果）
 ## 此方法用于处理通过统一事件系统触发的事件

@@ -120,9 +120,6 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 	# 打上引导标签（如需与状态系统交互，可在外部根据 TAG_CHANNELING 处理）
 	context["channeling"] = true
 	
-	# 应用施法者效果（包括持续特效 Cue）
-	_apply_caster_effects(instigator, context)
-	
 	# 存储引导状态
 	_channeling_state = {
 		"ability_comp": ability_comp,
@@ -183,14 +180,7 @@ func _interrupt_channeling(completed: bool = false) -> void:
 			var status_comp = GameplayAbilitySystem.get_component_by_interface(instigator, "GameplayStatusComponent")
 			if is_instance_valid(status_comp):
 				status_comp.remove_status(status_id)
-	
-	# 清理所有正在运行的效果实例（包括停止持续 Cue）
-	# 遍历 _pending_effects 中的所有效果实例，调用 remove() 方法正确清理
-	for effect_inst in _pending_effects.keys():
-		if is_instance_valid(effect_inst):
-			# remove() 方法会调用 _stop_cue() 来停止持续 Cue
-			effect_inst.remove(instigator, instigator)
-	
+
 	# 通知技能完成（引导结束时）
 	ability_completed.emit(self)
 	
@@ -208,9 +198,9 @@ func _toggle_off(ability_comp: Node, context: Dictionary = {}) -> void:
 	if is_instance_valid(instigator):
 		var target_status_comp = GameplayAbilitySystem.get_component_by_interface(instigator, "GameplayStatusComponent")
 		if is_instance_valid(target_status_comp):
-			# 移除开启状态（如果使用了 status_to_apply）
-			if is_instance_valid(status_to_apply):
-				target_status_comp.remove_status(status_to_apply.status_id)
+			## 移除开启状态（如果使用了 status_to_apply）
+			#if is_instance_valid(status_to_apply):
+				#target_status_comp.remove_status(status_to_apply.status_id)
 			# 应用关闭状态（如果需要）
 			if is_instance_valid(toggled_off_status_to_apply):
 				target_status_comp.apply_status(toggled_off_status_to_apply, instigator)

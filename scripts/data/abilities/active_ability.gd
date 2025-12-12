@@ -5,17 +5,19 @@ class_name ActiveAbility
 ## 核心改进：分离了"对己效果"和"对敌效果"，解耦了目标获取逻辑
 
 @export_group("Casting Rules")
-## [推荐] 目标获取策略（优先使用，提供最大灵活性）
-## 如果设置了此策略，将使用策略来获取目标，忽略 targeting_type
-## 如果未设置，将回退使用 targeting_type 枚举（向后兼容）
-@export var targeting_strategy: TargetingStrategy = null
 @export var cooldown_duration: float = 0.0  ## 技能冷却时间
 @export var costs: Array[AbilityCostBase] = []  ## 技能消耗器数组（支持多种消耗类型）
 @export var cast_point: float = 0.5  ## 施法前摇时间 (动画关键帧)
-@export var cast_range: float = 8.0  ## 施法距离
-@export var autocast: bool = false  ## 技能是否可以自动施法
+# @export var cast_range: float = 8.0  ## 施法距离
+## 命中检测器（用于动画关键帧触发时的目标检测）
+## 如果设置了此检测器，能力系统会在动画关键帧时主动调用它来获取目标
+## 适用于：普通攻击、需要精确时机检测的技能
+@export var hit_detector: HitDetectorBase = null
+## [推荐] 目标获取策略（优先使用，提供最大灵活性）
+## 如果设置了此策略，将使用策略来获取目标，忽略 targeting_type
+@export var targeting_strategy: TargetingStrategy = null
+
 @export var animation_name: StringName = &"cast_spell_default"  ## 动画名称
-@export var target_filters: Array[GameplayFilterData] = []  ## 技能目标过滤器
 @export var indicator_data: TargetIndicatorData = null  ## 目标指示器数据
 
 @export_group("Tag Requirements")
@@ -26,25 +28,8 @@ class_name ActiveAbility
 ## 如果施法者拥有任意一个阻止标签，技能无法施放
 @export var caster_blocked_tags: Array[StringName] = []
 
-@export_group("Hit Detection")
-## 命中检测器（用于动画关键帧触发时的目标检测）
-## 如果设置了此检测器，能力系统会在动画关键帧时主动调用它来获取目标
-## 适用于：普通攻击、需要精确时机检测的技能
-@export var hit_detector: HitDetectorBase = null
-
-var _is_autocast: bool = false  ## 技能是否自动施法
-
-func can_autocast() -> bool:
-	return autocast
-
-func is_autocast() -> bool:
-	return _is_autocast
-
 func get_cast_point() -> float:
 	return cast_point
-
-func get_cast_range() -> float:
-	return cast_range
 
 func get_cooldown_duration() -> float:
 	return cooldown_duration
@@ -187,7 +172,11 @@ func _apply_status(instigator: Node, status_data: GameplayStatusData, context: D
 	
 	# 应用状态（状态系统会处理目标检测、筛选和应用效果）
 	# Status 通过 target_mode 决定应用到自己、检测到的目标，或两者
-	status_comp.apply_status(status_data, instigator, 1, context)
+	var status_instance = status_comp.apply_status(status_data, instigator, 1, context)
+	
+	# 订阅 Status 完成信号（用于跟踪技能完成）
+	if is_instance_valid(status_instance):
+		_subscribe_status_completion(status_instance)
 
 ## 应用效果到目标列表（带基础过滤）
 ## [param] effects_to_apply: Array[GameplayEffect]
@@ -267,27 +256,8 @@ func _resolve_targets(instigator: Node, input_target: Node, context: Dictionary)
 	
 	# 优先级2: 回退到枚举（向后兼容）
 	# 注意：这里保留了原有的逻辑，但建议迁移到策略模式
-	return _resolve_targets_by_enum(instigator, input_target, context)
+	return [input_target]
 
-## [已弃用] 使用枚举解析目标（向后兼容）
-## 建议：使用 TargetingStrategy 替代
-func _resolve_targets_by_enum(instigator: Node, input_target: Node, context: Dictionary) -> Array[Node]:
-	var targets: Array[Node] = []
-	
-	# 策略 A: 命中检测器 (优先)
-	# 适用于：近战挥砍、周围 AOE
-	if hit_detector and instigator is Node3D:
-		targets = hit_detector.get_targets(instigator as Node3D, context)
-		if not targets.is_empty():
-			return targets
-	
-	# 策略 B: 指定目标 (Fallback)
-	# 适用于：指向性法术、远程锁定
-	if is_instance_valid(input_target):
-		targets.append(input_target)
-		return targets
-
-	return targets
 #endregion
 
 func _clear_cast(_ability_comp: Node, target: Node) -> void:

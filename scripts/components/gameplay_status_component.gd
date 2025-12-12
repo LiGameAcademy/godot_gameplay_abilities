@@ -32,10 +32,11 @@ func _ready() -> void:
 ## [param] instigator: Node 施加者
 ## [param] stacks: int 初始层数
 ## [param] context: Dictionary 上下文信息
-func apply_status(gsd: GameplayStatusData, instigator: Node, stacks: int = 1, context: Dictionary = {}) -> void:
+## [return] GameplayStatusInstance 返回状态实例（如果应用成功），否则返回 null
+func apply_status(gsd: GameplayStatusData, instigator: Node, stacks: int = 1, context: Dictionary = {}) -> GameplayStatusInstance:
 	if not is_instance_valid(gsd):
 		push_error("GameplayStatusComponent: GameplayStatusData is not valid!")
-		return
+		return null
 	
 	var status_id = gsd.status_id
 	
@@ -49,7 +50,7 @@ func apply_status(gsd: GameplayStatusData, instigator: Node, stacks: int = 1, co
 			remove_status(status_id)
 		elif gsd.priority < existing_priority:
 			# 旧状态优先级更高，忽略新状态
-			return
+			return null
 		# 如果优先级相同，继续执行堆叠逻辑
 	
 	# 【核心堆叠逻辑】
@@ -83,6 +84,10 @@ func apply_status(gsd: GameplayStatusData, instigator: Node, stacks: int = 1, co
 		
 		# 同时发送细粒度事件（向后兼容）
 		AbilityEventBus.emit_status_applied(get_parent(), status_id)
+		
+		# 返回状态实例（供 Ability 订阅完成信号）
+		return instance
+	return null
 
 ## 移除状态
 ## [param] status_id: StringName 状态ID

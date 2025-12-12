@@ -1,9 +1,20 @@
 extends GameplayEffect
 class_name GE_PhysicsMotion
 
-## 物理位移效果（持续效果）
-## 使用 move_and_collide 实现平滑物理移动，支持滑墙
-## 适用于：冲锋 (Charge)、闪避 (Dash)、击退 (Knockback)、跳斩位移
+## 物理位移效果（持续效果，已弃用）
+## [已弃用] 建议使用 GE_SingleFrameMotion + Status 周期性效果替代
+## 
+## 新架构推荐：
+## 1. 创建 Status，配置 period（如 0.05 秒）
+## 2. Status 的 effects 包含 GE_SingleFrameMotion
+## 3. Status 会周期性触发位移效果，实现平滑的持续位移
+## 
+## 优势：
+## - Effect 只负责单次动作，更简单
+## - Status 统一管理持续状态，更符合三层架构
+## - 更灵活：可以通过 Status 的 duration、period 等配置控制
+## 
+## 保留此效果以保持向后兼容，但新代码应使用新架构
 
 @export_group("Motion Config")
 ## 位移总距离（米）

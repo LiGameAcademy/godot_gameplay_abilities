@@ -27,4 +27,3 @@ func _get_tags_description() -> String:
 	for tag in tags_to_remove:
 		descriptions.append(tag)
 	return descriptions.join(", ")
-

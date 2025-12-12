@@ -88,4 +88,5 @@ func get_effects_description() -> String:
 	var descriptions = []
 	for effect in effects:
 		descriptions.append(effect.get_description())
-	return descriptions.join("\n")
+	#return descriptions.join("\n")
+	return ""

@@ -28,8 +28,8 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 		return
 	
 	# 1. 应用自身效果（后坐力、耗蓝等）
-	_apply_caster_effects(instigator, context)
-	
+	#_apply_caster_effects(instigator, context)
+	#
 	# 2. 检查魔法阵数据
 	if not is_instance_valid(magic_circle_data):
 		push_warning("MagicCircleAbility: magic_circle_data is not set for ability %s" % ability_id)
@@ -44,17 +44,17 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 	var spawn_position = _get_spawn_position(instigator, input_target, context)
 	
 	# 5. 获取要传递的效果列表（优先使用 magic_circle_data 的效果，否则使用 target_effects）
-	var effects_to_apply = magic_circle_data.effects if not magic_circle_data.effects.is_empty() else target_effects
-	if effects_to_apply.is_empty():
-		effects_to_apply = effects  # 向后兼容：使用基类的 effects
-	if effects_to_apply.is_empty():
-		push_warning("MagicCircleAbility: No effects configured for ability %s. Magic circle will spawn but won't deal damage. Please configure effects in magic_circle_data or target_effects in the ability resource." % ability_id)
-	
+	#var effects_to_apply = magic_circle_data.effects if not magic_circle_data.effects.is_empty() else target_effects
+	#if effects_to_apply.is_empty():
+		#effects_to_apply = effects  # 向后兼容：使用基类的 effects
+	#if effects_to_apply.is_empty():
+		#push_warning("MagicCircleAbility: No effects configured for ability %s. Magic circle will spawn but won't deal damage. Please configure effects in magic_circle_data or target_effects in the ability resource." % ability_id)
+	#
 	# 调试日志
-	print("MagicCircleAbility: Casting %s at position: %s with %d effect(s)" % [ability_id, spawn_position, effects_to_apply.size()])
-	
-	# 6. 生成魔法阵
-	_spawn_magic_circle(instigator, spawn_position, magic_circle_data, effects_to_apply, context)
+	#print("MagicCircleAbility: Casting %s at position: %s with %d effect(s)" % [ability_id, spawn_position, effects_to_apply.size()])
+	#
+	## 6. 生成魔法阵
+	#_spawn_magic_circle(instigator, spawn_position, magic_circle_data, effects_to_apply, context)
 
 ## 生成魔法阵
 ## [param] instigator: Node 施法者

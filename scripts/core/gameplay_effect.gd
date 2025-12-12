@@ -22,12 +22,6 @@ class_name GameplayEffect
 ## 当效果应用成功时，会执行此 Cue 来播放表现（特效、音效、飘字等）
 @export var cue: GameplayCue = null
 
-@export_group("Effect Lifecycle")
-## 延迟执行时间（秒）
-## 如果 > 0，效果会在延迟后执行，而不是立即执行
-## 适用于：前摇时间、延迟伤害、延迟治疗等场景
-@export var delay: float = 0.0
-
 # 标记是否已由子类处理信号发射（异步效果使用）
 var _signal_handled_by_subclass: bool = false
 
@@ -42,6 +36,9 @@ signal effect_completed(effect: GameplayEffect)
 ## [param] context: Dictionary 上下文信息（可选）
 ## 注意：此方法期望接收的是已经克隆的 Effect 实例
 ## Effect 的克隆和订阅逻辑由 Ability 负责（见 ActiveAbility._apply_single_effect_to_target）
+## 
+## 注意：在新三层架构下，Effect 只执行单次动作（同步完成）
+## 延迟执行应该由 Status 系统管理（通过 Status 的 period 或事件触发）
 func apply(target: Node, instigator: Node, context: Dictionary = {}) -> void:
 	if not _check_filters(target, instigator, context):
 		# 如果被过滤器过滤掉，仍然发出完成信号（避免技能卡死）
@@ -49,19 +46,6 @@ func apply(target: Node, instigator: Node, context: Dictionary = {}) -> void:
 		effect_completed.emit(self)
 		return
 	
-	# 检查是否有延迟
-	if delay > 0:
-		# 延迟执行：使用 SceneTreeTimer
-		_apply_delayed(target, instigator, context)
-	else:
-		# 立即执行
-		_apply_immediate(target, instigator, context)
-
-## 立即应用效果（内部方法）
-## [param] target: Node 目标节点
-## [param] instigator: Node 施法者节点
-## [param] context: Dictionary 上下文信息
-func _apply_immediate(target: Node, instigator: Node, context: Dictionary) -> void:
 	# 重置信号处理标志
 	_signal_handled_by_subclass = false
 	
@@ -90,69 +74,6 @@ func _apply_immediate(target: Node, instigator: Node, context: Dictionary) -> vo
 		
 		sub_effect_inst.apply(target, instigator, context)
 
-## 延迟应用效果（内部方法）
-## [param] target: Node 目标节点
-## [param] instigator: Node 施法者节点
-## [param] context: Dictionary 上下文信息
-func _apply_delayed(target: Node, instigator: Node, context: Dictionary) -> void:
-	# 获取 SceneTree（从 target 或 instigator）
-	var scene_tree: SceneTree = null
-	if is_instance_valid(target) and target.is_inside_tree():
-		scene_tree = target.get_tree()
-	elif is_instance_valid(instigator) and instigator.is_inside_tree():
-		scene_tree = instigator.get_tree()
-	
-	if not is_instance_valid(scene_tree):
-		push_warning("GameplayEffect: Cannot apply delayed effect, no valid SceneTree found")
-		# 回退到立即执行
-		_apply_immediate(target, instigator, context)
-		return
-	
-	# 1. 创建延迟计时器
-	var timer = scene_tree.create_timer(delay)
-	
-	# 2. 延迟执行回调
-	timer.timeout.connect(func() -> void:
-		# 延迟执行前再次检查目标有效性
-		if not is_instance_valid(target) or not is_instance_valid(instigator):
-			# 如果目标或施法者已失效，emit 信号
-			effect_completed.emit(self)
-			return
-		
-		# 再次检查过滤器（延迟期间可能状态已改变）
-		if not _check_filters(target, instigator, context):
-			# 过滤器不通过，emit 信号
-			effect_completed.emit(self)
-			return
-		
-		# 重置信号处理标志
-		_signal_handled_by_subclass = false
-		
-		# 执行具体逻辑（子类实现）
-		_apply(target, instigator, context)
-		
-		# 执行 Cue（逻辑与表现分离）
-		_execute_cue(target, context)
-		
-		# 通知完成（信号驱动模式）
-		# 如果子类已经处理了信号发射（异步效果），则不再发射
-		# 否则（同步效果），立即 emit 信号
-		if not _signal_handled_by_subclass:
-			effect_completed.emit(self)
-		
-		# 递归应用子效果（每个子效果会自己 emit 信号）
-		# 注意：子效果也需要克隆，避免运行时状态共享
-		for effect in sub_effects:
-			if not is_instance_valid(effect):
-				continue
-			
-			# 克隆子效果实例
-			var sub_effect_inst = effect.duplicate(true) as GameplayEffect
-			if not is_instance_valid(sub_effect_inst):
-				continue
-			
-			sub_effect_inst.apply(target, instigator, context)
-	)
 
 ## 移除效果（用于状态型效果）
 ## [param] target: Node 目标节点
