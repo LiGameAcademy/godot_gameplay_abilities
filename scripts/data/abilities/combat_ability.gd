@@ -17,8 +17,12 @@ var _current_combo_index: int = 0
 ## 连击重置计时器
 var _combo_reset_timer: float = 0.0
 
-## 重写：每帧更新（更新连击计时器）
+## 重写：每帧更新（更新连击计时器和冷却时间）
 func update(delta: float) -> void:
+	# 调用父类方法更新冷却时间
+	super(delta)
+	
+	# 更新连击重置计时器
 	_combo_reset_timer += delta
 	if _combo_reset_timer >= _combo_reset_time:
 		_reset_combo()
@@ -51,17 +55,6 @@ func get_cooldown_duration() -> float:
 	
 	# 返回两者中的最大值，确保更严格的冷却限制
 	return max(combo_cooldown, segment_cooldown)
-
-## 重写：获取技能图标
-## 返回当前连击段对应的图标
-## [param] ability_comp: Node 技能组件（可选，用于动态图标）
-## [return] Texture 技能图标
-func get_icon() -> Texture:
-	var current_ability = _get_current_combo_ability()
-	if is_instance_valid(current_ability):
-		# 如果当前连击段支持动态图标，传递 ability_comp
-		return current_ability.get_icon()
-	return super()
 
 ## 重写：获取效果描述
 ## 对于连击技能，需要遍历所有连击段并收集它们的效果描述
@@ -96,29 +89,30 @@ func get_effects_description() -> String:
 	return "\n".join(descriptions)
 
 ## 重写：检查是否可以施法
+## CombatAbility 只检查自己的冷却和消耗
+## 不检查子技能的冷却和消耗，因为子技能不会被 Component 直接调用
 func _can_cast(ability_comp: Node, target: Node = null, context: Dictionary = {}) -> bool:
 	# 检查是否有连击能力配置
 	if _combo_abilities.is_empty():
 		push_warning("CombatAbility: No combo abilities configured")
 		return false
 	
-	# 获取当前连击对应的能力
+	# 获取当前连击对应的能力（用于验证配置）
 	var current_ability = _get_current_combo_ability()
 	if not is_instance_valid(current_ability):
 		push_warning("CombatAbility: Current combo ability is not valid")
 		return false
 	
-	# 检查当前连击能力是否可以施放（包括冷却检查等）
-	return current_ability.can_cast(ability_comp, target, context)
+	# 只检查 CombatAbility 自己的条件（冷却、消耗等）
+	# 不检查子技能，因为子技能不会被 Component 直接调用
+	return super(ability_comp, target, context)
 
 ## 重写：提交施法
-func _commit_cast(ability_comp: Node, _context: Dictionary = {}) -> bool:
-	var current_ability := _get_current_combo_ability()
-	if not is_instance_valid(current_ability):
-		return false
-	
-	# 提交当前连击能力的施法（子技能自己的冷却检查已经足够了）
-	var success = current_ability.commit_cast(ability_comp)
+## CombatAbility 只检查自己的消耗
+## 子技能不会经过 Component 的 commit_cast，所以不需要检查子技能的消耗
+func _commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
+	# 调用父类方法检查 CombatAbility 自己的消耗
+	var success = super(ability_comp, context)
 	if success:
 		# 重置连击计时器（开始新的连击窗口）
 		_combo_reset_timer = 0.0
@@ -126,6 +120,8 @@ func _commit_cast(ability_comp: Node, _context: Dictionary = {}) -> bool:
 	return success
 
 ## 重写：施放技能
+## CombatAbility 不执行自己的效果，而是直接执行子技能
+## 子技能通过执行时间自动完成，CombatAbility 订阅完成信号推进连击
 func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
 	var current_ability = _get_current_combo_ability()
 	if not is_instance_valid(current_ability):
@@ -136,15 +132,21 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 	context["combo_index"] = _current_combo_index
 	context["combo_count"] = _combo_abilities.size()
 	
-	# 连接子技能的完成信号，在技能完成时推进连击
-	# 注意：应该订阅子技能的 ability_completed 信号，而不是 Component 的信号
-	if is_instance_valid(current_ability):
-		# 使用一次性连接，避免重复连接
-		if not current_ability.ability_completed.is_connected(_on_combo_segment_completed):
-			current_ability.ability_completed.connect(_on_combo_segment_completed)
+	# 订阅子技能的完成信号（子技能通过执行时间自动完成）
+	if not current_ability.ability_completed.is_connected(_on_combo_segment_completed):
+		current_ability.ability_completed.connect(_on_combo_segment_completed)
 
-	# 执行当前连击能力
-	current_ability.cast(ability_comp, input_target, context)
+	# 使用 execute_ability_direct 直接执行子技能（跳过冷却和消耗检查）
+	# 因为 CombatAbility 已经检查过冷却和消耗，子技能不需要再次检查
+	# 注意：不调用父类的 _on_cast()，因为 CombatAbility 不执行自己的效果（没有 statuses）
+	if ability_comp.has_method("execute_ability_direct"):
+		# 标记跳过冷却和消耗，因为 CombatAbility 已经检查过了
+		context["skip_cooldown"] = true
+		context["skip_cost"] = true
+		ability_comp.execute_ability_direct(current_ability, input_target, context)
+	else:
+		# 回退：直接调用子技能的 cast（但子技能可能会检查冷却和消耗）
+		current_ability.cast(ability_comp, input_target, context)
 	
 ## 连击段完成回调（在技能完成时推进连击）
 ## [param] completed_ability: GameplayAbility 完成的技能实例
@@ -155,7 +157,7 @@ func _on_combo_segment_completed(completed_ability: GameplayAbility) -> void:
 	# 检查是否是当前连击段完成
 	var current_ability = _get_current_combo_ability()
 	if is_instance_valid(current_ability) and completed_ability == current_ability:
-		# 断开信号连接（一次性连接）
+		# 断开信号连接
 		if completed_ability.ability_completed.is_connected(_on_combo_segment_completed):
 			completed_ability.ability_completed.disconnect(_on_combo_segment_completed)
 		
@@ -184,3 +186,14 @@ func _advance_combo() -> void:
 	if _current_combo_index >= _combo_abilities.size():
 		_current_combo_index = 0  # 循环回到第一段
 	_combo_reset_timer = 0.0
+
+## 重写：获取技能图标
+## 返回当前连击段对应的图标
+## [param] ability_comp: Node 技能组件（可选，用于动态图标）
+## [return] Texture 技能图标
+func _get_icon() -> Texture:
+	var current_ability = _get_current_combo_ability()
+	if is_instance_valid(current_ability):
+		# 如果当前连击段支持动态图标，传递 ability_comp
+		return current_ability.icon
+	return super()

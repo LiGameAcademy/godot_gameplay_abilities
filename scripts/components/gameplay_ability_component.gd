@@ -38,6 +38,18 @@ func _process(delta: float) -> void:
 		var ability_data = _learned_abilities[ability_id]
 		if is_instance_valid(ability_data):
 			ability_data.update(delta)
+	
+	# 检查连击技能：如果连击窗口已超时且当前正在执行，清理占用标记
+	if _current_casting_ability_id != &"":
+		var current_ability = get_ability_data(_current_casting_ability_id)
+		if is_instance_valid(current_ability) and current_ability is CombatAbility:
+			var combat_ability = current_ability as CombatAbility
+			# 如果连击索引已重置到第一段且连击计时器已超时，清理占用标记
+			# 注意：CombatAbility 的 update 会在连击窗口超时时调用 _reset_combo()
+			# 如果连击索引是 0 且计时器 >= 重置时间，说明连击窗口已超时
+			if combat_ability._current_combo_index == 0 and combat_ability._combo_reset_timer >= combat_ability._combo_reset_time:
+				# 连击窗口已超时，清理占用标记
+				clear_current_casting_ability()
 
 ## 学习技能
 ## [param] ability_data: GameplayAbility 技能数据
@@ -173,9 +185,15 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 			# 直接返回结果（关闭操作会返回 true，但不会继续执行后续逻辑）
 			return result
 		
-		# 非可切换技能：直接拒绝重复施放，避免连击/引导类重复进入
-		push_warning("GameplayAbilityComponent: Ability %s is already executing, cannot cast again." % ability_id)
-		return false
+		# 连击技能：允许继续连击（在连击窗口内）
+		# 连击技能的子技能完成后会推进连击索引，允许继续施放下一段
+		if ability_data is CombatAbility:
+			# 继续执行后续逻辑（检查消耗、冷却等）
+			pass
+		else:
+			# 非可切换技能：直接拒绝重复施放，避免连击/引导类重复进入
+			push_warning("GameplayAbilityComponent: Ability %s is already executing, cannot cast again." % ability_id)
+			return false
 	
 	# 正常执行技能：检查消耗
 	if not ability_data.commit_cast(self, context):
@@ -435,8 +453,14 @@ func _end_ability(ability_id: StringName) -> void:
 			"ability_id": ability_id
 		})
 		
-		# 绝大多数主动技能在完成时应立即清理占用标记
-		clear_current_casting_ability()
+		# 检查是否是连击技能
+		var ability_data = get_ability_data(ability_id)
+		var is_combat_ability = is_instance_valid(ability_data) and ability_data is CombatAbility
+		
+		# 连击技能：不立即清理占用标记，允许继续连击
+		# 其他技能：立即清理占用标记
+		if not is_combat_ability:
+			clear_current_casting_ability()
 
 ## 取消施法计时器
 ## [param] ability_id: StringName 技能ID

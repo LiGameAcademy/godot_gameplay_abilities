@@ -223,11 +223,18 @@ func _resolve_targets(context: Dictionary) -> Array[Node]:
 	
 	var targets_to_apply: Array[Node] = []
 	
-	# 1. 检测目标（如果配置了 hit_detector）
+	# 1. 获取 hit_detector（优先使用 Status 配置的，如果没有则使用上下文传递的）
+	var detector_to_use: HitDetectorBase = null
+	if is_instance_valid(status_data.hit_detector):
+		detector_to_use = status_data.hit_detector
+	elif context.has("hit_detector") and is_instance_valid(context["hit_detector"]):
+		detector_to_use = context["hit_detector"] as HitDetectorBase
+	
+	# 2. 检测目标（如果配置了 hit_detector）
 	var detected_targets: Array[Node] = []
-	if is_instance_valid(status_data.hit_detector) and target_entity is Node3D:
+	if is_instance_valid(detector_to_use) and target_entity is Node3D:
 		# 使用检测器检测目标
-		detected_targets = status_data.hit_detector.get_targets(
+		detected_targets = detector_to_use.get_targets(
 			target_entity as Node3D,
 			context
 		)
@@ -236,7 +243,7 @@ func _resolve_targets(context: Dictionary) -> Array[Node]:
 		if is_instance_valid(status_data.targeting_strategy):
 			var strategy_targets = status_data.targeting_strategy.resolve_targets(
 				instigator,
-				null,
+				context.get("input_target", null),
 				context
 			)
 			# 求交集（只保留同时出现在两个列表中的目标）
@@ -246,16 +253,23 @@ func _resolve_targets(context: Dictionary) -> Array[Node]:
 					filtered_targets.append(target)
 			detected_targets = filtered_targets
 
-	# 2. 根据 target_mode 决定应用目标
+	# 3. 根据 target_mode 决定应用目标
 	match status_data.target_mode:
 		0:  # TargetApplicationMode.SELF
 			# 只应用到自己
 			targets_to_apply = [target_entity]
 		1:  # TargetApplicationMode.DETECTED_TARGETS
-			# 只应用到检测到的目标（已设置）
-			pass
+			# 只应用到检测到的目标
+			targets_to_apply = detected_targets.duplicate()
+			
+			# 如果没有检测到目标，尝试使用上下文中的 input_target
+			if targets_to_apply.is_empty() and context.has("input_target"):
+				var input_target = context["input_target"]
+				if is_instance_valid(input_target):
+					targets_to_apply = [input_target]
 		2:  # TargetApplicationMode.BOTH
 			# 同时应用到自己和检测到的目标
+			targets_to_apply = detected_targets.duplicate()
 			if target_entity not in targets_to_apply:
 				targets_to_apply.append(target_entity)
 	

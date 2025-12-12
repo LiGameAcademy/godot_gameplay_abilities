@@ -70,6 +70,8 @@ func update(delta: float) -> void:
 		_interrupt_channeling(false)
 		return
 
+	super(delta)
+
 ## 检查技能是否处于开启状态
 func is_toggled_on() -> bool:
 	return _is_active
@@ -80,18 +82,6 @@ func is_toggled_on() -> bool:
 func can_toggle_off(_context: Dictionary = {}) -> bool:
 	# 只有切换式引导（stop_on_input_release = false）可以主动关闭
 	return not stop_on_input_release
-
-## 重写：获取技能图标
-## 根据切换状态返回不同的图标
-func get_icon() -> Texture:
-	# 如果技能处于开启状态，显示关闭状态图标（表示按下会关闭）
-	if is_toggled_on():
-		if is_instance_valid(toggled_off_icon):
-			return toggled_off_icon
-	# 如果技能处于关闭状态，显示开启状态图标（表示按下会开启）
-	# 这里返回默认图标即可
-	# 默认返回基础图标（开启状态）
-	return super()
 
 ## ToggleAbility 属于可切换技能（用于避免外部类型判断）
 func is_toggleable() -> bool:
@@ -244,3 +234,15 @@ func _on_channeling_status_removed(status_id: StringName) -> void:
 	# 或者通过 GE_ApplyStatus 在状态中应用另一个状态来实现
 	# 这里暂时不处理，完成效果应该在引导状态中配置
 	pass
+
+## 重写：获取技能图标
+## 根据切换状态返回不同的图标
+func _get_icon() -> Texture:
+	# 如果技能处于开启状态，显示关闭状态图标（表示按下会关闭）
+	if is_toggled_on():
+		if is_instance_valid(toggled_off_icon):
+			return toggled_off_icon
+	# 如果技能处于关闭状态，显示开启状态图标（表示按下会开启）
+	# 这里返回默认图标即可
+	# 默认返回基础图标（开启状态）
+	return super()

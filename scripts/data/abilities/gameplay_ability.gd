@@ -8,7 +8,7 @@ class_name GameplayAbility
 @export var ability_id: StringName                  	## 技能的唯一ID
 @export var ability_name: String                    	## 技能名称
 @export_multiline var description: String           	## 技能描述
-@export var _icon: Texture                         		## 技能图标
+@export var icon: Texture : get = _get_icon				## 技能图标
 @export var tags: Array[StringName] = []            	## 技能标签
 @export var disabled: bool = false                  	## 技能是否禁用
 @export var targeting_scorer: TargetingScorer = null   	## 目标评分器
@@ -104,12 +104,6 @@ func clear_cast(ability_comp: Node, target: Node) -> void:
 func get_cast_point() -> float:
 	return 0.0
 
-## 获取技能图标
-## [param] ability_comp: Node 技能组件（可选，用于动态图标）
-## [return] Texture 技能图标
-func get_icon() -> Texture:
-	return _icon
-
 ## 获取施法距离
 func get_cast_range() -> float:
 	return 0.0
@@ -147,6 +141,7 @@ func _subscribe_status_completion(status_instance: GameplayStatusInstance) -> vo
 func _check_ability_completion() -> void:
 	# 如果还有 Status，不完成
 	if not _pending_statuses.is_empty():
+		push_error("GameplayAbility: Ability %s has pending statuses, cannot complete." % ability_id)
 		return
 	
 	# 发出技能完成信号
@@ -234,23 +229,6 @@ func _on_status_completed(status_instance: GameplayStatusInstance) -> void:
 	# 检查是否所有 Status 都完成了
 	_check_ability_completion()
 
-## [已弃用] 订阅 Effect 完成信号
-## 保留此方法以保持向后兼容（旧架构直接应用 Effect）
-## 新架构应使用 _subscribe_status_completion()
-func _subscribe_effect_completion(effect: GameplayEffect) -> void:
-	if not is_instance_valid(effect):
-		return
-	
-	# 向后兼容：将 Effect 添加到 Status 字典中（使用临时键）
-	# 注意：这里使用一个临时的 Status 实例包装 Effect，仅用于向后兼容
-	# 实际上，旧架构的 Effect 完成应该直接触发 ability_completed
-	# 但为了保持 API 一致性，我们仍然跟踪它
-	var temp_key = effect as Variant
-	if not _pending_statuses.has(temp_key):
-		_pending_statuses[temp_key] = true
-		if not effect.effect_completed.is_connected(_on_effect_completed):
-			effect.effect_completed.connect(_on_effect_completed)
-
 ## [已弃用] 处理 Effect 完成信号
 ## 保留此方法以保持向后兼容，但新架构应使用 _on_status_completed()
 func _on_effect_completed(effect: GameplayEffect) -> void:
@@ -267,3 +245,9 @@ func _on_effect_completed(effect: GameplayEffect) -> void:
 	
 	# 检查是否所有 Status 都完成了
 	_check_ability_completion()
+
+## 获取技能图标
+## [param] ability_comp: Node 技能组件（可选，用于动态图标）
+## [return] Texture 技能图标
+func _get_icon() -> Texture:
+	return icon

@@ -8,6 +8,11 @@ class_name ActiveAbility
 @export var cooldown_duration: float = 0.0  ## 技能冷却时间
 @export var costs: Array[AbilityCostBase] = []  ## 技能消耗器数组（支持多种消耗类型）
 @export var cast_point: float = 0.5  ## 施法前摇时间 (动画关键帧)
+## 技能执行时间（秒）
+## 如果 > 0，技能会在执行时间结束后自动完成
+## 如果 <= 0，则使用 cast_point 作为执行时间
+## 最终执行时间 = max(execution_duration, cast_point)
+@export var execution_duration: float = 0.0
 # @export var cast_range: float = 8.0  ## 施法距离
 ## 命中检测器（用于动画关键帧触发时的目标检测）
 ## 如果设置了此检测器，能力系统会在动画关键帧时主动调用它来获取目标
@@ -123,11 +128,14 @@ func _commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
 			push_warning("ActiveAbility: Failed to pay cost for ability %s: %s" % [ability_id, cost.get_cost_description()])
 			return false
 	
+	# 2. 启动执行计时器（自动完成技能）
+	if execution_duration > 0.0:
+		_start_execution_timer(ability_comp)
 	return true
 
 ## [核心重构] 施放技能
-## 逻辑流：支付消耗 -> 对己状态/效果 -> 对敌状态/效果
-## [新架构] 优先使用 Status 系统，回退到 Effect 系统（向后兼容）
+## 逻辑流：支付消耗 -> 应用状态 -> 启动执行计时器
+## [新架构] 使用 Status 系统，通过执行时间自动完成技能
 func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
 	var instigator = ability_comp.get_parent()
 	if not is_instance_valid(instigator):
@@ -142,19 +150,44 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 		status_context["hit_detector"] = hit_detector
 	
 	# 1. 应用状态（新架构）
-	# 优先使用基类的 statuses，Status 系统会自己处理目标检测和筛选
+	# Status 系统会自己处理目标检测、筛选和应用效果
 	if not statuses.is_empty():
 		for status_data in statuses:
 			if is_instance_valid(status_data):
 				_apply_status(instigator, status_data, status_context)
-		# 检查是否所有效果都已完成
+
+	if execution_duration <= 0.0:
+		_check_ability_completion()
+
+## 启动执行计时器（自动完成技能）
+## [param] ability_comp: Node 技能组件
+func _start_execution_timer(ability_comp: Node) -> void:
+	# 计算执行时间：max(execution_duration, cast_point)
+	var exec_time = max(execution_duration, cast_point) if execution_duration > 0.0 else cast_point
+	
+	# 如果执行时间 <= 0，立即完成
+	if exec_time <= 0.0:
 		_check_ability_completion()
 		return
-
-	# 3. 检查是否所有效果都已完成
-	# 注意：Status 系统是异步的，但瞬时 Status（duration = 0）会立即完成
-	# Effect 系统会通过信号通知完成
-	_check_ability_completion()
+	
+	# 获取 SceneTree（从 ability_comp）
+	var scene_tree: SceneTree = null
+	if is_instance_valid(ability_comp) and ability_comp.is_inside_tree():
+		scene_tree = ability_comp.get_tree()
+	
+	if not is_instance_valid(scene_tree):
+		push_warning("ActiveAbility: Cannot start execution timer, no valid SceneTree found")
+		# 回退：立即完成
+		_check_ability_completion()
+		return
+	
+	# 创建计时器
+	var timer = scene_tree.create_timer(exec_time)
+	
+	# 计时结束 -> 完成技能
+	timer.timeout.connect(func() -> void:
+		_check_ability_completion()
+	)
 
 ## 应用状态（新架构）
 ## [param] instigator: Node 施法者
@@ -172,13 +205,12 @@ func _apply_status(instigator: Node, status_data: GameplayStatusData, context: D
 	
 	# 应用状态（状态系统会处理目标检测、筛选和应用效果）
 	# Status 通过 target_mode 决定应用到自己、检测到的目标，或两者
-	var status_instance = status_comp.apply_status(status_data, instigator, 1, context)
-	
-	# 订阅 Status 完成信号（用于跟踪技能完成）
-	if is_instance_valid(status_instance):
-		_subscribe_status_completion(status_instance)
+	# 注意：不再订阅 Status 完成信号，技能完成由执行时间控制
+	status_comp.apply_status(status_data, instigator, 1, context)
 
-## 应用效果到目标列表（带基础过滤）
+#region ========== 向后兼容方法（供子类使用，如 MagicCircleAbility、ProjectileAbility）==========
+
+## 应用效果到目标列表（向后兼容，供子类使用）
 ## [param] effects_to_apply: Array[GameplayEffect]
 ## [param] instigator: Node 施法者
 ## [param] targets: Array[Node] 目标列表
@@ -190,54 +222,33 @@ func _apply_effects_to_targets(effects_to_apply: Array, instigator: Node, target
 	for target in targets:
 		if not is_instance_valid(target):
 			continue
-		# 阵营或自我过滤可在调用前或这里扩展
 		for effect in effects_to_apply:
 			if not is_instance_valid(effect):
 				continue
-			
 			_apply_single_effect_to_target(effect, target, instigator, context)
 
-## 为单个单位应用单个效果（内部方法）
-## 负责：克隆 Effect 实例、订阅信号、应用效果
+## 为单个单位应用单个效果（向后兼容，供子类使用）
 ## [param] effect: GameplayEffect 要应用的效果模板
 ## [param] target: Node 目标单位
 ## [param] instigator: Node 施法者
 ## [param] context: Dictionary 上下文
 func _apply_single_effect_to_target(effect: GameplayEffect, target: Node, instigator: Node, context: Dictionary) -> void:
-	if not is_instance_valid(effect):
-		push_warning("ActiveAbility: Effect is not valid for ability %s" % ability_id)
+	if not is_instance_valid(effect) or not is_instance_valid(target):
 		return
 	
-	if not is_instance_valid(target):
-		return
-	
-	# 1. 克隆 Effect 实例（避免运行时状态共享）
 	var effect_inst = effect.duplicate(true) as GameplayEffect
-	if not is_instance_valid(effect_inst):
-		push_warning("ActiveAbility: Effect instance is not valid for ability %s" % ability_id)
-		return
-	
-	# 2. 订阅完成信号（在应用前订阅，避免信号丢失）
-	_subscribe_effect_completion(effect_inst)
-	
-	# 3. 应用效果
-	effect_inst.apply(target, instigator, context)
+	if is_instance_valid(effect_inst):
+		effect_inst.apply(target, instigator, context)
 
-#region ========== 目标筛选与应用（供子类/其他能力复用）==========
-
-## 使用策略对目标进行筛选，并与原始目标求交集
-## [param] targets: Array 原始目标列表（比如检测器或信号给出的）
+## 使用策略对目标进行筛选（向后兼容，供子类使用）
+## [param] targets: Array 原始目标列表
 ## [param] instigator: Node 施法者
 ## [param] context: Dictionary 上下文
 ## [param] strategy: TargetingStrategy 可选策略
-## [param] input_target: Node 可选的直接输入目标（单体命中时使用）
+## [param] input_target: Node 可选的直接输入目标
 ## [return] Array 筛选后的目标
 func _filter_targets_with_strategy(targets: Array, instigator: Node, context: Dictionary, strategy: TargetingStrategy, input_target: Node = null) -> Array:
-	if targets.is_empty():
-		print("ActiveAbility: No targets detected for ability %s" % ability_id)
-		return []
-	if not is_instance_valid(strategy):
-		print("ActiveAbility: Strategy is not valid for ability %s" % ability_id)
+	if targets.is_empty() or not is_instance_valid(strategy):
 		return targets
 	
 	var resolved = strategy.resolve_targets(instigator, input_target, context)
@@ -247,35 +258,10 @@ func _filter_targets_with_strategy(targets: Array, instigator: Node, context: Di
 			filtered.append(target)
 	return filtered
 
-## 封装目标获取逻辑
-## 【重构】优先使用 TargetingStrategy，回退到枚举（向后兼容）
-func _resolve_targets(instigator: Node, input_target: Node, context: Dictionary) -> Array[Node]:
-	# 优先级1: 使用 TargetingStrategy（推荐方式）
-	if is_instance_valid(targeting_strategy):
-		return targeting_strategy.resolve_targets(instigator, input_target, context)
-	
-	# 优先级2: 回退到枚举（向后兼容）
-	# 注意：这里保留了原有的逻辑，但建议迁移到策略模式
-	return [input_target]
-
 #endregion
 
-func _clear_cast(_ability_comp: Node, target: Node) -> void:
-	if not is_instance_valid(target):
-		return
-	
-	var instigator = _ability_comp.get_parent() if _ability_comp.has_method("get_parent") else null
-	
-	# 1. 移除效果（向后兼容，基类属性）
-	var base_effects = get("effects")
-	if base_effects:
-		for effect in base_effects:
-			if is_instance_valid(effect):
-				effect.remove(target, instigator)
-	
-	# 2. 移除状态（向后兼容：status_to_apply，基类属性）
-	var base_status = get("status_to_apply")
-	if is_instance_valid(base_status):
-		var target_status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
-		if is_instance_valid(target_status_comp) and target_status_comp.has_method("remove_status"):
-			target_status_comp.remove_status(base_status.status_id)
+## 清除施法效果（基类接口，新架构下通常不需要）
+func _clear_cast(_ability_comp: Node, _target: Node) -> void:
+	# 新架构下，状态由 Status 系统管理，不需要手动清理
+	# 保留此方法以满足基类接口要求
+	pass
