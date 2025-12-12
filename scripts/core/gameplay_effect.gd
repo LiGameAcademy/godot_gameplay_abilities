@@ -7,7 +7,13 @@ class_name GameplayEffect
 
 @export var filters: Array[GameplayFilterData] = [] 	## 过滤器，如果为空，则不过滤
 
-@export var sub_effects : Array[GameplayEffect] = [] 		## 子效果，支持效果组合
+## 子效果，支持效果组合
+## 注意：
+## - 常规 Effect（Primitive Effect）通常不使用此属性，保持单一职责
+## - Meta Effect（元效果）使用此属性来协调其他 Effect 的执行
+## - 如果 _should_auto_apply_sub_effects() 返回 true，基类会自动应用子效果到同一个 target
+## - 如果返回 false，子类需要自己控制子效果的应用（如应用到不同目标）
+@export var sub_effects : Array[GameplayEffect] = []
 
 @export_group("Tag Requirements")
 ## 目标必须拥有的标签（效果生效的前置条件）
@@ -62,17 +68,12 @@ func apply(target: Node, instigator: Node, context: Dictionary = {}) -> void:
 		effect_completed.emit(self)
 	
 	# 4. 递归应用子效果（每个子效果会自己 emit 信号）
-	# 注意：子效果也需要克隆，避免运行时状态共享
-	for effect in sub_effects:
-		if not is_instance_valid(effect):
-			continue
-		
-		# 克隆子效果实例
-		var sub_effect_inst = effect.duplicate(true) as GameplayEffect
-		if not is_instance_valid(sub_effect_inst):
-			continue
-		
-		sub_effect_inst.apply(target, instigator, context)
+	# 注意：
+	# - 常规 Effect 通常不使用 sub_effects，保持单一职责
+	# - 如果 _should_auto_apply_sub_effects() 返回 true，基类会自动应用子效果到同一个 target
+	# - Meta Effect 应该返回 false，自己控制子效果的应用（如应用到不同目标）
+	if _should_auto_apply_sub_effects():
+		_apply_sub_effects(target, instigator, context)
 
 
 ## 移除效果（用于状态型效果）
@@ -84,9 +85,10 @@ func remove(target: Node, instigator: Node) -> void:
 	_stop_cue(target)
 	# 如果被移除的效果还未完成，emit 信号（避免技能卡死）
 	effect_completed.emit(self)
-	# 递归移除子效果
-	for effect in sub_effects:
-		effect.remove(target, instigator)
+	# 递归移除子效果（只有自动应用的子效果才需要移除）
+	if _should_auto_apply_sub_effects():
+		for effect in sub_effects:
+			effect.remove(target, instigator)
 
 ## 获取效果描述
 func get_description() -> String:
@@ -105,6 +107,36 @@ func get_description() -> String:
 ## [子类重写] 移除效果的具体实现
 func _remove(_target: Node, _instigator: Node) -> void: 
 	pass
+
+## [子类重写] 是否自动应用子效果
+## 
+## 设计原则：
+## - 常规 Effect（Primitive Effect）应该返回 true（默认），不使用 sub_effects，保持单一职责
+## - Meta Effect（元效果）应该返回 false，自己控制子效果的应用（如应用到不同目标）
+##
+## 返回 true：基类会自动应用 sub_effects 到同一个 target（常规 Effect 的默认行为）
+## 返回 false：子类需要自己控制子效果的应用（Meta Effect 应该返回 false）
+## 
+## 默认返回 true，保持向后兼容
+func _should_auto_apply_sub_effects() -> bool:
+	return true
+
+## 应用子效果（内部方法，供基类和子类使用）
+## [param] target: Node 目标节点
+## [param] instigator: Node 施法者节点
+## [param] context: Dictionary 上下文信息
+func _apply_sub_effects(target: Node, instigator: Node, context: Dictionary) -> void:
+	# 注意：子效果也需要克隆，避免运行时状态共享
+	for effect in sub_effects:
+		if not is_instance_valid(effect):
+			continue
+		
+		# 克隆子效果实例
+		var sub_effect_inst = effect.duplicate(true) as GameplayEffect
+		if not is_instance_valid(sub_effect_inst):
+			continue
+		
+		sub_effect_inst.apply(target, instigator, context)
 
 ## 检查过滤器
 ## [param] target: Node 目标

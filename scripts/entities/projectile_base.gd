@@ -2,17 +2,17 @@ extends Area3D
 class_name ProjectileBase
 
 ## 投射物基类
-## 职责：运动控制、碰撞检测、效果传递
+## 职责：运动控制、碰撞检测、弹头传递
 ##
-## 设计原则：
-## - 投射物是"载具"（Carrier），负责把"弹头"（Effect）运送到目标
-## - 投射物不关心伤害公式，只关心飞行和碰撞
-## - 撞击时，将携带的 Effect 应用给目标
-## - 通过信号系统通知外部系统（如技能系统），保持解耦
+## 设计原则（载具-弹头模式）：
+## - 投射物是"载具"（Carrier），负责运输"弹头"（Payload：Status/Effect）
+## - 投射物不包含能力逻辑（如伤害计算），只负责将弹头传递给目标
+## - 在碰撞时，投射物将携带的弹头应用给目标
+## - 通过信号系统通知外部系统（如技能系统），用于处理穿透、销毁等逻辑
 
 # ========== 运行时配置（由 ProjectileData 注入）==========
 ## 飞行速度（单位/秒）
-var speed: float = 20.0
+var speed: float = 0.0
 ## 最大生命周期（秒）
 var max_lifetime: float = 5.0
 ## 追踪加速度（0 为直线，>0 为追踪）
@@ -28,20 +28,22 @@ var max_pierce_count: int = -1
 var movement_strategy: ProjectileMovementStrategy = null
 
 # ========== 运行时数据（由 Ability 注入）==========
-## 施法者（用于过滤碰撞，避免击中自己）
+## 施法者（用于过滤碰撞，避免击中自己，以及作为弹头的施加者）
 var instigator: Node = null
-## 携带的弹头（Effect 列表）
-var payload_effects: Array[GameplayEffect] = []
 ## 追踪目标（如果设置了，会追踪此目标）
 var target_reference: Node3D = null
-## 撞击时的上下文信息（会传递给 Effect）
-var impact_context: Dictionary = {}
+
+# ========== 弹头舱（Payload Bay）==========
+## 携带的状态列表（弹头）
+## 当投射物击中目标时，会将此列表中的状态应用给目标
+var payload_statuses: Array[GameplayStatusData] = []
 
 # ========== 内部状态 ==========
 ## 当前速度向量（策略类需要访问）
 var velocity: Vector3 = Vector3.ZERO
+## 穿透次数（由外部系统管理，投射物只提供访问接口）
+var pierce_count: int = 0
 var _timer: float = 0.0
-var _pierce_count: int = 0
 
 # ========== 信号系统 ==========
 ## 投射物撞击时触发
@@ -61,7 +63,6 @@ func _ready() -> void:
 	# 注意：collision_mask 应该在场景中配置，或在子类中通过 @export 设置
 	
 	# 碰撞监听
-	body_entered.connect(_on_body_entered)
 	area_entered.connect(_on_area_entered)
 	
 	# 调试：输出投射物生成信息
@@ -82,11 +83,8 @@ func _physics_process(delta: float) -> void:
 	if _timer >= max_lifetime:
 		print("ProjectileBase: Lifetime expired (%.2f >= %.2f)" % [_timer, max_lifetime])
 		# 发射超时信号，让外部系统（如技能系统）处理
-		var timeout_context = impact_context.duplicate()
-		timeout_context["projectile"] = self
-		timeout_context["timeout_position"] = global_position
-		timeout_triggered.emit(global_position, timeout_context)
-		_destroy_projectile()
+		# 注意：不自动销毁，由外部系统决定是否销毁
+		timeout_triggered.emit(global_position, {"projectile": self})
 		return
 	
 	# 2. 运动逻辑（策略模式）
@@ -106,16 +104,34 @@ func _physics_process(delta: float) -> void:
 	if velocity.length_squared() > 0.01:
 		look_at(global_position + velocity, Vector3.UP)
 
-## 处理碰撞（Body）
-func _on_body_entered(body: Node3D) -> void:
-	_handle_impact(body)
+## 初始化速度向量
+## 应该在 apply_to_projectile() 之后调用，确保 speed 已正确设置
+func initialize_velocity() -> void:
+	# 初始化方向（使用 -Z 轴作为前进方向，Godot 默认）
+	var forward = -global_transform.basis.z
+	velocity = forward * speed
+	
+	# 调试日志
+	print("ProjectileBase: Initialized velocity - speed: %.1f, direction: %s, velocity: %s" % [
+		speed,
+		forward,
+		velocity
+	])
+	
+	if speed <= 0.0:
+		push_warning("ProjectileBase: speed is %f, projectile may not move" % speed)
 
-## 处理碰撞（Area）
-func _on_area_entered(area: Area3D) -> void:
-	# 处理 Hitbox 等逻辑
-	# 通常 Area 的 owner 是实际的实体
-	var target = area.owner if area.owner else area
-	_handle_impact(target)
+## 销毁投射物（公共方法，由外部系统调用）
+## 投射物不自动销毁，必须由外部系统（如 ProjectileAbility）调用此方法
+func destroy() -> void:
+	# 清理引用
+	instigator = null
+	target_reference = null
+	movement_strategy = null
+	payload_statuses.clear()
+	
+	# 销毁节点
+	queue_free()
 
 ## 【核心】撞击结算
 func _handle_impact(target: Node) -> void:
@@ -126,47 +142,54 @@ func _handle_impact(target: Node) -> void:
 	
 	print("ProjectileBase: Impact detected - target: %s, position: %s" % [target.name if target else "null", global_position])
 	
-	# 2. 获取撞击位置
+	# 2. 获取撞击位置和方向
 	var hit_pos = global_position  # 或者更精确的碰撞点
+	var hit_dir = velocity.normalized() if velocity.length_squared() > 0.01 else Vector3.ZERO
 	
-	# 3. 应用单体效果（如果配置了效果）
-	if not payload_effects.is_empty():
-		_deliver_payload(target)
+	# 3. 传递弹头（Payload）：将携带的状态和效果应用给目标
+	_deliver_payload(target, hit_pos, hit_dir)
 	
-	# 4. 发射撞击信号，让外部系统（如技能系统）决定是否消耗本次撞击
-	var impact_context_data = impact_context.duplicate()
-	impact_context_data["hit_position"] = hit_pos
-	impact_context_data["hit_direction"] = velocity.normalized()
-	impact_context_data["projectile"] = self
-	impact_context_data["direct_hit_target"] = target
-	impact_context_data["consume_hit"] = true  # 默认消耗
-	impact_triggered.emit(hit_pos, target, impact_context_data)
-	
-	# 5. 处理穿透
-	var consume_hit: bool = impact_context_data.get("consume_hit", true)
-	if not consume_hit:
-		# 不消耗本次撞击，继续飞行
-		return
-	if piercing and (max_pierce_count < 0 or _pierce_count < max_pierce_count):
-		_pierce_count += 1
-		print("ProjectileBase: Piercing through (count: %d)" % _pierce_count)
-		# 穿透时继续飞行，不销毁
-		return
-	
-	# 6. 销毁投射物
-	print("ProjectileBase: Destroying projectile after impact")
-	_destroy_projectile()
+	# 4. 发射撞击信号，让外部系统（如技能系统）决定是否销毁、处理穿透等
+	# 注意：不自动销毁，由外部系统决定
+	impact_triggered.emit(hit_pos, target, {
+		"hit_direction": hit_dir,
+		"projectile": self
+	})
 
+## 传递弹头（Payload）：将携带的状态和效果应用给目标
+## [param] target: Node 目标实体（直接命中的目标）
+## [param] hit_position: Vector3 撞击位置
+## [param] hit_direction: Vector3 撞击方向
+func _deliver_payload(target: Node, hit_position: Vector3, hit_direction: Vector3) -> void:
+	if not is_instance_valid(target) or not is_instance_valid(instigator):
+		return
+	
+	# 准备上下文信息（供 Status 的目标检测使用）
+	var context = {
+		"hit_position": hit_position,
+		"detection_position": hit_position,  # 供 AreaHitDetector 使用
+		"hit_direction": hit_direction,
+		"projectile": self,
+		"input_target": target  # 直接命中的目标
+	}
+	
+	# 应用状态（弹头）
+	for status_data in payload_statuses:
+		if not is_instance_valid(status_data):
+			continue
+		
+		# 获取 instigator 的状态组件（状态会应用到 instigator，但会检测 hit_position 周围的目标）
+		var status_comp = GameplayAbilitySystem.get_component_by_interface(instigator, "GameplayStatusComponent")
+		if is_instance_valid(status_comp):
+			# 应用状态（状态系统会处理目标检测、筛选和应用效果）
+			# 状态会通过 context["hit_position"] 和 context["detection_position"] 检测周围的目标
+			status_comp.apply_status(status_data, instigator, 1, context)
+		else:
+			push_warning("ProjectileBase: Instigator %s has no GameplayStatusComponent, cannot apply status %s" % [instigator.name, status_data.status_id])
+	
 ## 检查是否应该撞击此目标
 func _should_impact(target: Node) -> bool:
 	if not is_instance_valid(target):
-		return false
-	
-	# 忽略地面和静态环境（GridMap、StaticBody3D 等）
-	var target_name = target.name if target else ""
-	if target_name.contains("Floor") or target_name.contains("Ground") or target_name.contains("Wall") or target_name.contains("GridMap"):
-		# 只忽略静态环境，不忽略可交互的物体
-		# 如果需要更精确的控制，可以通过碰撞层/遮罩来实现
 		return false
 	
 	# 忽略施法者及其所有子节点
@@ -186,72 +209,11 @@ func _should_impact(target: Node) -> bool:
 		if target.has_method("get") and target.get("owner") == instigator:
 			return false
 	
-	# 调试：输出碰撞信息（只在非静态环境时输出）
-	if not (target_name.contains("Floor") or target_name.contains("Ground") or target_name.contains("Wall") or target_name.contains("GridMap")):
-		print("ProjectileBase: Impact check - target: %s, instigator: %s" % [target_name, instigator.name if is_instance_valid(instigator) else "null"])
-	
-	# 可以在这里添加阵营检查、过滤器等
-	# 例如：
-	# if not is_enemy(instigator, target):
-	#     return false
-	
 	return true
 
-## 传递弹头（应用 Effect）
-## 注意：此方法会克隆 Effect 实例，但不会订阅信号（由 Ability 系统管理）
-func _deliver_payload(target: Node) -> void:
-	if not is_instance_valid(target):
-		return
-	
-	# 构建撞击上下文
-	var context = impact_context.duplicate()
-	context["hit_position"] = global_position
-	context["hit_direction"] = velocity.normalized()
-	context["projectile"] = self
-	
-	# 应用所有携带的效果
-	for effect in payload_effects:
-		if not is_instance_valid(effect):
-			continue
-		
-		# 克隆 Effect 实例（避免运行时状态共享）
-		var effect_inst = effect.duplicate(true) as GameplayEffect
-		if not is_instance_valid(effect_inst):
-			push_warning("ProjectileBase: Effect instance is not valid for projectile %s" % name)
-			continue
-		
-		# 应用效果（注意：不订阅信号，由 Ability 系统管理）
-		effect_inst.apply(target, instigator, context)
-
-## 初始化速度向量
-## 应该在 apply_to_projectile() 之后调用，确保 speed 已正确设置
-func initialize_velocity() -> void:
-	# 初始化方向（使用 -Z 轴作为前进方向，Godot 默认）
-	var forward = -global_transform.basis.z
-	velocity = forward * speed
-	
-	# 调试日志
-	print("ProjectileBase: Initialized velocity - speed: %.1f, direction: %s, velocity: %s" % [
-		speed,
-		forward,
-		velocity
-	])
-	
-	if speed <= 0.0:
-		push_warning("ProjectileBase: speed is %f, projectile may not move" % speed)
-
-
-## 销毁投射物
-func _destroy_projectile() -> void:
-	# 可以在这里播放爆炸特效、音效等
-	# 或者生成另一个特效对象
-	
-	# 清理引用
-	instigator = null
-	target_reference = null
-	movement_strategy = null
-	payload_effects.clear()
-	impact_context.clear()
-	
-	# 销毁节点
-	queue_free()
+## 处理碰撞（Area）
+func _on_area_entered(area: Area3D) -> void:
+	# 处理 Hitbox 等逻辑
+	# 通常 Area 的 owner 是实际的实体
+	var target = area.owner if area.owner else area
+	_handle_impact(target)

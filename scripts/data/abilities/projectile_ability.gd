@@ -14,20 +14,8 @@ class_name ProjectileAbility
 ## - 不要让 Projectile 去生产 Effect（逻辑混乱）
 ## - 让 Ability 打包好 Effect，交给 Projectile，告诉它送到哪里
 
-## 效果传递策略
-## - USE_MAGIC_CIRCLE_EFFECTS: 魔法阵总是使用自己的效果（默认）
-## - USE_PROJECTILE_EFFECTS: 魔法阵使用投射物的效果（如果魔法阵未配置效果）
-## - MERGE_EFFECTS: 合并两者（魔法阵效果 + 投射物效果）
-enum EffectTransferStrategy {
-	USE_PROJECTILE_EFFECTS,  ## 使用投射物效果
-	USE_MAGIC_CIRCLE_EFFECTS,  ## 使用魔法阵效果（默认）
-	MERGE_EFFECTS  ## 合并效果
-}
-
 @export_group("Projectile Settings")
-## 投射物场景（必须继承自 ProjectileBase）
-@export var projectile_scene: PackedScene = null
-## 投射物数据（包含速度、生命周期、穿透等配置）
+## 投射物数据（包含场景、速度、生命周期、穿透等配置）
 ## 业务层可以在编辑器中创建 .tres 资源文件并配置
 @export var projectile_data: ProjectileData = null
 ## 发射数量（多重施法）
@@ -41,223 +29,144 @@ enum EffectTransferStrategy {
 ## - "weapon": 武器位置
 ## - "head": 头顶
 ## - "body": 身体中心
-@export var muzzle_attachment_point: StringName = &"muzzle"
-
-@export_group("Magic Circle Settings")
-## 撞击时触发的魔法阵技能（可选）
-## 如果设置了，投射物撞击时会触发此技能来创建魔法阵
-## 技能会使用自己的目标筛选和效果配置
-@export var impact_magic_circle_ability: MagicCircleAbility = null
-## 是否在生命周期结束时触发魔法阵（即使没有命中目标）
-## 如果为 true，投射物在 max_lifetime 到期时会自动触发魔法阵技能
-@export var trigger_magic_circle_on_timeout: bool = false
-## 效果传递策略
-@export var effect_transfer_strategy: EffectTransferStrategy = EffectTransferStrategy.USE_MAGIC_CIRCLE_EFFECTS
+@export var muzzle_attachment_point: StringName = &"body"
 
 ## [重写] 施放技能
-## 逻辑：生成投射物，并把 target_effects 作为"弹头"传递给投射物
+## 逻辑：生成投射物，并把 statuses 中的效果作为"弹头"传递给投射物
 func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
 	var instigator = ability_comp.get_parent()
 	if not is_instance_valid(instigator):
 		push_warning("ProjectileAbility: Cannot cast, instigator is not valid")
 		return
-	## 1. 应用自身效果（后坐力、耗蓝等）
-	#_apply_caster_effects(instigator, context)
-	#
-	# 2. 检查投射物场景
-	if not projectile_scene:
-		push_warning("ProjectileAbility: projectile_scene is not set for ability %s" % ability_id)
-		return
 	
-	# 3. 检查投射物数据
+	# 1. 检查投射物数据
 	if not is_instance_valid(projectile_data):
 		push_warning("ProjectileAbility: projectile_data is not set for ability %s" % ability_id)
 		return
 	
-	# 4. 确定发射基准信息
+	# 2. 检查投射物场景（现在从 projectile_data 获取）
+	if not is_instance_valid(projectile_data.projectile_scene):
+		push_warning("ProjectileAbility: projectile_scene is not set in projectile_data for ability %s" % ability_id)
+		return
+	
+	# 3. 确定发射基准信息
 	var spawn_transform = _get_muzzle_transform(instigator, context)
 	
-	# 5. 获取要传递的效果列表（弹头）
-	#var payload_effects = target_effects if not target_effects.is_empty() else effects
-	#if payload_effects.is_empty():
-		#push_warning("ProjectileAbility: No effects configured for ability %s. Projectile will spawn but won't deal damage. Please configure target_effects or effects in the ability resource." % ability_id)
-		## 注意：即使没有效果，也允许生成投射物（用于测试和视觉效果）
-		## payload_effects = []  # 保持为空数组
-	#
-	## 调试日志
-	#print("ProjectileAbility: Casting %s with %d effect(s)" % [ability_id, payload_effects.size()])
-	#
-	# 6. 获取追踪目标（用于投射物追踪）
-	# 符合开闭原则：通过 context 传递追踪目标，或使用 input_target
-	# 业务层可以在 context 中设置 "homing_target" 来指定追踪目标
+	# 4. 获取追踪目标（用于投射物追踪）
 	var target_for_homing: Node3D = _get_homing_target(instigator, input_target, context)
 	
-	# 7. 循环生成投射物
-	#for i in range(projectile_count):
-		#var projectile = _spawn_projectile(instigator, spawn_transform, projectile_data, target_for_homing, payload_effects, context)
-		## 8. 连接信号（如果配置了魔法阵技能）
-		#if is_instance_valid(projectile) and (is_instance_valid(impact_magic_circle_ability) or trigger_magic_circle_on_timeout):
-			#_connect_projectile_signals(projectile, ability_comp, payload_effects, context)
-	#
+	# 5. 循环生成投射物
+	for i in range(projectile_count):
+		var projectile = _spawn_projectile(
+			instigator, 
+			spawn_transform, 
+			projectile_data, 
+			target_for_homing, 
+			context
+		)
+		
+		# 6. 连接信号（用于超时处理）
+		if is_instance_valid(projectile):
+			_connect_projectile_signals(projectile, ability_comp, context)
+	
 	# 注意：投射物是"发射即不管"（Fire and Forget），所以这里不需要阻塞
 	# 如果投射物需要阻塞技能完成，可以在 ProjectileBase 中实现
 	# 但是，由于投射物的效果是在命中时应用的（不在 _on_cast 中应用），
-	# 所以 _pending_effects 会保持为空，需要立即检查并发出完成信号
+	# 所以 _pending_statuses 会保持为空，需要立即检查并发出完成信号
 	_check_ability_completion()
 
 ## 连接投射物信号
 ## [param] projectile: ProjectileBase 投射物实例
 ## [param] ability_comp: Node 技能组件
-## [param] payload_effects: Array[GameplayEffect] 投射物效果列表
 ## [param] context: Dictionary 上下文信息
 func _connect_projectile_signals(
 		projectile: ProjectileBase,
 		ability_comp: Node,
-		payload_effects: Array,
 		context: Dictionary) -> void:
 	if not is_instance_valid(projectile):
 		return
+
+	# 连接撞击信号：由 Ability 将状态应用给命中相关目标（通过状态的 hit_detector 与 target_mode 决定）
+	projectile.impact_triggered.connect(_on_projectile_impact.bind(ability_comp, context))
 	
-	# 连接撞击信号
-	projectile.impact_triggered.connect(_on_projectile_impact.bind(ability_comp, payload_effects, context))
-	
-	# 连接超时信号（如果配置了）
-	if trigger_magic_circle_on_timeout:
-		projectile.timeout_triggered.connect(_on_projectile_timeout.bind(ability_comp, payload_effects, context))
+	# 连接超时信号（如果配置了 timeout_status）
+	if is_instance_valid(projectile_data) and is_instance_valid(projectile_data.timeout_status):
+		projectile.timeout_triggered.connect(_on_projectile_timeout.bind(ability_comp, context))
 
 ## 处理投射物撞击事件
+## 当投射物撞击时，投射物已经自己应用了弹头（状态/效果）
+## Ability 只需要处理穿透逻辑和销毁决策
 ## [param] hit_position: Vector3 撞击位置
-## [param] direct_hit_target: Node 直接命中的目标
-## [param] impact_context: Dictionary 撞击上下文
+## [param] direct_hit_target: Node 直接命中的目标（可选）
+## [param] impact_context: Dictionary 撞击上下文（来自 ProjectileBase）
 ## [param] ability_comp: Node 技能组件
-## [param] payload_effects: Array[GameplayEffect] 投射物效果列表
-## [param] original_context: Dictionary 原始上下文
+## [param] context: Dictionary 原始施放上下文
 func _on_projectile_impact(
 		hit_position: Vector3,
 		direct_hit_target: Node,
 		impact_context: Dictionary,
 		ability_comp: Node,
-		payload_effects: Array,
-		original_context: Dictionary) -> void:
-	var instigator = ability_comp.get_parent()
-	if not is_instance_valid(instigator):
+		context: Dictionary) -> void:
+	var projectile = impact_context.get("projectile", null) as ProjectileBase
+	if not is_instance_valid(projectile):
 		return
 	
-	# 如果目标无效，直接标记不消耗撞击
-	if not is_instance_valid(direct_hit_target):
-		impact_context["consume_hit"] = false
-		return
+	# 处理穿透逻辑（由 Ability 决定是否消耗本次撞击）
+	var should_consume = true  # 默认消耗
+	if is_instance_valid(projectile_data) and projectile_data.piercing:
+		# 检查穿透次数（使用投射物实例的 pierce_count 属性）
+		var max_pierce = projectile_data.max_pierce_count
+		
+		if max_pierce < 0 or projectile.pierce_count < max_pierce:
+			# 可以继续穿透
+			should_consume = false
+			projectile.pierce_count += 1
+			print("ProjectileAbility: Piercing through (count: %d)" % projectile.pierce_count)
 	
-	# 先用技能的 targeting_strategy 进行筛选，决定是否对命中目标直接应用效果
-	impact_context["target_unit"] = direct_hit_target
-	var filtered_targets = _filter_targets_with_strategy([direct_hit_target], instigator, impact_context, targeting_strategy, direct_hit_target)
-	#if not filtered_targets.is_empty():
-		#var effects_to_apply = target_effects if not target_effects.is_empty() else effects
-		#_apply_effects_to_targets(effects_to_apply, instigator, filtered_targets, impact_context)
-	#
-	# 命中发生即消耗本次撞击（不让弹体继续飞行），无论是否直伤命中
-	impact_context["consume_hit"] = true
-	
-	# 如果未配置魔法阵技能，仅消耗撞击即可
-	if not is_instance_valid(impact_magic_circle_ability):
-		return
-	
-	# 准备魔法阵技能的上下文
-	var magic_circle_context = impact_context.duplicate()
-	magic_circle_context["spawn_position"] = hit_position
-	magic_circle_context["direct_hit_target"] = direct_hit_target
-	magic_circle_context["original_ability_id"] = ability_id
-	
-	_trigger_magic_circle(magic_circle_context, ability_comp, payload_effects, "impact", hit_position)
+	# 如果应该消耗，销毁投射物
+	if should_consume:
+		projectile.destroy()
 
 ## 处理投射物超时事件
+## 当投射物生命周期结束时，在超时位置应用 timeout_status（如果配置了）
+## 注意：超时状态会应用到 instigator 上，但状态可以通过 hit_detector 检测超时位置周围的目标
 ## [param] position: Vector3 超时位置
-## [param] timeout_context: Dictionary 超时上下文
+## [param] timeout_context: Dictionary 超时上下文（来自 ProjectileBase）
 ## [param] ability_comp: Node 技能组件
-## [param] payload_effects: Array[GameplayEffect] 投射物效果列表
-## [param] original_context: Dictionary 原始上下文
+## [param] context: Dictionary 原始上下文
 func _on_projectile_timeout(
 		position: Vector3,
 		timeout_context: Dictionary,
 		ability_comp: Node,
-		payload_effects: Array,
-		original_context: Dictionary) -> void:
-	if not is_instance_valid(impact_magic_circle_ability):
+		context: Dictionary) -> void:
+	if not is_instance_valid(projectile_data) or not is_instance_valid(projectile_data.timeout_status):
 		return
 	
 	var instigator = ability_comp.get_parent()
 	if not is_instance_valid(instigator):
 		return
 	
-	# 准备魔法阵技能的上下文
-	var magic_circle_context = timeout_context.duplicate()
-	magic_circle_context["spawn_position"] = position
-	magic_circle_context["timeout_position"] = position
-	magic_circle_context["original_ability_id"] = ability_id
-	
-	_trigger_magic_circle(magic_circle_context, ability_comp, payload_effects, "timeout", position)
-
-## 应用效果传递策略
-## [param] magic_circle_ability: MagicCircleAbility 魔法阵技能
-## [param] payload_effects: Array[GameplayEffect] 投射物效果列表
-func _apply_effect_transfer_strategy(magic_circle_ability: MagicCircleAbility, payload_effects: Array) -> void:
-	if not is_instance_valid(magic_circle_ability):
+	var projectile = timeout_context.get("projectile", null) as ProjectileBase
+	if not is_instance_valid(projectile):
 		return
 	
-	match effect_transfer_strategy:
-		EffectTransferStrategy.USE_PROJECTILE_EFFECTS:
-			# 如果魔法阵未配置效果，使用投射物的效果
-			if magic_circle_ability.target_effects.is_empty() and magic_circle_ability.effects.is_empty():
-				magic_circle_ability.target_effects = payload_effects.duplicate(true)
-		
-		EffectTransferStrategy.USE_MAGIC_CIRCLE_EFFECTS:
-			# 魔法阵总是使用自己的效果（默认，不做任何处理）
-			pass
-		
-		EffectTransferStrategy.MERGE_EFFECTS:
-			# 合并效果：魔法阵效果 + 投射物效果
-			var merged_effects = magic_circle_ability.target_effects.duplicate(true)
-			if merged_effects.is_empty():
-				merged_effects = magic_circle_ability.effects.duplicate(true)
-			merged_effects.append_array(payload_effects.duplicate(true))
-			magic_circle_ability.target_effects = merged_effects
-
-## 触发魔法阵技能的通用方法
-## [param] magic_circle_context: Dictionary 上下文
-## [param] ability_comp: Node 技能组件
-## [param] payload_effects: Array[GameplayEffect] 投射物效果
-## [param] reason: String 用于日志（impact / timeout）
-## [param] position: Vector3 触发位置
-func _trigger_magic_circle(
-		magic_circle_context: Dictionary,
-		ability_comp: Node,
-		payload_effects: Array,
-		reason: String,
-		position: Vector3) -> void:
-	# 处理效果传递
-	_apply_effect_transfer_strategy(impact_magic_circle_ability, payload_effects)
+	# 准备状态应用的上下文
+	# 注意：状态会应用到 instigator 上，但状态可以通过 hit_detector 检测超时位置周围的目标
+	# AreaHitDetector 支持通过 context["hit_position"] 或 context["detection_position"] 指定检测位置
+	var status_context = context.duplicate()
+	status_context["timeout_position"] = position
+	status_context["hit_position"] = position  # 供 AreaHitDetector 使用（如果 detection_position_source = HIT_POSITION）
+	status_context["detection_position"] = position  # 供 AreaHitDetector 使用（如果 detection_position_source = DETECTION_POSITION）
+	status_context["ability_id"] = ability_id
 	
-	# 确保位置被正确设置（优先级：显式传入的 position > context 中的位置）
-	if not magic_circle_context.has("spawn_position") or not (magic_circle_context["spawn_position"] is Vector3):
-		magic_circle_context["spawn_position"] = position
-	# 同时设置 hit_position 作为备用（MagicCircleAbility 会优先读取 spawn_position）
-	magic_circle_context["hit_position"] = position
-	
-	# 标记跳过冷却与消耗（投射物的副作用）
-	magic_circle_context["skip_cooldown"] = true
-	magic_circle_context["skip_cost"] = true
-	
-	# 通过组件执行技能，保持架构一致性
-	# 使用 execute_ability_direct 方法，支持执行未学会的技能
-	ability_comp.execute_ability_direct(impact_magic_circle_ability, null, magic_circle_context)
-	print("ProjectileAbility: Triggered magic circle ability on %s at position: %s" % [reason, position])
+	# 超时后销毁投射物
+	projectile.destroy()
 
 ## 生成投射物
 ## [param] instigator: Node 施法者
 ## [param] spawn_transform: Transform3D 发射变换
 ## [param] data: ProjectileData 投射物数据
 ## [param] target_node: Node3D 追踪目标（可选）
-## [param] payload_effects: Array[GameplayEffect] 弹头效果列表
 ## [param] context: Dictionary 上下文信息
 ## [return] ProjectileBase 投射物实例（用于连接信号），如果失败则返回 null
 func _spawn_projectile(
@@ -265,9 +174,13 @@ func _spawn_projectile(
 		spawn_transform: Transform3D, 
 		data: ProjectileData, 
 		target_node: Node3D, 
-		payload_effects: Array, 
 		context: Dictionary = {}) -> ProjectileBase:
-	var projectile = projectile_scene.instantiate()
+	# 从 ProjectileData 获取场景
+	if not is_instance_valid(data) or not is_instance_valid(data.projectile_scene):
+		push_error("ProjectileAbility: projectile_scene is not set in projectile_data")
+		return null
+	
+	var projectile = data.projectile_scene.instantiate()
 	
 	# 类型检查
 	if not projectile is ProjectileBase:
@@ -318,17 +231,8 @@ func _spawn_projectile(
 		projectile_base.movement_strategy.get_class() if is_instance_valid(projectile_base.movement_strategy) else "None"
 	])
 	
-	# D. 【关键】注入弹头（Payload）
-	# 将 Ability 配置的 target_effects 传递给投射物
-	# 投射物会在撞击时代为执行 apply()
-	projectile_base.payload_effects = payload_effects.duplicate(true)  # 深拷贝，避免引用问题
-	
-	# E. 传递 Context（比如暴击信息、技能ID等）
-	projectile_base.impact_context = context.duplicate()
-	projectile_base.impact_context["ability_id"] = ability_id
-	projectile_base.impact_context["instigator"] = instigator
-	
 	# 返回投射物实例，供调用者连接信号
+	# 注意：不再传递 impact_context，所有上下文信息由 Ability 在信号处理时提供
 	return projectile_base
 
 ## 获取枪口变换（发射点位置和朝向）

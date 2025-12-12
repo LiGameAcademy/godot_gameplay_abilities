@@ -29,6 +29,14 @@ class_name ProjectileData
 ## 业务层可以在编辑器中创建 .tres 资源文件并配置
 @export var movement_strategy: ProjectileMovementStrategy = null
 
+@export_group("Scene")
+## 投射物场景（必须继承自 ProjectileBase）
+## 场景是投射物的核心定义，属于数据配置的一部分
+@export var projectile_scene: PackedScene = null
+## 携带的状态列表（弹头）
+## 当目标进入区域或周期性触发时，会将此列表中的状态应用给目标
+@export var payload_statuses: Array[GameplayStatusData] = []
+
 ## 应用数据到投射物实例
 ## [param] projectile: ProjectileBase 投射物实例
 func apply_to_projectile(projectile: ProjectileBase) -> void:
@@ -45,15 +53,13 @@ func apply_to_projectile(projectile: ProjectileBase) -> void:
 	projectile.piercing = piercing
 	projectile.max_pierce_count = max_pierce_count
 	
+	projectile.payload_statuses = payload_statuses
+
 	# 应用移动策略（如果设置了）
 	if is_instance_valid(movement_strategy):
 		projectile.movement_strategy = movement_strategy.duplicate(true)
 	else:
-		# 如果没有设置策略，投射物将使用初始速度直线移动
-		# 这是可接受的行为，所以只在调试模式下提示
-		if OS.is_debug_build():
-			print("ProjectileData: movement_strategy is not set, projectile will use linear movement with initial velocity")
+		print("ProjectileData: movement_strategy is not set, projectile will use linear movement with initial velocity")
 	
 	# 【关键】重新初始化速度向量，确保使用正确的 speed
 	projectile.initialize_velocity()
-

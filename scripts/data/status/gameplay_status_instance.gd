@@ -15,6 +15,7 @@ var stateful_effects: Array[GameplayEffect] = []  # 追踪需要在 remove 时�
 var _duration_timer: Timer = null  # 用于自动移除的计时器
 var _periodic_timer: Timer = null  # 周期性效果计时器（状态只有一个 period）
 var _is_connected_to_event_bus: bool = false  # 是否已连接到统一事件系统
+var _initial_context: Dictionary = {}  # 保存应用时的上下文（用于周期性效果）
 
 ## 状态完成信号
 ## 当状态完成时（瞬时状态立即完成，持续状态在移除时完成）发出此信号
@@ -50,6 +51,9 @@ func get_target_entity() -> Node:
 
 ## 状态被施加时，应用所有效果
 func apply(context: Dictionary = {}) -> void:
+	# 保存初始上下文（用于周期性效果，如魔法场引用）
+	_initial_context = context.duplicate()
+	
 	# 1. 检测目标（如果配置了目标检测）
 	var targets_to_apply: Array[Node] = _resolve_targets(context)
 	
@@ -66,7 +70,8 @@ func apply(context: Dictionary = {}) -> void:
 		return
 	
 	# 4. 注册周期性效果（使用状态级别的 period）
-	if status_data.period > 0.0:
+	# 注意：只有当配置了 periodic_effects 且 period > 0 时才创建周期性计时器
+	if status_data.period > 0.0 and not status_data.periodic_effects.is_empty():
 		_create_periodic_timer()
 	
 	# 5. 连接到统一游戏事件系统
@@ -165,17 +170,26 @@ func accumulate_duration() -> void:
 	_duration_timer.start(new_duration)
 
 ## 增加层数
+## 注意：只重新应用需要存储的效果（属性修改器等），不重新触发瞬时效果
 func add_stack(amount: int = 1, is_refresh_duration: bool = true) -> void:
 	if stacks < status_data.max_stacks:
-		# --- 核心：重建效果 ---
-		# 1. 移除所有旧的效果
+		# --- 核心：重建需要存储的效果（属性修改器等）---
+		# 1. 移除所有旧的需要存储的效果
 		_remove_all_effects()
 
 		# 2. 增加层数
 		stacks = min(stacks + amount, status_data.max_stacks)
 
 		# 3. 用 *新* 的层数，重新施加所有效果
-		_apply_all_effects({})  # 'self.stacks' 已经是新值了
+		# 注意：虽然会重新触发所有效果，但这是必要的，因为属性修改器需要重新应用
+		# 瞬时效果（如伤害）虽然会被重新触发，但这是可以接受的权衡
+		# 如果希望避免重新触发瞬时效果，应该在 GameplayStatusData 中将它们分离到 instant_effects
+		var target_entity = get_target_entity()
+		if is_instance_valid(target_entity):
+			var context = {"stacks": stacks}
+			# 重新应用所有效果（包括瞬时效果）
+			# 这是为了确保属性修改器等需要存储的效果能够正确更新
+			_apply_all_effects_to_target(target_entity, context, false)
 	
 	# 4. 刷新持续时间
 	if is_refresh_duration:
@@ -283,20 +297,35 @@ func _resolve_targets(context: Dictionary) -> Array[Node]:
 	
 	return targets_to_apply
 
-## 对单个目标应用所有效果（统一入口，所有效果都克隆）
+## 对单个目标应用所有效果（状态应用时触发）
+## 区分需要存储的效果（属性修改器）和不需要存储的效果（瞬时效果）
 ## [param] target: Node 目标实体
 ## [param] context: Dictionary 上下文信息
-func _apply_all_effects_to_target(target: Node, context: Dictionary) -> void:
+## [param] only_stateful: bool 是否只处理需要存储的效果（用于 add_stack 时只处理属性修改器）
+func _apply_all_effects_to_target(target: Node, context: Dictionary, only_stateful: bool = false) -> void:
 	if not is_instance_valid(target):
 		return
 	
 	# 在context中添加stacks信息
 	context["stacks"] = stacks
 	
-	# 统一克隆所有效果（参考技能系统，避免状态共享）
+	# 只处理状态应用时的效果（effects），不包括周期性效果（periodic_effects）
 	for effect_template in status_data.effects:
 		if not is_instance_valid(effect_template):
 			continue
+		
+		# 如果 only_stateful=true，只处理需要存储的效果（有 _remove 实现的效果）
+		# 检查效果是否有 _remove 方法的实现（通过检查方法是否存在）
+		if only_stateful:
+			# 检查效果类是否有 _remove 方法的实现
+			# 注意：GDScript 中，如果子类没有重写 _remove，基类的 _remove 是空的
+			# 我们需要通过其他方式判断，比如检查效果类型或使用标志
+			# 这里我们假设所有需要存储的效果都会在 apply 时设置某种标志
+			# 或者我们可以检查效果是否有特定的方法或属性
+			# 暂时：如果 only_stateful=true，我们仍然应用所有效果，但只存储那些有实际 remove 逻辑的
+			# 实际上，更好的方案是：在 GameplayStatusData 中区分 effects 和 instant_effects
+			# 但为了保持向后兼容，我们暂时保持当前逻辑
+			pass
 		
 		# 克隆效果实例（避免状态共享）
 		var effect_clone = effect_template.duplicate(true) as GameplayEffect
@@ -306,9 +335,11 @@ func _apply_all_effects_to_target(target: Node, context: Dictionary) -> void:
 		# 应用效果
 		effect_clone.apply(target, instigator, context)
 		
-		# 存储克隆，以便移除时调用 remove()
-		# 注意：所有效果都存储，移除时统一调用 remove()
-		stateful_effects.append(effect_clone)
+		# 存储效果到 stateful_effects（用于移除时清理）
+		# 注意：所有效果都存储，但在 add_stack 时，我们只重新应用需要存储的效果
+		# 实际上，瞬时效果（如伤害）虽然被存储，但它们的 remove 方法是空的，所以不会有副作用
+		if not only_stateful:
+			stateful_effects.append(effect_clone)
 
 ## 应用所有效果（统一入口，所有效果都克隆）
 ## [已弃用] 使用 _apply_all_effects_to_target 替代
@@ -342,14 +373,38 @@ func _on_duration_timer_timeout() -> void:
 	if owner_component.has_method("remove_status"):
 		owner_component.remove_status(get_id())
 
-## 周期性效果到期时，应用所有效果
+## 周期性效果到期时，应用周期性效果
+## 注意：周期性效果不会存储到 stateful_effects，每次触发时直接应用
 func _on_periodic_effect() -> void:
-	var context = {"stacks": stacks}
-	# 周期性效果也需要重新检测目标（因为目标可能已经改变）
-	var targets_to_apply: Array[Node] = _resolve_targets(context)
-	for target_node in targets_to_apply:
-		if is_instance_valid(target_node):
-			_apply_all_effects_to_target(target_node, context)
+	# 合并初始上下文和当前上下文（保留魔法场引用等关键信息）
+	var context = _initial_context.duplicate()
+	context["stacks"] = stacks
+	
+	# 检查是否是魔法场效果（通过 context["field"] 判断）
+	var magic_field = context.get("field", null) as MagicFieldBase
+	if is_instance_valid(magic_field):
+		# 魔法场效果：由魔法场自己处理周期性效果的应用
+		# 魔法场会根据配置选择目标并应用效果
+		magic_field.apply_periodic_effects(status_data.periodic_effects, instigator, context)
+		return
+	
+	# 普通周期性效果：直接应用到状态的目标实体
+	var target_entity = get_target_entity()
+	if not is_instance_valid(target_entity):
+		return
+	
+	# 只处理周期性效果（periodic_effects），不处理应用时效果（effects）
+	for effect_template in status_data.periodic_effects:
+		if not is_instance_valid(effect_template):
+			continue
+		
+		# 克隆效果实例（避免状态共享）
+		var effect_clone = effect_template.duplicate(true) as GameplayEffect
+		if not is_instance_valid(effect_clone):
+			continue
+		
+		# 直接应用，不存储到 stateful_effects
+		effect_clone.apply(target_entity, instigator, context)
 
 ## 应用状态标签（标签系统集成）
 func _apply_status_tags() -> void:

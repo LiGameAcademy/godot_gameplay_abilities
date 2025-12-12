@@ -12,14 +12,6 @@ enum StackingPolicy {
 	IGNORE                 ## 忽略, (例如: 变形术, 无法被刷新)
 }
 
-## 目标应用模式
-## 决定状态效果应该应用到哪些目标
-enum TargetApplicationMode {
-	SELF,              ## 应用到自己（默认，适用于Buff、Debuff等）
-	DETECTED_TARGETS,  ## 应用到检测到的目标（适用于范围伤害、AOE技能等）
-	BOTH               ## 同时应用到自己和检测到的目标（适用于治疗术等）
-}
-
 @export var status_id: StringName
 @export var status_display_name: String = ""
 @export var status_description: String = ""
@@ -29,12 +21,21 @@ enum TargetApplicationMode {
 @export var tags: Array[StringName] = []
 
 @export_group("Effects")
-## 这个状态所包含的所有效果
+## 状态应用时触发的效果（一次性效果）
+## 这些效果在状态被应用时立即触发，包括：
+## - 瞬时效果（如初始伤害、治疗）
+## - 属性修改器（需要存储以便移除时清理）
+## - 视觉效果（如状态图标、粒子特效）
 @export var effects: Array[GameplayEffect] = []
+
+## 周期性触发的效果（DoT、HoT等）
+## 这些效果会在状态的每个周期触发，不会在状态应用时触发
+## 注意：周期性效果不会存储到 stateful_effects，每次触发时直接应用
+@export var periodic_effects: Array[GameplayEffect] = []
 
 @export_group("Effect Timing")
 ## 周期性效果的周期时间，如果为0，则不周期性触发
-## 当 period > 0 时，所有效果会按此周期重复触发
+## 当 period > 0 时，periodic_effects 会按此周期重复触发
 @export var period: float = 0.0
 ## 监听的事件，如果为空，则不监听事件
 ## 当 event_to_listen 不为空时，所有效果会在该事件发生时触发
@@ -61,24 +62,6 @@ enum TargetApplicationMode {
 ## 当状态应用时，会执行此 Cue 来播放表现（特效、音效等）
 ## 状态移除时，会自动停止持续 Cue（如附加粒子特效）
 @export var cue: GameplayCue = null
-
-@export_group("Target Detection")
-## 命中检测器（用于检测目标）
-## 如果设置了，Status 会在应用时使用此检测器检测目标
-## 如果未设置，Status 会应用到自己（target = instigator）
-## 适用于：范围伤害、AOE技能等需要检测周围目标的场景
-@export var hit_detector: HitDetectorBase = null
-
-## 目标筛选策略（用于筛选检测到的目标）
-## 如果设置了，Status 会使用此策略进一步筛选目标
-## 适用于：需要特定筛选逻辑的场景（如只对敌人、只对友军等）
-@export var targeting_strategy: TargetingStrategy = null
-
-## 目标应用模式
-## SELF: 应用到自己（默认）
-## DETECTED_TARGETS: 应用到检测到的目标
-## BOTH: 同时应用到自己和检测到的目标
-@export var target_mode: TargetApplicationMode = TargetApplicationMode.SELF
 
 ## 检查此状态是否可以被指定事件触发
 func can_trigger_on_event(event_type: StringName) -> bool:
