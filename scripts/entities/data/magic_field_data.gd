@@ -37,6 +37,17 @@ enum TargetSelectionMode {
 @export var target_selection_mode: TargetSelectionMode = TargetSelectionMode.ALL
 ## 目标数量（-1 为全部，仅在 RANDOM 和 NEAREST 模式下有效）
 @export var target_count: int = -1
+## 目标获取策略（可选）
+## 如果配置了此策略，魔法场将使用策略来获取目标（支持筛选器，如敌我筛选）
+## 如果未配置，则使用默认的区域检测逻辑（Area3D 的 overlapping 方法）
+## 
+## 推荐策略：
+## - HitDetectorTargetingStrategy: 简单的目标检测（使用 hit_detector）
+## - AreaTargetingStrategy: 区域目标检测（AOE技能）
+## 
+## 注意：如果配置了 targeting_strategy，target_selection_mode 和 target_count 仍然有效
+## 策略负责获取目标列表，然后根据 target_selection_mode 进行进一步筛选
+@export var targeting_strategy: TargetingStrategy = null
 
 @export_group("Scene")
 ## 魔法场场景（必须继承自 MagicFieldBase）
@@ -62,6 +73,9 @@ func apply_to_magic_field(magic_field: MagicFieldBase) -> void:
 	# 应用目标选择配置
 	magic_field.target_selection_mode = target_selection_mode
 	magic_field.target_count = target_count
+	
+	# 应用目标获取策略
+	magic_field.targeting_strategy = targeting_strategy
 
 	# 应用弹头配置
 	magic_field.payload_statuses = payload_statuses.duplicate()

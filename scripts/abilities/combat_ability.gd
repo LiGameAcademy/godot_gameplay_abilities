@@ -130,23 +130,33 @@ func _commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
 	return success
 
 ## 重写：施放技能
-## CombatAbility 不执行自己的效果，而是直接执行子技能
+## CombatAbility 可以在连击开始时应用自己的效果，然后执行子技能
 ## 子技能通过执行时间自动完成，CombatAbility 订阅完成信号推进连击
 func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
+	var instigator = ability_comp.get_parent()
+	if not is_instance_valid(instigator):
+		push_warning("CombatAbility: Cannot cast, instigator is not valid")
+		return
+	
 	var current_ability = _get_current_combo_ability()
 	if not is_instance_valid(current_ability):
 		push_warning("CombatAbility: Cannot cast, current combo ability is not valid")
 		return
 	
-	# 将当前连击索引添加到上下文，供动画系统使用
+	# 1. 应用连击技能自己的直接效果（如连击开始时给自己加buff）
+	# 注意：只在第一段连击时应用，避免重复应用
+	if _current_combo_index == 0:
+		_apply_initial_effects(instigator, input_target, context)
+	
+	# 2. 将当前连击索引添加到上下文，供动画系统使用
 	context["combo_index"] = _current_combo_index
 	context["combo_count"] = _combo_abilities.size()
 	
-	# 订阅子技能的完成信号（子技能通过执行时间自动完成）
+	# 3. 订阅子技能的完成信号（子技能通过执行时间自动完成）
 	if not current_ability.ability_completed.is_connected(_on_combo_segment_completed):
 		current_ability.ability_completed.connect(_on_combo_segment_completed)
 
-	# 直接调用子技能的 cast（但子技能可能会检查冷却和消耗）
+	# 4. 直接调用子技能的 cast（但子技能可能会检查冷却和消耗）
 	current_ability.cast(ability_comp, input_target, context)
 	
 ## 连击段完成回调（在技能完成时推进连击）

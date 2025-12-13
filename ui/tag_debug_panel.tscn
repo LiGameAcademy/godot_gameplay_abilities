@@ -4,7 +4,7 @@
 
 [node name="TagDebugPanel" type="MarginContainer"]
 offset_right = 396.0
-offset_bottom = 439.0
+offset_bottom = 542.0
 script = ExtResource("1_06b37")
 
 [node name="Panel" type="Panel" parent="."]

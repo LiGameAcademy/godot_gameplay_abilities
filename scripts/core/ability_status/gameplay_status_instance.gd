@@ -54,13 +54,20 @@ func apply(context: Dictionary = {}) -> void:
 	# 保存初始上下文（用于周期性效果，如魔法场引用）
 	_initial_context = context.duplicate()
 	
-	# 获取目标实体（状态只应用到自己）
-	var target_entity = get_target_entity()
-	if not is_instance_valid(target_entity):
+	# 获取状态被应用到的实体（状态持有者）
+	var status_holder = get_target_entity()
+	if not is_instance_valid(status_holder):
 		return
 	
-	# 应用效果到目标实体
-	_apply_all_effects_to_target(target_entity, context)
+	# 【关键】获取效果应用的目标列表
+	# 如果配置了 targeting_strategy，使用策略选择目标
+	# 否则，直接应用到状态持有者（默认行为）
+	var effect_targets: Array[Node] = _get_effect_targets(status_holder, context)
+	
+	# 为所有目标应用效果
+	for target in effect_targets:
+		if is_instance_valid(target):
+			_apply_all_effects_to_target(target, context)
 	
 	# 3. 如果是瞬时效果（duration = 0），立即移除并发出完成信号
 	if status_data.duration == 0.0:
@@ -123,8 +130,8 @@ func remove() -> void:
 ## 处理事件（用于事件监听型效果）
 ## 此方法用于处理通过统一事件系统触发的事件
 func handle_event(event_id: StringName, context: Dictionary) -> void:
-	var target = get_target_entity()
-	if not is_instance_valid(target):
+	var status_holder = get_target_entity()
+	if not is_instance_valid(status_holder):
 		return
 	
 	# 检查状态是否应该响应这个事件
@@ -133,8 +140,13 @@ func handle_event(event_id: StringName, context: Dictionary) -> void:
 	
 	# 检查是否是状态级别的事件监听
 	if status_data.event_to_listen == event_id:
-		# 事件触发时应用效果到目标实体（状态只应用到自己）
-		_apply_all_effects_to_target(target, context)
+		# 【关键】获取效果应用的目标列表（支持目标选择策略）
+		var effect_targets: Array[Node] = _get_effect_targets(status_holder, context)
+		
+		# 为所有目标应用效果
+		for target in effect_targets:
+			if is_instance_valid(target):
+				_apply_all_effects_to_target(target, context)
 
 ## 统一游戏事件系统的回调
 ## 当任何游戏事件发生时，此方法会被调用
@@ -224,6 +236,28 @@ func _create_duration_timer() -> void:
 	owner_component.add_child(_duration_timer)
 	_duration_timer.start()
 
+## 获取效果应用的目标列表（支持目标选择策略）
+## [param] status_holder: Node 状态持有者（状态被应用到的实体）
+## [param] context: Dictionary 上下文信息
+## [return] Array[Node] 目标列表
+func _get_effect_targets(status_holder: Node, context: Dictionary) -> Array[Node]:
+	# 如果配置了 targeting_strategy，使用策略选择目标
+	if is_instance_valid(status_data.targeting_strategy):
+		# 准备策略上下文
+		var strategy_context = context.duplicate()
+		strategy_context["status_holder"] = status_holder
+		strategy_context["status_id"] = status_data.status_id
+		
+		# 使用策略解析目标
+		# 注意：instigator 作为施法者，status_holder 作为 input_target
+		var targets = status_data.targeting_strategy.resolve_targets(instigator, status_holder, strategy_context)
+		
+		# 如果策略返回了目标，使用它们
+		if not targets.is_empty():
+			return targets
+	
+	# 默认：直接应用到状态持有者
+	return [status_holder]
 
 ## 对单个目标应用所有效果（状态应用时触发）
 ## 区分需要存储的效果（属性修改器）和不需要存储的效果（瞬时效果）
@@ -308,10 +342,13 @@ func _on_periodic_effect() -> void:
 	var context = _initial_context.duplicate()
 	context["stacks"] = stacks
 	
-	# 获取目标实体（状态只应用到自己）
-	var target_entity = get_target_entity()
-	if not is_instance_valid(target_entity):
+	# 获取状态持有者
+	var status_holder = get_target_entity()
+	if not is_instance_valid(status_holder):
 		return
+	
+	# 【关键】获取效果应用的目标列表（支持目标选择策略）
+	var effect_targets: Array[Node] = _get_effect_targets(status_holder, context)
 	
 	# 只处理周期性效果（periodic_effects），不处理应用时效果（effects）
 	for effect_template in status_data.periodic_effects:
@@ -323,8 +360,11 @@ func _on_periodic_effect() -> void:
 		if not is_instance_valid(effect_clone):
 			continue
 		
-		# 直接应用，不存储到 stateful_effects
-		effect_clone.apply(target_entity, instigator, context)
+		# 为所有目标应用周期性效果
+		for target in effect_targets:
+			if is_instance_valid(target):
+				# 直接应用，不存储到 stateful_effects
+				effect_clone.apply(target, instigator, context)
 
 ## 应用状态标签（标签系统集成）
 func _apply_status_tags() -> void:

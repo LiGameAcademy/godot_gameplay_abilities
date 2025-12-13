@@ -104,16 +104,20 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 		push_warning("ChannelingAbility: Cannot cast, instigator is not valid")
 		return
 	
-	# 1. 应用初始状态（如前摇效果），复用基类的状态应用逻辑
+	# 1. 应用直接效果（简单效果，立即执行）
+	# 注意：使用基类的 _apply_initial_effects() 方法，支持瞬时效果
+	_apply_initial_effects(instigator, input_target, context)
+	
+	# 2. 应用初始状态（如前摇效果），复用基类的状态应用逻辑
 	# 注意：使用基类的 _apply_initial_statuses() 方法，而不是 super._on_cast()
 	# 因为 super._on_cast() 会启动执行计时器，但引导技能自己管理生命周期
 	_apply_initial_statuses(instigator, input_target, context)
 	
-	# 2. 缓存数据
+	# 3. 缓存数据
 	_cached_ability_comp = ability_comp
 	_cached_instigator = instigator
 
-	# 3. 启动引导/切换核心逻辑
+	# 4. 启动引导/切换核心逻辑
 	_start_channeling(instigator)
 
 ## [重写] 启动执行计时器

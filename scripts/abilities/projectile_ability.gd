@@ -33,30 +33,35 @@ class_name ProjectileAbility
 
 
 ## [重写] 施放技能
-## 逻辑：生成投射物，并把 statuses 中的效果作为"弹头"传递给投射物
+## 逻辑：应用直接效果（如发射时对施法者的效果），然后生成投射物
+## 投射物携带 statuses 中的效果作为"弹头"传递给目标
 func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
 	var instigator = ability_comp.get_parent()
 	if not is_instance_valid(instigator):
 		push_warning("ProjectileAbility: Cannot cast, instigator is not valid")
 		return
 	
-	# 1. 检查投射物数据
+	# 1. 应用直接效果（如发射时对施法者应用buff、消耗资源等）
+	# 注意：effects 应用到施法者或通过 targeting_strategy 获取的目标
+	_apply_initial_effects(instigator, input_target, context)
+	
+	# 2. 检查投射物数据
 	if not is_instance_valid(projectile_data):
 		push_warning("ProjectileAbility: projectile_data is not set for ability %s" % ability_id)
 		return
 	
-	# 2. 检查投射物场景（现在从 projectile_data 获取）
+	# 3. 检查投射物场景（现在从 projectile_data 获取）
 	if not is_instance_valid(projectile_data.projectile_scene):
 		push_warning("ProjectileAbility: projectile_scene is not set in projectile_data for ability %s" % ability_id)
 		return
 	
-	# 3. 确定发射基准信息
+	# 4. 确定发射基准信息
 	var spawn_transform = _get_muzzle_transform(instigator, context)
 	
-	# 4. 获取追踪目标（用于投射物追踪）
+	# 5. 获取追踪目标（用于投射物追踪）
 	var target_for_homing: Node3D = _get_homing_target(instigator, input_target, context)
 	
-	# 5. 循环生成投射物
+	# 6. 循环生成投射物
 	for i in range(projectile_count):
 		var projectile = _spawn_projectile(
 			instigator, 
@@ -66,7 +71,7 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 			context
 		)
 		
-		# 6. 连接信号（用于超时处理）
+		# 7. 连接信号（用于超时处理）
 		if is_instance_valid(projectile):
 			_connect_projectile_signals(projectile, ability_comp, context)
 	

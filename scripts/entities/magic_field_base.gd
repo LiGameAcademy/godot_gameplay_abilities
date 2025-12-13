@@ -36,6 +36,10 @@ var periodic_trigger_interval: float = 0.0
 var target_selection_mode: int = 2  # TargetSelectionMode.ALL
 ## 目标数量（-1 为全部，仅在 RANDOM 和 NEAREST 模式下有效）
 var target_count: int = -1
+## 目标获取策略（可选）
+## 如果配置了此策略，将使用策略来获取目标（支持筛选器，如敌我筛选）
+## 如果未配置，则使用默认的区域检测逻辑（_get_all_targets）
+var targeting_strategy: TargetingStrategy = null
 
 # ========== 内部定时器 ==========
 var _periodic_timer: Timer = null
@@ -83,9 +87,15 @@ func destroy() -> void:
 ## 【传感器接口】获取当前区域内的所有目标
 ## 返回：Array[Node3D] 当前区域内的所有有效目标（实体根节点）
 ## 
-## 注意：使用 PhysicsServer3D 的同步查询，确保在创建时也能正确检测到目标
+## 注意：
+## - 如果配置了 targeting_strategy，将使用策略获取目标（支持筛选器）
+## - 否则使用默认的区域检测逻辑（Area3D 的 overlapping 方法）
 func _get_all_targets() -> Array[Node3D]:
-	# 方法1：尝试使用 Area3D 的 overlapping 方法（事件驱动，更高效）
+	# 如果配置了 targeting_strategy，使用策略获取目标
+	if is_instance_valid(targeting_strategy):
+		return _get_targets_via_strategy()
+	
+	# 默认逻辑：使用 Area3D 的 overlapping 方法（事件驱动，更高效）
 	var bodies = get_overlapping_bodies()
 	var areas = get_overlapping_areas()
 	
@@ -94,6 +104,42 @@ func _get_all_targets() -> Array[Node3D]:
 		return _get_targets_from_overlapping(bodies, areas)
 	
 	return []
+
+## 通过 TargetingStrategy 获取目标
+## [return] Array[Node3D] 通过策略获取的目标列表（已应用筛选器）
+func _get_targets_via_strategy() -> Array[Node3D]:
+	if not is_instance_valid(targeting_strategy):
+		return []
+	
+	if not is_instance_valid(instigator):
+		push_warning("MagicFieldBase: Cannot use targeting_strategy, instigator is not valid")
+		return []
+	
+	# 构建上下文信息
+	# 注意：对于 AreaHitDetector，需要传递 detection_position 或使用 DETECTION_POSITION 模式
+	var context = {
+		"field_position": global_position,
+		"detection_position": global_position,  # 魔法场的位置作为检测位置
+		"field": self,
+		"instigator": instigator,
+		# 如果策略使用 AreaHitDetector，可以覆盖检测位置来源
+		"detection_position_source": AreaHitDetector.DetectionPositionSource.DETECTION_POSITION
+	}
+	
+	# 使用策略解析目标（策略会自动应用筛选器）
+	# 注意：对于魔法场，instigator 是施法者，但检测位置应该是魔法场的位置
+	# 策略会使用 context 中的 detection_position
+	var targets = targeting_strategy.resolve_targets(instigator, null, context)
+	
+	# 转换为 Node3D 数组（过滤掉非 Node3D 的目标）
+	var valid_targets: Array[Node3D] = []
+	for target in targets:
+		if not is_instance_valid(target):
+			continue
+		if target is Node3D:
+			valid_targets.append(target as Node3D)
+	
+	return valid_targets
 
 ## 从 overlapping 列表获取目标（事件驱动方法）
 func _get_targets_from_overlapping(bodies: Array, areas: Array) -> Array[Node3D]:

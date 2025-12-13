@@ -20,30 +20,40 @@ class_name MagicFieldAbility
 @export var magic_field_data: MagicFieldData = null
 
 ## [重写] 施放技能
-## 逻辑：生成魔法场
+## 逻辑：应用直接效果（如放置时对施法者的效果），然后生成魔法场
+## 魔法场携带 statuses 中的效果作为"弹头"传递给进入区域的目标
 func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
 	var instigator = ability_comp.get_parent()
 	if not is_instance_valid(instigator):
 		push_warning("MagicFieldAbility: Cannot cast, instigator is not valid")
 		return
 	
-	# 1. 检查魔法场数据
+	# 1. 应用直接效果（如放置时对施法者应用buff等）
+	# 注意：effects 应用到施法者或通过 targeting_strategy 获取的目标
+	_apply_initial_effects(instigator, input_target, context)
+	
+	# 2. 检查魔法场数据
 	if not is_instance_valid(magic_field_data):
 		push_warning("MagicFieldAbility: magic_field_data is not set for ability %s" % ability_id)
 		return
 	
-	# 2. 检查魔法场场景
+	# 3. 检查魔法场场景
 	if not is_instance_valid(magic_field_data.magic_field_scene):
 		push_warning("MagicFieldAbility: magic_field_scene is not set in magic_field_data for ability %s" % ability_id)
 		return
 	
-	# 3. 确定生成位置
+	# 4. 确定生成位置
 	var spawn_position = _get_spawn_position(instigator, input_target, context)
 	if spawn_position == Vector3.INF:
 		return
 
-	# 4. 生成魔法场
+	# 5. 生成魔法场
 	_spawn_magic_field(instigator, spawn_position, magic_field_data, context)
+	
+	# 注意：魔法场是"放置即不管"（Place and Forget），所以这里不需要阻塞
+	# 魔法场的效果是在目标进入区域时应用的（不在 _on_cast 中应用），
+	# 所以 _pending_statuses 会保持为空，需要立即检查并发出完成信号
+	_check_ability_completion()
 
 ## 生成魔法场
 ## [param] instigator: Node 施法者

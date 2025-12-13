@@ -57,6 +57,21 @@ enum StackingPolicy {
 ## 当新状态与旧状态冲突时，优先级高的状态会替换优先级低的状态
 @export var priority: int = 0
 
+@export_group("Targeting")
+## 目标选择策略（可选）
+## 如果设置了此策略，状态的效果会应用到策略选择的目标，而不是状态被应用到的实体
+## 例如：状态应用到自己，但效果通过策略应用到周围敌人
+## 
+## 如果未设置策略，效果会直接应用到状态被应用到的实体（默认行为）
+## 
+## 推荐策略：
+## - HitDetectorTargetingStrategy: 简单的目标检测（范围伤害、AOE效果等）
+## - AreaTargetingStrategy: 区域目标检测（AOE技能）
+## - UnitTargetingStrategy: 单位目标检测（指向性效果）
+## - SelfTargetingStrategy: 只对自己生效（显式指定）
+## - NoTargetingStrategy: 无目标（通常不需要）
+@export var targeting_strategy: TargetingStrategy = null
+
 @export_group("Visual Feedback")
 ## 游戏提示（Cue），用于逻辑与表现分离
 ## 当状态应用时，会执行此 Cue 来播放表现（特效、音效等）

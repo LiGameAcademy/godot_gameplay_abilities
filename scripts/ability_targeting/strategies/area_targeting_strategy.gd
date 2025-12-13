@@ -25,4 +25,3 @@ func _get_description() -> String:
 	if is_instance_valid(hit_detector):
 		return "Area Target (范围: %.1f)" % hit_detector.detection_radius
 	return "Area Target (未配置检测器)"
-

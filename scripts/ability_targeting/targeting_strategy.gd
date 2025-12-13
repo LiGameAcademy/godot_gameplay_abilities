@@ -14,8 +14,14 @@ class_name TargetingStrategy
 ## - HitDetectorBase: 负责物理/数学检测（"如何检测"）
 ## - TargetingStrategy: 负责目标获取逻辑（"获取哪些目标"）
 ## - TargetingScorer: 负责目标选择（"选择哪个目标"）
+## - GameplayFilterData: 负责目标筛选（"过滤哪些目标"）
 
-## 解析目标
+## 目标筛选器列表
+## 如果配置了筛选器，只有通过所有筛选器的目标才会被返回
+## 例如：可以筛选出只有"敌人"标签的目标，或只有"友军"标签的目标
+@export var filters: Array[GameplayFilterData] = []
+
+## 解析目标（带筛选）
 ## [param] instigator: Node 施法者
 ## [param] input_target: Node 输入目标（可能为 null，由策略决定是否使用）
 ## [param] context: Dictionary 上下文信息，可能包含：
@@ -24,9 +30,33 @@ class_name TargetingStrategy
 ##   - "facing_angle": float 面朝角度（弧度）
 ##   - "facing_direction": Vector3 面朝方向向量
 ##   - "hit_detector": HitDetectorBase 命中检测器（如果技能配置了）
-## [return] Array[Node] 解析出的目标列表
+## [return] Array[Node] 解析出的目标列表（已通过筛选器过滤）
 func resolve_targets(instigator: Node, input_target: Node, context: Dictionary = {}) -> Array[Node]:
-	return _resolve_targets(instigator, input_target, context)
+	# 1. 获取原始目标列表
+	var raw_targets = _resolve_targets(instigator, input_target, context)
+	
+	# 2. 应用筛选器
+	if filters.is_empty():
+		return raw_targets
+	
+	var filtered_targets: Array[Node] = []
+	for target in raw_targets:
+		if not is_instance_valid(target):
+			continue
+		
+		# 检查是否通过所有筛选器
+		var passed = true
+		for filter in filters:
+			if not is_instance_valid(filter):
+				continue
+			if not filter.check(target, instigator, context):
+				passed = false
+				break
+		
+		if passed:
+			filtered_targets.append(target)
+	
+	return filtered_targets
 
 ## 获取策略描述（用于调试和UI显示）
 func get_description() -> String:

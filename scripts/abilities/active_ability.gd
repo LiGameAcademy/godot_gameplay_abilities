@@ -14,16 +14,31 @@ class_name ActiveAbility
 ## 最终执行时间 = max(execution_duration, cast_point)
 @export var execution_duration: float = 0.0
 # @export var cast_range: float = 8.0  ## 施法距离
-## 命中检测器（用于动画关键帧触发时的目标检测）
-## 如果设置了此检测器，能力系统会在动画关键帧时主动调用它来获取目标
-## 适用于：普通攻击、需要精确时机检测的技能
-@export var hit_detector: HitDetectorBase = null
-## [推荐] 目标获取策略（优先使用，提供最大灵活性）
-## 如果设置了此策略，将使用策略来获取目标，忽略 targeting_type
-@export var targeting_strategy: TargetingStrategy = null
+## 目标获取策略
+## 如果设置了此策略，将使用策略来获取目标
+## 策略可以包含 hit_detector（如 HitDetectorTargetingStrategy），也可以实现更复杂的目标获取逻辑
+## 
+## 推荐策略：
+## - HitDetectorTargetingStrategy: 简单的目标检测（普通攻击、范围技能等）
+## - AreaTargetingStrategy: 区域目标检测（AOE技能）
+## - UnitTargetingStrategy: 单位目标检测（指向性技能）
+## - GroundTargetingStrategy: 地面目标检测（放置类技能）
+## - SelfTargetingStrategy: 只对自己生效
+## - NoTargetingStrategy: 无目标（战吼、光环等）
+@export var targeting_strategy: TargetingStrategy = NoTargetingStrategy.new()
 
 @export var animation_name: StringName = &"cast_spell_default"  ## 动画名称
 @export var indicator_data: TargetIndicatorData = null  ## 目标指示器数据
+
+@export_group("Effects")
+## 直接执行的效果列表（简单效果，不需要状态系统）
+## 这些效果会在技能施放时立即应用到目标，适用于：
+## - 瞬时伤害/治疗
+## - 位移效果
+## - 资源消耗/恢复
+## - 其他不需要持续管理的简单效果
+## 注意：如果需要周期性效果或状态管理，请使用 statuses
+@export var effects: Array[GameplayEffect] = []
 
 @export_group("Tag Requirements")
 ## 施法者必须拥有的标签（技能施放的前置条件）
@@ -59,8 +74,17 @@ func get_costs_description() -> String:
 func get_effects_description() -> String:
 	var descriptions: Array[String] = []
 	
-	# 新架构：状态效果
+	# 直接效果
+	if not effects.is_empty():
+		descriptions.append("[直接效果]")
+		for effect in effects:
+			if is_instance_valid(effect):
+				descriptions.append("- %s" % effect.get_description())
+	
+	# 状态效果
 	if not statuses.is_empty():
+		if not descriptions.is_empty():
+			descriptions.append("")
 		descriptions.append("[状态]")
 		for status_data in statuses:
 			if is_instance_valid(status_data):
@@ -148,10 +172,13 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 		push_warning("ActiveAbility: Cannot cast, instigator is not valid")
 		return
 	
-	# 1. 应用初始状态（提取为独立方法，便于子类复用）
+	# 1. 应用直接效果（简单效果，立即执行）
+	_apply_initial_effects(instigator, input_target, context)
+	
+	# 2. 应用初始状态（提取为独立方法，便于子类复用）
 	_apply_initial_statuses(instigator, input_target, context)
 	
-	# 2. 启动执行计时器（如果配置了执行时间）
+	# 3. 启动执行计时器（如果配置了执行时间）
 	# 注意：执行计时器会在时间到期时自动调用 _check_ability_completion()
 	if execution_duration > 0.0:
 		_start_execution_timer(ability_comp)
@@ -159,24 +186,53 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 		# 瞬时技能：立即完成
 		_check_ability_completion()
 
+## 应用初始效果（提取为独立方法，便于子类复用）
+## [param] instigator: Node 施法者
+## [param] input_target: Node 输入目标
+## [param] context: Dictionary 上下文信息
+func _apply_initial_effects(instigator: Node, input_target: Node, context: Dictionary) -> void:
+	# 准备效果上下文
+	var effect_context = context.duplicate()
+	effect_context["input_target"] = input_target
+	effect_context["ability_id"] = ability_id
+	
+	# 应用直接效果
+	if not effects.is_empty():
+		for effect_data in effects:
+			if not is_instance_valid(effect_data):
+				continue
+			
+			# 【关键】获取目标列表（使用 targeting_strategy 或默认到施法者）
+			var targets: Array[Node] = _get_targets_for_application(instigator, input_target, effect_context)
+			
+			# 为所有目标应用效果
+			for target in targets:
+				if is_instance_valid(target):
+					_apply_single_effect_to_target(effect_data, target, instigator, effect_context)
+
 ## 应用初始状态（提取为独立方法，便于子类复用）
 ## [param] instigator: Node 施法者
 ## [param] input_target: Node 输入目标
 ## [param] context: Dictionary 上下文信息
 func _apply_initial_statuses(instigator: Node, input_target: Node, context: Dictionary) -> void:
-	# 传递上下文信息（包括 input_target，供 Status 的目标检测使用）
+	# 准备状态上下文
 	var status_context = context.duplicate()
 	status_context["input_target"] = input_target
 	status_context["ability_id"] = ability_id
-	if hit_detector:
-		status_context["hit_detector"] = hit_detector
 	
 	# 应用状态（新架构）
-	# Status 系统会自己处理目标检测、筛选和应用效果
 	if not statuses.is_empty():
 		for status_data in statuses:
-			if is_instance_valid(status_data):
-				_apply_status(instigator, status_data, status_context)
+			if not is_instance_valid(status_data):
+				continue
+			
+			# 【关键】获取目标列表（使用 targeting_strategy 或默认到施法者）
+			var targets: Array[Node] = _get_targets_for_application(instigator, input_target, status_context)
+			
+			# 为所有目标应用状态
+			for target in targets:
+				if is_instance_valid(target):
+					_apply_status_to_target(target, status_data, instigator, status_context)
 
 ## 启动执行计时器（自动完成技能）
 ## [param] ability_comp: Node 技能组件
@@ -211,18 +267,36 @@ func _start_execution_timer(ability_comp: Node) -> void:
 		_check_ability_completion()
 	)
 
-## 应用状态（新架构）
+## 获取应用目标列表（统一的目标获取逻辑）
 ## [param] instigator: Node 施法者
-## [param] status_data: GameplayStatusData 状态数据
+## [param] input_target: Node 输入目标
 ## [param] context: Dictionary 上下文信息
-func _apply_status(instigator: Node, status_data: GameplayStatusData, context: Dictionary) -> void:
-	if not is_instance_valid(status_data):
+## [return] Array[Node] 目标列表
+func _get_targets_for_application(instigator: Node, input_target: Node, context: Dictionary) -> Array[Node]:
+	# 如果配置了 targeting_strategy，使用它
+	if is_instance_valid(targeting_strategy):
+		var targets = targeting_strategy.resolve_targets(instigator, input_target, context)
+		# 如果策略返回了目标，使用它们
+		if not targets.is_empty():
+			return targets
+	
+	# 默认：只应用到施法者
+	push_error("ActiveAbility: No targeting strategy found for ability %s" % ability_id)
+	return []
+
+## 应用状态到指定目标（新架构）
+## [param] target: Node 目标实体
+## [param] status_data: GameplayStatusData 状态数据
+## [param] instigator: Node 施法者
+## [param] context: Dictionary 上下文信息
+func _apply_status_to_target(target: Node, status_data: GameplayStatusData, instigator: Node, context: Dictionary) -> void:
+	if not is_instance_valid(status_data) or not is_instance_valid(target):
 		return
 	
-	# 获取施法者的状态组件
-	var status_comp = GameplayAbilitySystem.get_component_by_interface(instigator, "GameplayStatusComponent")
+	# 获取目标的状态组件
+	var status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
 	if not is_instance_valid(status_comp):
-		push_warning("ActiveAbility: Instigator %s has no GameplayStatusComponent, cannot apply status %s" % [instigator.name, status_data.status_id])
+		push_warning("ActiveAbility: Target %s has no GameplayStatusComponent, cannot apply status %s" % [target.name, status_data.status_id])
 		return
 	
 	# 应用状态（状态只应用到自己，不处理目标检测）

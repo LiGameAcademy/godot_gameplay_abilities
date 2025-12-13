@@ -18,4 +18,3 @@ func _find_best_target(_instigator: Node, _valid_targets: Array[Node]) -> Node:
 	if _valid_targets.size() > 0:
 		return _valid_targets[0]
 	return null
-
