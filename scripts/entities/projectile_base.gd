@@ -49,6 +49,10 @@ var _timer: float = 0.0
 var on_destory_magic_field_data : MagicFieldData
 ## 是否只在撞击时产生
 var spawn_on_hit : bool = false
+## 最近一次直接命中的目标（用于基于目标标签的反应/连携逻辑）
+var _last_hit_target: Node = null
+## 触发销毁魔法场生成所需的命中目标标签（由 ProjectileData 注入）
+var required_trigger_target_tags: Array[StringName] = []
 
 # ========== 信号系统 ==========
 ## 投射物撞击时触发
@@ -128,7 +132,9 @@ func destroy(on_hit: bool = false) -> void:
 	# 生成销毁时的魔法场（如果配置了）
 	if is_instance_valid(on_destory_magic_field_data) and is_instance_valid(instigator):
 		if not spawn_on_hit or on_hit:
-			_spawn_impact_field(instigator, global_position, on_destory_magic_field_data, {})
+			# 检查是否满足生成魔法场的反应条件（如：命中带燃烧状态的目标才触发爆炸）
+			if _can_spawn_impact_field():
+				_spawn_impact_field(instigator, global_position, on_destory_magic_field_data, {})
 
 	# 清理引用
 	instigator = null
@@ -148,14 +154,17 @@ func _handle_impact(target: Node) -> void:
 	
 	print("ProjectileBase: Impact detected - target: %s, position: %s" % [target.name if target else "null", global_position])
 	
-	# 2. 获取撞击位置和方向
+	# 2. 记录最近一次命中的目标（用于反应/连携逻辑）
+	_last_hit_target = target
+	
+	# 3. 获取撞击位置和方向
 	var hit_pos = global_position  # 或者更精确的碰撞点
 	var hit_dir = velocity.normalized() if velocity.length_squared() > 0.01 else Vector3.ZERO
 	
-	# 3. 传递弹头（Payload）：将携带的状态和效果应用给目标
+	# 4. 传递弹头（Payload）：将携带的状态和效果应用给目标
 	_deliver_payload(target, hit_pos, hit_dir)
 	
-	# 4. 处理穿透逻辑
+	# 5. 处理穿透逻辑
 	var should_consume = true  # 默认消耗（销毁）
 	if piercing:
 		# 检查穿透次数
@@ -165,7 +174,7 @@ func _handle_impact(target: Node) -> void:
 			pierce_count += 1
 			print("ProjectileBase: Piercing through (count: %d)" % pierce_count)
 	
-	# 5. 发射撞击信号，通知外部系统（如技能系统）
+	# 6. 发射撞击信号，通知外部系统（如技能系统）
 	# 注意：投射物已经自己处理了穿透逻辑和销毁决策
 	impact_triggered.emit(hit_pos, target, {
 		"hit_direction": hit_dir,
@@ -173,9 +182,26 @@ func _handle_impact(target: Node) -> void:
 		"consumed": should_consume  # 告知外部系统是否已销毁
 	})
 	
-	# 6. 如果应该消耗，销毁投射物
+	# 7. 如果应该消耗，销毁投射物
 	if should_consume:
 		destroy(true)
+
+## 检查是否可以生成撞击魔法场（用于元素反应/连携）
+## 例如：只在命中带有特定标签（如燃烧）的目标时才生成爆炸魔法场
+func _can_spawn_impact_field() -> bool:
+	if not is_instance_valid(on_destory_magic_field_data):
+		return false
+	
+	# 如果没有配置触发标签要求，则默认允许生成（保持向后兼容）
+	if required_trigger_target_tags.is_empty():
+		return true
+	
+	# 必须有最近一次命中的目标
+	if not is_instance_valid(_last_hit_target):
+		return false
+	
+	# 使用标签系统检查命中目标是否满足触发条件
+	return TagManager.has_all_tags(_last_hit_target, required_trigger_target_tags)
 
 ## 传递弹头（Payload）：将携带的状态和效果应用给目标
 ## [param] target: Node 目标实体（直接命中的目标）

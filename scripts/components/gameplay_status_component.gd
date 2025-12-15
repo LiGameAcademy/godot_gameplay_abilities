@@ -38,59 +38,105 @@ func apply_status(gsd: GameplayStatusData, instigator: Node, stacks: int = 1, co
 		push_error("GameplayStatusComponent: GameplayStatusData is not valid!")
 		return null
 	
-	var status_id = gsd.status_id
+	var status_id: StringName = gsd.status_id
 	
-	# 【优先级检查】：如果新状态优先级更高，替换旧状态
-	if _active_statuses.has(status_id):
-		var existing_instance = _active_statuses[status_id]
-		var existing_priority = existing_instance.status_data.priority
-		
-		if gsd.priority > existing_priority:
-			# 新状态优先级更高，移除旧状态
-			remove_status(status_id)
-		elif gsd.priority < existing_priority:
-			# 旧状态优先级更高，忽略新状态
-			return null
-		# 如果优先级相同，继续执行堆叠逻辑
+	# 状态 ID 为空：允许应用，但不参与记录/堆叠/优先级比较
+	if status_id.is_empty():
+		return _create_and_apply_new_status_instance(gsd, instigator, stacks, context)
 	
-	# 【核心堆叠逻辑】
-	if _active_statuses.has(status_id):
-		var existing_instance = _active_statuses[status_id]
-		
-		# 根据 GSD 中的策略进行处理
-		match gsd.stacking_policy:
-			GameplayStatusData.StackingPolicy.REFRESH_DURATION:
-				existing_instance.refresh_duration()
-			GameplayStatusData.StackingPolicy.STACK_INTENSITY:
-				existing_instance.add_stack(stacks, true)
-				status_stacked.emit(status_id, existing_instance.stacks)
-			GameplayStatusData.StackingPolicy.ACCUMULATE_DURATION:
-				existing_instance.accumulate_duration()
-			GameplayStatusData.StackingPolicy.IGNORE:
-				# 忽略，不处理
-				pass
-	else:
-		# 【新实例逻辑】
-		var instance = GameplayStatusInstance.new(gsd, self, instigator, stacks)
-		if gsd.duration != 0.0:
-			_active_statuses[gsd.status_id] = instance
-		# 先应用状态（执行效果）
-		instance.apply(context)
-		
-		status_applied.emit(status_id, instance)
-		
-		# 触发统一游戏事件：status_applied
-		AbilityEventBus.trigger_game_event(&"status_applied", {
-			"entity": get_parent(),
-			"status_id": status_id
-		})
-		
-		# 同时发送细粒度事件（向后兼容）
-		AbilityEventBus.emit_status_applied(get_parent(), status_id)
-		
-		# 返回状态实例（供 Ability 订阅完成信号）
-		return instance
-	return null
+	# 1. 优先级检查（可能会移除旧状态或直接拒绝新状态）
+	if not _handle_priority_for_existing_status(status_id, gsd):
+		return null
+	
+	# 2. 堆叠逻辑：如果已经有同 ID 的状态，根据 stacking_policy 处理
+	if _apply_stacking_for_existing_status(status_id, gsd, stacks):
+		# 对已有实例做了刷新/叠加等处理，不需要创建新实例
+		return null
+	
+	# 3. 创建并应用新的状态实例
+	return _create_and_apply_new_status_instance(gsd, instigator, stacks, context)
+
+## 处理已有状态的优先级比较
+## [return] bool 是否允许继续后续流程（false 表示应直接拒绝新状态）
+func _handle_priority_for_existing_status(status_id: StringName, gsd: GameplayStatusData) -> bool:
+	if not _active_statuses.has(status_id):
+		return true
+	
+	var existing_instance: GameplayStatusInstance = _active_statuses[status_id]
+	if not is_instance_valid(existing_instance) or not is_instance_valid(existing_instance.status_data):
+		# 旧实例异常时，直接移除并允许新状态进入
+		_active_statuses.erase(status_id)
+		return true
+	
+	var existing_priority: int = existing_instance.status_data.priority
+	
+	if gsd.priority > existing_priority:
+		# 新状态优先级更高，移除旧状态
+		remove_status(status_id)
+		return true
+	elif gsd.priority < existing_priority:
+		# 旧状态优先级更高，忽略新状态
+		return false
+	
+	# 优先级相同，继续后续堆叠逻辑
+	return true
+
+## 对已有状态应用堆叠策略
+## [return] bool 是否已经对已有实例进行了处理（true 表示已处理完毕，无需创建新实例）
+func _apply_stacking_for_existing_status(status_id: StringName, gsd: GameplayStatusData, stacks: int) -> bool:
+	if not _active_statuses.has(status_id):
+		return false
+	
+	var existing_instance: GameplayStatusInstance = _active_statuses[status_id]
+	if not is_instance_valid(existing_instance):
+		_active_statuses.erase(status_id)
+		return false
+	
+	match gsd.stacking_policy:
+		GameplayStatusData.StackingPolicy.REFRESH_DURATION:
+			existing_instance.refresh_duration()
+		GameplayStatusData.StackingPolicy.STACK_INTENSITY:
+			existing_instance.add_stack(stacks, true)
+			status_stacked.emit(status_id, existing_instance.stacks)
+		GameplayStatusData.StackingPolicy.ACCUMULATE_DURATION:
+			existing_instance.accumulate_duration()
+		GameplayStatusData.StackingPolicy.IGNORE:
+			# 忽略，不处理
+			pass
+	
+	return true
+
+## 创建并应用新的状态实例
+## - 对于有 ID 的状态：根据 duration 决定是否写入 _active_statuses
+## - 对于 ID 为空的状态：不会写入 _active_statuses，仅执行一次性效果
+func _create_and_apply_new_status_instance(
+		gsd: GameplayStatusData,
+		instigator: Node,
+		stacks: int,
+		context: Dictionary) -> GameplayStatusInstance:
+	var instance := GameplayStatusInstance.new(gsd, self, instigator, stacks)
+	var status_id: StringName = gsd.status_id
+	
+	# 仅当状态 ID 非空且有持续时间时才记录到激活状态表
+	if not status_id.is_empty() and gsd.duration != 0.0:
+		_active_statuses[status_id] = instance
+	
+	# 先应用状态（执行效果）
+	instance.apply(context)
+	
+	# 发信号和事件（即便 ID 为空，也允许外部根据实例做自定义逻辑）
+	status_applied.emit(status_id, instance)
+	
+	# 触发统一游戏事件：status_applied
+	AbilityEventBus.trigger_game_event(&"status_applied", {
+		"entity": get_parent(),
+		"status_id": status_id
+	})
+	
+	# 同时发送细粒度事件（向后兼容）
+	AbilityEventBus.emit_status_applied(get_parent(), status_id)
+	
+	return instance
 
 ## 移除状态
 ## [param] status_id: StringName 状态ID

@@ -43,6 +43,12 @@ class_name ProjectileData
 ## 是否只在撞击时产生
 @export var spawn_on_hit : bool = false
 
+@export_group("Reactions / Conditional Spawn")
+## 触发销毁魔法场生成所需的命中目标标签（元素反应 / 连携条件）
+## - 为空：始终生成（保持向后兼容）
+## - 非空：只有当最近一次命中的目标拥有所有这些标签时才生成
+@export var required_trigger_target_tags: Array[StringName] = []
+
 ## 应用数据到投射物实例
 ## [param] projectile: ProjectileBase 投射物实例
 func apply_to_projectile(projectile: ProjectileBase) -> void:
@@ -63,6 +69,7 @@ func apply_to_projectile(projectile: ProjectileBase) -> void:
 
 	projectile.on_destory_magic_field_data = on_destory_magic_field_data
 	projectile.spawn_on_hit = spawn_on_hit
+	projectile.required_trigger_target_tags = required_trigger_target_tags.duplicate()
 
 	# 应用移动策略（如果设置了）
 	if is_instance_valid(movement_strategy):
