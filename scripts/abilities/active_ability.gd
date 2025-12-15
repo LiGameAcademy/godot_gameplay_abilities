@@ -31,13 +31,11 @@ class_name ActiveAbility
 @export var indicator_data: TargetIndicatorData = null  ## 目标指示器数据
 
 @export_group("Effects")
-## 直接执行的效果列表（简单效果，不需要状态系统）
-## 这些效果会在技能施放时立即应用到目标，适用于：
-## - 瞬时伤害/治疗
-## - 位移效果
-## - 资源消耗/恢复
-## - 其他不需要持续管理的简单效果
-## 注意：如果需要周期性效果或状态管理，请使用 statuses
+## [DEPRECATED] 直接执行的效果列表. 推荐使用 'statuses' 数组来定义技能逻辑.
+##
+## 这个属性为了向后兼容和快速原型而保留. 在新的三层架构 (v3.0+) 中,
+## 所有逻辑都应该封装在 GameplayStatusData 中, 即使是瞬时效果 (使用 duration = 0 的 Status).
+## 这能确保所有技能都遵循统一的 Ability -> Status -> Effect 执行路径.
 @export var effects: Array[GameplayEffect] = []
 
 @export_group("Tag Requirements")
@@ -74,22 +72,23 @@ func get_costs_description() -> String:
 func get_effects_description() -> String:
 	var descriptions: Array[String] = []
 	
-	# 直接效果
-	if not effects.is_empty():
-		descriptions.append("[直接效果]")
-		for effect in effects:
-			if is_instance_valid(effect):
-				descriptions.append("- %s" % effect.get_description())
-	
-	# 状态效果
+	# 状态效果 (新架构)
 	if not statuses.is_empty():
-		if not descriptions.is_empty():
-			descriptions.append("")
 		descriptions.append("[状态]")
 		for status_data in statuses:
 			if is_instance_valid(status_data):
 				descriptions.append("- %s" % status_data.status_display_name)
 				descriptions.append("  %s" % status_data.get_effects_description())
+
+	# 直接效果 (旧架构, 仅作补充或向后兼容)
+	if not effects.is_empty():
+		if not descriptions.is_empty():
+			descriptions.append("")
+		descriptions.append("[直接效果 - 已弃用]")
+		for effect in effects:
+			if is_instance_valid(effect):
+				descriptions.append("- %s" % effect.get_description())
+
 	return "\n".join(descriptions)
 
 ## 检查是否可以施法
@@ -163,38 +162,72 @@ func _commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
 	return true
 
 ## [核心重构] 施放技能
-## 职责：应用状态，不负责完成检查
-## 逻辑流：应用状态 -> （由子类或执行计时器负责完成检查）
-## [新架构] 使用 Status 系统，通过执行时间自动完成技能
-## 
-## 设计原则：
-## - _on_cast() 只负责应用状态，保持职责单一
-## - 完成检查由 _start_execution_timer() 或子类自己管理
-## - 子类可以重写此方法，但建议调用 _apply_initial_statuses() 来应用状态
+## 职责：应用状态或效果，不负责完成检查.
+##
+## [新架构] v3.0 推荐使用 Status 系统.
+## 逻辑流:
+## 1. 优先应用 statuses 数组中的状态.
+## 2. 如果 statuses 为空, 则回退到旧的, 直接应用 effects 数组.
+## 3. 启动执行计时器 (如果 execution_duration > 0), 在时间到期时自动完成技能.
 func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
 	var instigator = ability_comp.get_parent()
 	if not is_instance_valid(instigator):
 		push_warning("ActiveAbility: Cannot cast, instigator is not valid")
 		return
-	
-	# 1. 应用直接效果（简单效果，立即执行）
-	_apply_initial_effects(instigator, input_target, context)
-	
-	# 2. 应用初始状态（提取为独立方法，便于子类复用）
-	_apply_initial_statuses(instigator, input_target, context)
-	
-	# 3. 启动执行计时器（如果配置了执行时间）
-	# 注意：执行计时器会在时间到期时自动调用 _check_ability_completion()
+
+	# 新架构 (v3.0+): 优先使用 Status 系统
+	if not statuses.is_empty():
+		_apply_initial_statuses(instigator, input_target, context)
+	# 旧架构 (向后兼容): 如果没有配置 Status, 则回退到直接应用 Effect
+	elif not effects.is_empty():
+		push_warning("ActiveAbility: Ability '%s' is using deprecated direct effects. Consider wrapping them in a GameplayStatusData." % ability_id)
+		_apply_initial_effects(instigator, input_target, context)
+
+	# 应用 Modifier 追加的额外效果 (新旧架构通用)
+	_apply_modifier_effects(instigator, input_target, context)
+
+	# 启动执行计时器, 决定技能何时结束
 	if execution_duration > 0.0:
 		_start_execution_timer(ability_comp)
-	elif execution_duration == 0.0:
-		# 瞬时技能：立即完成
+	# 如果没有持续时间, 并且没有状态需要等待, 则认为是瞬时技能, 立即完成
+	elif statuses.is_empty():
 		_check_ability_completion()
+	# 如果有状态, 技能的完成将由状态的生命周期决定 (通过 GameplayAbility 的 _on_status_completed).
 
-## 应用初始效果（提取为独立方法，便于子类复用）
-## [param] instigator: Node 施法者
-## [param] input_target: Node 输入目标
-## [param] context: Dictionary 上下文信息
+
+## 应用由 Modifier 动态追加的额外效果
+func _apply_modifier_effects(instigator: Node, input_target: Node, context: Dictionary) -> void:
+	var extra_effects = context.get("extra_effects", [])
+	if not (extra_effects is Array and not extra_effects.is_empty()):
+		return
+
+	var effect_context = context.duplicate()
+	effect_context["input_target"] = input_target
+	effect_context["ability_id"] = ability_id
+	
+	var apply_to_all = context.get("apply_extra_effects_to_all_targets", true)
+	
+	# 确定目标列表
+	var targets: Array[Node] = []
+	if apply_to_all:
+		# 应用到所有目标（使用 targeting_strategy）
+		targets = _get_targets_for_application(instigator, input_target, effect_context)
+	else:
+		# 只应用到 input_target
+		if is_instance_valid(input_target):
+			targets = [input_target]
+	
+	# 为所有目标应用额外效果
+	for effect_data in extra_effects:
+		if not is_instance_valid(effect_data):
+			continue
+		
+		for target in targets:
+			if is_instance_valid(target):
+				_apply_single_effect_to_target(effect_data, target, instigator, effect_context)
+
+
+## [已弃用] 应用初始直接效果（为向后兼容保留）
 func _apply_initial_effects(instigator: Node, input_target: Node, context: Dictionary) -> void:
 	# 准备效果上下文
 	var effect_context = context.duplicate()
@@ -207,33 +240,7 @@ func _apply_initial_effects(instigator: Node, input_target: Node, context: Dicti
 			if not is_instance_valid(effect_data):
 				continue
 			
-			# 【关键】获取目标列表（使用 targeting_strategy 或默认到施法者）
 			var targets: Array[Node] = _get_targets_for_application(instigator, input_target, effect_context)
-			
-			# 为所有目标应用效果
-			for target in targets:
-				if is_instance_valid(target):
-					_apply_single_effect_to_target(effect_data, target, instigator, effect_context)
-	
-	# 应用 Modifier 追加的额外效果（如果存在）
-	var extra_effects = context.get("extra_effects", [])
-	if extra_effects is Array and not extra_effects.is_empty():
-		var apply_to_all = context.get("apply_extra_effects_to_all_targets", true)
-		
-		# 确定目标列表
-		var targets: Array[Node] = []
-		if apply_to_all:
-			# 应用到所有目标（使用 targeting_strategy）
-			targets = _get_targets_for_application(instigator, input_target, effect_context)
-		else:
-			# 只应用到 input_target
-			if is_instance_valid(input_target):
-				targets = [input_target]
-		
-		# 为所有目标应用额外效果
-		for effect_data in extra_effects:
-			if not is_instance_valid(effect_data):
-				continue
 			
 			for target in targets:
 				if is_instance_valid(target):
