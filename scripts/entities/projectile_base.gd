@@ -26,6 +26,8 @@ var max_pierce_count: int = -1
 
 ## 移动策略实例（由 ProjectileData 注入）
 var movement_strategy: ProjectileMovementStrategy = null
+## 撞击策略实例（由 ProjectileData 注入，控制命中时的行为，如链式传导等）
+var impact_strategy: ProjectileImpactStrategy = null
 
 # ========== 运行时数据（由 Ability 注入）==========
 ## 施法者（用于过滤碰撞，避免击中自己，以及作为弹头的施加者）
@@ -161,18 +163,15 @@ func _handle_impact(target: Node) -> void:
 	var hit_pos = global_position  # 或者更精确的碰撞点
 	var hit_dir = velocity.normalized() if velocity.length_squared() > 0.01 else Vector3.ZERO
 	
-	# 4. 传递弹头（Payload）：将携带的状态和效果应用给目标
-	_deliver_payload(target, hit_pos, hit_dir)
+	var should_consume: bool = true
 	
-	# 5. 处理穿透逻辑
-	var should_consume = true  # 默认消耗（销毁）
-	if piercing:
-		# 检查穿透次数
-		if max_pierce_count < 0 or pierce_count < max_pierce_count:
-			# 可以继续穿透
-			should_consume = false
-			pierce_count += 1
-			print("ProjectileBase: Piercing through (count: %d)" % pierce_count)
+	# 4. 如果配置了撞击策略，则交由策略处理
+	if is_instance_valid(impact_strategy):
+		should_consume = impact_strategy.on_impact(self, target, hit_pos, hit_dir)
+	else:
+		# 默认行为：传递 Payload，然后根据穿透配置决定是否销毁
+		_deliver_payload(target, hit_pos, hit_dir)
+		should_consume = _apply_piercing_logic()
 	
 	# 6. 发射撞击信号，通知外部系统（如技能系统）
 	# 注意：投射物已经自己处理了穿透逻辑和销毁决策
@@ -185,6 +184,16 @@ func _handle_impact(target: Node) -> void:
 	# 7. 如果应该消耗，销毁投射物
 	if should_consume:
 		destroy(true)
+
+## 默认穿透逻辑（供默认撞击行为和自定义策略复用）
+func _apply_piercing_logic() -> bool:
+	var should_consume := true
+	if piercing:
+		if max_pierce_count < 0 or pierce_count < max_pierce_count:
+			should_consume = false
+			pierce_count += 1
+			print("ProjectileBase: Piercing through (count: %d)" % pierce_count)
+	return should_consume
 
 ## 检查是否可以生成撞击魔法场（用于元素反应/连携）
 ## 例如：只在命中带有特定标签（如燃烧）的目标时才生成爆炸魔法场
