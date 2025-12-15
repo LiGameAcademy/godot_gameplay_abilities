@@ -16,6 +16,7 @@ var _duration_timer: Timer = null  # 用于自动移除的计时器
 var _periodic_timer: Timer = null  # 周期性效果计时器（状态只有一个 period）
 var _is_connected_to_event_bus: bool = false  # 是否已连接到统一事件系统
 var _initial_context: Dictionary = {}  # 保存应用时的上下文（用于周期性效果）
+var _cue_instance: GameplayCue = null  # 保存克隆的 Cue 实例（用于停止时清理）
 
 ## 状态完成信号
 ## 当状态完成时（瞬时状态立即完成，持续状态在移除时完成）发出此信号
@@ -397,23 +398,35 @@ func _execute_status_cue() -> void:
 	if not is_instance_valid(target):
 		return
 	
-	# 执行 Cue（Manager 会处理挂点计算）
-	GameplayCueManager.execute_cue(status_data.cue, target, {})
+	# 【关键】克隆 Cue 实例（避免直接修改配置数据）
+	# 使用 deep 复制，确保所有 Cue 组件也被克隆
+	_cue_instance = status_data.cue.duplicate(true) as GameplayCue
+	if not is_instance_valid(_cue_instance):
+		push_warning("GameplayStatusInstance: Failed to duplicate cue instance")
+		return
+	
+	# 执行克隆的 Cue 实例（Manager 会处理挂点计算）
+	GameplayCueManager.execute_cue(_cue_instance, target, {})
 
 ## 停止状态 Cue（清理视觉反馈）
 func _stop_status_cue() -> void:
-	if not is_instance_valid(status_data) or not is_instance_valid(status_data.cue):
+	if not is_instance_valid(_cue_instance):
+		# 如果没有保存的 Cue 实例，说明可能没有执行过 Cue，直接返回
 		return
 	
 	var target = get_target_entity()
 	if not is_instance_valid(target):
 		return
 	
+	# 【关键】使用克隆的 Cue 实例停止持续效果
 	# 遍历所有 Cue 组件并停止持续效果
-	for cue_component in status_data.cue.cues:
+	for cue_component in _cue_instance.cues:
 		if not is_instance_valid(cue_component):
 			continue
 		
 		# 如果 Cue 组件实现了 stop 方法，调用它
 		if cue_component.has_method("stop"):
 			cue_component.stop(target)
+	
+	# 清理 Cue 实例引用
+	_cue_instance = null

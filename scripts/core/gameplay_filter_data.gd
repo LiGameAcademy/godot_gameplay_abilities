@@ -16,4 +16,3 @@ func check(target: Node, instigator: Node, context: Dictionary) -> bool:
 func _check(_target: Node, _instigator: Node, _context: Dictionary) -> bool:
 	# 默认总是通过
 	return true
-

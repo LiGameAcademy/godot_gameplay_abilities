@@ -102,6 +102,11 @@ func _can_cast(ability_comp: Node, target: Node = null, context: Dictionary = {}
 	if not is_instance_valid(instigator):
 		return false
 	
+	# 【标签系统】检查是否被眩晕或沉默（无法释放技能）
+	if TagManager.has_tag(instigator, &"state.stunned") or TagManager.has_tag(instigator, &"state.silenced"):
+		print("ActiveAbility: Caster is stunned or silenced, cannot cast ability %s" % ability_id)
+		return false
+	
 	# 检查标签要求（标签系统集成）
 	# 检查必须标签
 	if not caster_required_tags.is_empty():
@@ -276,9 +281,7 @@ func _get_targets_for_application(instigator: Node, input_target: Node, context:
 	# 如果配置了 targeting_strategy，使用它
 	if is_instance_valid(targeting_strategy):
 		var targets = targeting_strategy.resolve_targets(instigator, input_target, context)
-		# 如果策略返回了目标，使用它们
-		if not targets.is_empty():
-			return targets
+		return targets
 	
 	# 默认：只应用到施法者
 	push_error("ActiveAbility: No targeting strategy found for ability %s" % ability_id)

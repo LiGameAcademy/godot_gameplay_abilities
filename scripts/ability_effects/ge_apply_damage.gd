@@ -2,6 +2,9 @@ extends GameplayEffect
 class_name GE_ApplyDamage
 
 ## 应用伤害效果
+## 默认会阻挡带有 state.invulnerable 标签的目标（免疫伤害）。
+## 如需让某个资源忽略此默认值，可将 add_default_invulnerable_block 设为 false，
+## 或直接在资源上自定义 target_blocked_tags。
 
 @export var damage_multiplier: float = 1.0 ## 伤害倍数
 @export var vital_id : StringName = &"health"
@@ -9,6 +12,14 @@ class_name GE_ApplyDamage
 @export var vital_comp_name : StringName = &"GameplayAttributeComponent"
 @export var instigator_attribute_comp_name : StringName = &"GameplayAttributeComponent"
 @export var ability_comp_name : StringName = &"GameplayAbilityComponent"
+## 免疫伤害标签
+@export var invulnerable_block_tag: StringName = &"state.invulnerable"
+
+func _init() -> void:
+	# 为伤害效果提供默认的免疫标签，避免在每个资源里手工配置
+	# 可通过将 add_default_invulnerable_block 设为 false 来禁用该默认值
+	if target_blocked_tags.is_empty() and not invulnerable_block_tag.is_empty():
+		target_blocked_tags = [invulnerable_block_tag]
 
 func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 	var vital_comp = GameplayAbilitySystem.get_component_by_interface(target, vital_comp_name)
