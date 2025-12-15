@@ -171,6 +171,78 @@ func _on_learned(_ability_comp: Node, _status_comp: Node) -> void: pass
 ## 默认实现为空，子类可按需重写（如 PassiveAbility 需要移除状态）
 func _on_forgotten(_ability_comp: Node, _status_comp: Node) -> void: pass
 
+## 移除技能应用的所有状态（私有辅助方法）
+## [param] entity: Node 实体（状态持有者）
+## [param] status_comp: Node 状态组件
+func _remove_all_statuses_from_entity(entity: Node, status_comp: Node) -> void:
+	if not is_instance_valid(entity) or not is_instance_valid(status_comp):
+		return
+	
+	if not status_comp.has_method("remove_status"):
+		return
+	
+	# 遍历技能配置的所有状态，移除它们
+	for status_data in statuses:
+		if not is_instance_valid(status_data):
+			continue
+		var sid: StringName = status_data.status_id
+		if not sid.is_empty():
+			status_comp.remove_status(sid)
+
+## 应用状态到目标列表（私有辅助方法）
+## [param] instigator: Node 施法者
+## [param] input_target: Node 输入目标（用于策略解析）
+## [param] context: Dictionary 上下文信息
+## [param] targeting_strategy: TargetingStrategy 可选的目标获取策略（如果为 null，则应用到 instigator）
+func _apply_statuses_to_targets(instigator: Node, input_target: Node, context: Dictionary, targeting_strategy: TargetingStrategy = null) -> void:
+	if not is_instance_valid(instigator) or statuses.is_empty():
+		return
+	
+	# 准备状态上下文
+	var status_context = context.duplicate()
+	status_context["input_target"] = input_target
+	status_context["ability_id"] = ability_id
+	
+	# 获取目标列表
+	var targets: Array[Node] = []
+	if is_instance_valid(targeting_strategy):
+		targets = targeting_strategy.resolve_targets(instigator, input_target, status_context)
+	else:
+		# 默认：只应用到施法者
+		targets = [instigator]
+	
+	if targets.is_empty():
+		return
+	
+	# 为所有目标应用状态
+	for status_data in statuses:
+		if not is_instance_valid(status_data):
+			continue
+		
+		for target in targets:
+			if not is_instance_valid(target):
+				continue
+			
+			_apply_status_to_target(target, status_data, instigator, status_context)
+
+## 应用单个状态到指定目标（私有辅助方法）
+## [param] target: Node 目标实体
+## [param] status_data: GameplayStatusData 状态数据
+## [param] instigator: Node 施法者
+## [param] context: Dictionary 上下文信息
+func _apply_status_to_target(target: Node, status_data: GameplayStatusData, instigator: Node, context: Dictionary) -> void:
+	if not is_instance_valid(status_data) or not is_instance_valid(target):
+		return
+	
+	# 获取目标的状态组件
+	var status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
+	if not is_instance_valid(status_comp):
+		push_warning("GameplayAbility: Target %s has no GameplayStatusComponent, cannot apply status %s" % [target.name, status_data.status_id])
+		return
+	
+	# 应用状态
+	status_comp.apply_status(status_data, instigator, 1, context)
+
 ## [子类可重写] 检查是否可以施法
 ## 默认返回 true，子类应重写此方法以实现具体的施法条件检查
 func _can_cast(_ability_comp: Node, _target: Node, _context: Dictionary = {}) -> bool: return true
@@ -184,10 +256,19 @@ func _commit_cast(_ability_comp: Node, _context: Dictionary = {}) -> bool: retur
 func _clear_cast(_ability_comp: Node, _target: Node) -> void: pass
 
 ## [子类可重写] 技能被取消时的处理
-## 默认实现为空，子类可按需重写（如需要清理持续效果、停止计时器等）
+## 默认实现：清理 Status 订阅和移除技能应用的状态
+## 子类可按需重写（如需要清理持续效果、停止计时器等），但应调用 super._on_cancel()
 func _on_cancel(ability_comp: Node, context: Dictionary = {}) -> void:
-	# 清理 Status 订阅
+	# 1. 清理 Status 订阅
 	_clear_statuses()
+	
+	# 2. 移除由该技能应用的所有状态（新架构：技能通过 Status 系统应用效果）
+	if is_instance_valid(ability_comp):
+		var instigator = ability_comp.get_parent()
+		if is_instance_valid(instigator):
+			var status_comp = GameplayAbilitySystem.get_component_by_interface(instigator, "GameplayStatusComponent")
+			if is_instance_valid(status_comp):
+				_remove_all_statuses_from_entity(instigator, status_comp)
 
 ## 检查冷却是否就绪
 ## [return] bool 冷却是否就绪

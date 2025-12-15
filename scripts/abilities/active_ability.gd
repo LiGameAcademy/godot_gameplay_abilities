@@ -220,24 +220,8 @@ func _apply_initial_effects(instigator: Node, input_target: Node, context: Dicti
 ## [param] input_target: Node 输入目标
 ## [param] context: Dictionary 上下文信息
 func _apply_initial_statuses(instigator: Node, input_target: Node, context: Dictionary) -> void:
-	# 准备状态上下文
-	var status_context = context.duplicate()
-	status_context["input_target"] = input_target
-	status_context["ability_id"] = ability_id
-	
-	# 应用状态（新架构）
-	if not statuses.is_empty():
-		for status_data in statuses:
-			if not is_instance_valid(status_data):
-				continue
-			
-			# 【关键】获取目标列表（使用 targeting_strategy 或默认到施法者）
-			var targets: Array[Node] = _get_targets_for_application(instigator, input_target, status_context)
-			
-			# 为所有目标应用状态
-			for target in targets:
-				if is_instance_valid(target):
-					_apply_status_to_target(target, status_data, instigator, status_context)
+	# 使用基类方法，传入本技能的 targeting_strategy
+	_apply_statuses_to_targets(instigator, input_target, context, targeting_strategy)
 
 ## 启动执行计时器（自动完成技能）
 ## [param] ability_comp: Node 技能组件
@@ -287,24 +271,7 @@ func _get_targets_for_application(instigator: Node, input_target: Node, context:
 	push_error("ActiveAbility: No targeting strategy found for ability %s" % ability_id)
 	return []
 
-## 应用状态到指定目标（新架构）
-## [param] target: Node 目标实体
-## [param] status_data: GameplayStatusData 状态数据
-## [param] instigator: Node 施法者
-## [param] context: Dictionary 上下文信息
-func _apply_status_to_target(target: Node, status_data: GameplayStatusData, instigator: Node, context: Dictionary) -> void:
-	if not is_instance_valid(status_data) or not is_instance_valid(target):
-		return
-	
-	# 获取目标的状态组件
-	var status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
-	if not is_instance_valid(status_comp):
-		push_warning("ActiveAbility: Target %s has no GameplayStatusComponent, cannot apply status %s" % [target.name, status_data.status_id])
-		return
-	
-	# 应用状态（状态只应用到自己，不处理目标检测）
-	# 注意：不再订阅 Status 完成信号，技能完成由执行时间控制
-	status_comp.apply_status(status_data, instigator, 1, context)
+# 注意：_apply_status_to_target 已移至基类 GameplayAbility，子类可直接使用
 
 #region ========== 向后兼容方法（供子类使用，如 MagicCircleAbility、ProjectileAbility）==========
 

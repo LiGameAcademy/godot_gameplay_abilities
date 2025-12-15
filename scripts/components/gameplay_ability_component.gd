@@ -274,23 +274,8 @@ func cancel_ability(ability_id: StringName = &"", context: Dictionary = {}) -> v
 	if not is_instance_valid(ability_data):
 		return
 	
-	# 调用技能的取消方法（允许技能自己处理清理逻辑）
+	# 调用技能的取消方法（允许技能自己处理清理逻辑，包括状态移除）
 	ability_data.handle_cancel(self, context)
-	
-	# 获取施法者
-	var instigator = get_parent()
-	if not is_instance_valid(instigator):
-		return
-	
-	# 移除由该技能应用的所有状态（新架构：技能通过 Status 系统应用效果）
-	if not is_instance_valid(_status_comp):
-		_status_comp = GameplayAbilitySystem.get_component_by_interface(instigator, "GameplayStatusComponent")
-	
-	if is_instance_valid(_status_comp):
-		# 遍历技能配置的所有状态，移除它们
-		for status_data in ability_data.statuses:
-			if is_instance_valid(status_data):
-				_status_comp.remove_status(status_data.status_id)
 	
 	# 强制重置状态
 	if _current_casting_ability_id == target_id:

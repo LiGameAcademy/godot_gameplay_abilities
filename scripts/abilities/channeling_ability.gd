@@ -175,15 +175,10 @@ func stop_channeling(reason: String = "manual") -> void:
 		TagManager.remove_tags(_cached_instigator, self_channeling_tags)
 	
 	# 3. 移除由该技能应用的所有状态
-	if is_instance_valid(_cached_instigator) and is_instance_valid(_cached_ability_comp):
+	if is_instance_valid(_cached_instigator):
 		var status_comp = GameplayAbilitySystem.get_component_by_interface(_cached_instigator, "GameplayStatusComponent")
 		if is_instance_valid(status_comp):
-			# 遍历技能配置的所有状态，移除它们
-			for status_data in statuses:
-				if not is_instance_valid(status_data):
-					continue
-				# 通过状态ID移除状态
-				status_comp.remove_status(status_data.status_id)
+			_remove_all_statuses_from_entity(_cached_instigator, status_comp)
 	
 	# 4. 开始冷却时间（引导技能在关闭时才开始冷却）
 	var cooldown = get_cooldown_duration()
