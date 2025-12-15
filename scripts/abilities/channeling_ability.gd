@@ -264,8 +264,11 @@ func _pay_tick_costs() -> bool:
 		
 	return true
 
-func _on_cancel(_ability_comp: Node, _context: Dictionary = {}) -> void:
-	# 如果技能已经激活，停止引导
+func _on_cancel(ability_comp: Node, context: Dictionary = {}) -> void:
+	# 1. 先调用父类方法，确保状态被移除（即使引导未激活也能正确清理）
+	super(ability_comp, context)
+	
+	# 2. 如果技能已经激活，停止引导
 	# 注意：这里调用 stop_channeling 会清除 _is_active，但不会清除 _current_casting_ability_id
 	# 这样可以防止用户继续按住时重复扣除费用
 	if _is_active:

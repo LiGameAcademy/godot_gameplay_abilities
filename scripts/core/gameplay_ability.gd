@@ -20,12 +20,6 @@ class_name GameplayAbility
 ## 适用：所有效果（瞬时、周期性、永久）
 @export var statuses: Array[GameplayStatusData] = []
 
-## 运行时 Status 列表（用于跟踪所有 Status，等待它们完成）
-## 格式：{status_instance: true}
-## 注意：在新架构中，Ability 通过 Status 系统应用效果，因此跟踪 Status 完成而非 Effect 完成
-## 使用 Variant 作为键类型以支持向后兼容（旧架构的 Effect 跟踪）
-var _pending_statuses: Dictionary = {}
-
 ## 冷却剩余时间（秒，由技能自己管理）
 var _cooldown_remaining: float = 0.0
 
@@ -64,8 +58,6 @@ func commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
 ## [param] target: Node 目标节点
 ## [param] context: Dictionary 上下文信息（可选）
 func cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> void:
-	# 清理之前的 Status（防止重复）
-	_clear_statuses()
 	_on_cast(ability_comp, target, context)
 
 ## [子类可重写] 每帧更新（用于需要持续更新的技能，如连击计时器、引导技能）
@@ -119,75 +111,34 @@ func get_animation_name() -> StringName:
 func is_toggleable() -> bool:
 	return false
 
-## 订阅 Status 完成信号（由 Ability 自己管理）
-## [param] status_instance: GameplayStatusInstance 要订阅的状态实例
-func _subscribe_status_completion(status_instance: GameplayStatusInstance) -> void:
-	if not is_instance_valid(status_instance):
-		return
-	
-	# 如果已经订阅过，跳过
-	if _pending_statuses.has(status_instance):
-		return
-	
-	# 添加到 Status 列表
-	_pending_statuses[status_instance] = true
-	
-	# 订阅完成信号
-	# 注意：信号已经传递了 status_instance 参数，不需要 bind
-	if not status_instance.status_completed.is_connected(_on_status_completed):
-		status_instance.status_completed.connect(_on_status_completed)
+## 检查冷却是否就绪
+## [return] bool 冷却是否就绪
+func is_cooldown_ready() -> bool:
+	return _cooldown_remaining <= 0.0
 
-## 检查技能是否完成（所有 Status 都完成时调用）
+## 开始冷却
+## [param] duration: float 冷却持续时间（秒）
+func start_cooldown(duration: float) -> void:
+	if duration > 0.0:
+		_cooldown_remaining = duration
+
+## 获取冷却剩余时间
+## [return] float 冷却剩余时间（秒）
+func get_cooldown_remaining() -> float:
+	return _cooldown_remaining
+
+## 获取冷却进度（0.0-1.0，0.0 表示冷却完成，1.0 表示刚开始冷却）
+## [return] float 冷却进度
+func get_cooldown_progress() -> float:
+	var total_cooldown = get_cooldown_duration()
+	if total_cooldown <= 0.0:
+		return 0.0
+	return _cooldown_remaining / total_cooldown
+
+## 检查技能是否完成
 func _check_ability_completion() -> void:
-	# 如果还有 Status，不完成
-	if not _pending_statuses.is_empty():
-		push_error("GameplayAbility: Ability %s has pending statuses, cannot complete." % ability_id)
-		return
-	
 	# 发出技能完成信号
 	ability_completed.emit(self)
-
-## 清理所有 Status 订阅（技能取消或结束时调用）
-func _clear_statuses() -> void:
-	for status_instance in _pending_statuses.keys():
-		if is_instance_valid(status_instance) and status_instance.status_completed.is_connected(_on_status_completed):
-			status_instance.status_completed.disconnect(_on_status_completed)
-	_pending_statuses.clear()
-
-## [已弃用] 清理所有 Effect 订阅
-## 保留此方法以保持向后兼容，但新架构应使用 _clear_statuses()
-func _clear_effects() -> void:
-	_clear_statuses()
-
-## [子类必须重写] 施放技能（应用效果）
-## 这是技能系统的核心方法，所有子类都必须实现
-@abstract func _on_cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> void
-
-## [子类可重写] 技能学习时的处理
-## 默认实现为空，子类可按需重写（如 PassiveAbility 需要应用状态）
-func _on_learned(_ability_comp: Node, _status_comp: Node) -> void: pass
-
-## [子类可重写] 技能遗忘时的处理
-## 默认实现为空，子类可按需重写（如 PassiveAbility 需要移除状态）
-func _on_forgotten(_ability_comp: Node, _status_comp: Node) -> void: pass
-
-## 移除技能应用的所有状态（私有辅助方法）
-## [param] entity: Node 实体（状态持有者）
-## [param] status_comp: Node 状态组件
-func _remove_all_statuses_from_entity(entity: Node, status_comp: Node) -> void:
-	if not is_instance_valid(entity) or not is_instance_valid(status_comp):
-		return
-	
-	if not status_comp.has_method("remove_status"):
-		return
-	
-	# 遍历技能配置的所有状态，移除它们
-	for status_data in statuses:
-		if not is_instance_valid(status_data):
-			continue
-		var sid: StringName = status_data.status_id
-		if not sid.is_empty():
-			status_comp.remove_status(sid)
 
 ## 应用状态到目标列表（私有辅助方法）
 ## [param] instigator: Node 施法者
@@ -243,6 +194,42 @@ func _apply_status_to_target(target: Node, status_data: GameplayStatusData, inst
 	# 应用状态
 	status_comp.apply_status(status_data, instigator, 1, context)
 
+## 移除技能应用的所有状态（私有辅助方法）
+## [param] entity: Node 实体（状态持有者）
+## [param] status_comp: Node 状态组件
+func _remove_all_statuses_from_entity(entity: Node, status_comp: Node) -> void:
+	if not is_instance_valid(entity) or not is_instance_valid(status_comp):
+		return
+	
+	if not status_comp.has_method("remove_status"):
+		return
+	
+	# 遍历技能配置的所有状态，移除它们
+	for status_data in statuses:
+		if not is_instance_valid(status_data):
+			continue
+		var sid: StringName = status_data.status_id
+		if not sid.is_empty():
+			status_comp.remove_status(sid)
+
+## 获取技能图标
+## [param] ability_comp: Node 技能组件（可选，用于动态图标）
+## [return] Texture 技能图标
+func _get_icon() -> Texture:
+	return icon
+
+## [子类必须重写] 施放技能（应用效果）
+## 这是技能系统的核心方法，所有子类都必须实现
+@abstract func _on_cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> void
+
+## [子类可重写] 技能学习时的处理
+## 默认实现为空，子类可按需重写（如 PassiveAbility 需要应用状态）
+func _on_learned(_ability_comp: Node, _status_comp: Node) -> void: pass
+
+## [子类可重写] 技能遗忘时的处理
+## 默认实现为空，子类可按需重写（如 PassiveAbility 需要移除状态）
+func _on_forgotten(_ability_comp: Node, _status_comp: Node) -> void: pass
+
 ## [子类可重写] 检查是否可以施法
 ## 默认返回 true，子类应重写此方法以实现具体的施法条件检查
 func _can_cast(_ability_comp: Node, _target: Node, _context: Dictionary = {}) -> bool: return true
@@ -259,76 +246,10 @@ func _clear_cast(_ability_comp: Node, _target: Node) -> void: pass
 ## 默认实现：清理 Status 订阅和移除技能应用的状态
 ## 子类可按需重写（如需要清理持续效果、停止计时器等），但应调用 super._on_cancel()
 func _on_cancel(ability_comp: Node, context: Dictionary = {}) -> void:
-	# 1. 清理 Status 订阅
-	_clear_statuses()
-	
-	# 2. 移除由该技能应用的所有状态（新架构：技能通过 Status 系统应用效果）
+	# 移除由该技能应用的所有状态（新架构：技能通过 Status 系统应用效果）
 	if is_instance_valid(ability_comp):
 		var instigator = ability_comp.get_parent()
 		if is_instance_valid(instigator):
 			var status_comp = GameplayAbilitySystem.get_component_by_interface(instigator, "GameplayStatusComponent")
 			if is_instance_valid(status_comp):
 				_remove_all_statuses_from_entity(instigator, status_comp)
-
-## 检查冷却是否就绪
-## [return] bool 冷却是否就绪
-func is_cooldown_ready() -> bool:
-	return _cooldown_remaining <= 0.0
-
-## 开始冷却
-## [param] duration: float 冷却持续时间（秒）
-func start_cooldown(duration: float) -> void:
-	if duration > 0.0:
-		_cooldown_remaining = duration
-
-## 获取冷却剩余时间
-## [return] float 冷却剩余时间（秒）
-func get_cooldown_remaining() -> float:
-	return _cooldown_remaining
-
-## 获取冷却进度（0.0-1.0，0.0 表示冷却完成，1.0 表示刚开始冷却）
-## [return] float 冷却进度
-func get_cooldown_progress() -> float:
-	var total_cooldown = get_cooldown_duration()
-	if total_cooldown <= 0.0:
-		return 0.0
-	return _cooldown_remaining / total_cooldown
-
-## 处理 Status 完成信号
-## [param] status_instance: GameplayStatusInstance 完成的状态实例
-func _on_status_completed(status_instance: GameplayStatusInstance) -> void:
-	if not _pending_statuses.has(status_instance):
-		return
-	
-	# 从 Status 列表中移除
-	_pending_statuses.erase(status_instance)
-	
-	# 断开信号连接
-	if is_instance_valid(status_instance) and status_instance.status_completed.is_connected(_on_status_completed):
-		status_instance.status_completed.disconnect(_on_status_completed)
-	
-	# 检查是否所有 Status 都完成了
-	_check_ability_completion()
-
-## [已弃用] 处理 Effect 完成信号
-## 保留此方法以保持向后兼容，但新架构应使用 _on_status_completed()
-func _on_effect_completed(effect: GameplayEffect) -> void:
-	var temp_key = effect as Variant
-	if not _pending_statuses.has(temp_key):
-		return
-	
-	# 从 Status 列表中移除（向后兼容）
-	_pending_statuses.erase(temp_key)
-	
-	# 断开信号连接
-	if is_instance_valid(effect) and effect.effect_completed.is_connected(_on_effect_completed):
-		effect.effect_completed.disconnect(_on_effect_completed)
-	
-	# 检查是否所有 Status 都完成了
-	_check_ability_completion()
-
-## 获取技能图标
-## [param] ability_comp: Node 技能组件（可选，用于动态图标）
-## [return] Texture 技能图标
-func _get_icon() -> Texture:
-	return icon
