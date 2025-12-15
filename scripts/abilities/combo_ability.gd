@@ -1,5 +1,5 @@
 extends ActiveAbility
-class_name CombatAbility
+class_name ComboAbility
 
 ## 连击技能
 ## 管理多段连击，每次触发时根据当前连击索引执行对应的能力
