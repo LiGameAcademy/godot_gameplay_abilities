@@ -5,14 +5,10 @@ extends Node
 ## 核心思想：Fire and Forget（射后不理）
 ## 采用组合模式，将具体表现处理交给 Cue 组件
 
-## 飘字场景模板（用于初始化飘字 Cue 的对象池）
-var _floating_text_template: PackedScene = null
 ## 持续 Cue 列表（需要每帧更新的 Cue，如拖尾）
 var _persistent_cues: Array[GameplayCueBase] = []
 
 func _ready() -> void:
-	# 初始化飘字模板
-	_init_floating_text_template()
 	# 启用 process 以更新持续 Cue
 	set_process(true)
 
@@ -32,12 +28,6 @@ func _process(delta: float) -> void:
 	for cue_component in to_remove:
 		_persistent_cues.erase(cue_component)
 
-## 初始化飘字模板
-func _init_floating_text_template() -> void:
-	_floating_text_template = load("res://prefabs/fx/floating_text.tscn")
-	if not is_instance_valid(_floating_text_template):
-		push_warning("GameplayCueManager: Floating text scene not found")
-
 ## 执行 Cue（核心接口）
 ## [param] cue: GameplayCue Cue 资源
 ## [param] target: Node 目标节点（用于计算挂点位置）
@@ -56,11 +46,6 @@ func execute_cue(cue: GameplayCue, target: Node, context: Dictionary = {}) -> vo
 		
 		# 应用偏移量（如果配置了）
 		location += cue_component.offset
-		
-		# 初始化飘字 Cue 的对象池（如果需要）
-		if cue_component.has_method("initialize_pool"):
-			if cue_component.get("_text_template") == null and is_instance_valid(_floating_text_template):
-				cue_component.initialize_pool(_floating_text_template, 10)
 		
 		# 执行 Cue 组件
 		cue_component.execute(target, location, context)

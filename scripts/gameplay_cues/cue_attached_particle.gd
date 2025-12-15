@@ -30,13 +30,19 @@ func _execute(target: Node, location: Vector3, context: Dictionary) -> void:
 	if not is_instance_valid(particle):
 		return
 	
-	# 2. 根据配置决定附加方式
+	# 2. 根据配置决定附加方式（先设置位置，再传递上下文）
 	if attach_to_target and is_instance_valid(target):
-		_attach_to_target(particle, target)
+		_attach_to_target(particle, target, context)
 	else:
-		_spawn_at_location(particle, location)
+		_spawn_at_location(particle, location, context)
 	
-	# 3. 应用缩放随机性（如果配置了）
+	# 3. 【关键】如果特效场景实现了 setup_from_context 方法，传递上下文数据
+	# 注意：在位置设置之后调用，确保动画在正确位置播放
+	# 这样特效节点可以从 context 中读取关键数据（如伤害值、治疗值等）
+	if particle.has_method("setup_from_context"):
+		particle.setup_from_context(context)
+	
+	# 4. 应用缩放随机性（如果配置了）
 	_apply_scale_randomness(particle)
 
 ## 验证并实例化粒子
@@ -56,7 +62,8 @@ func _validate_and_instantiate_particle() -> Node:
 ## 附加特效到目标节点
 ## [param] particle: Node 粒子节点
 ## [param] target: Node 目标节点
-func _attach_to_target(particle: Node, target: Node) -> void:
+## [param] context: Dictionary 上下文信息（可选）
+func _attach_to_target(particle: Node, target: Node, context: Dictionary = {}) -> void:
 	# 获取挂点节点
 	var attachment_node = _get_attachment_node(target)
 	if not is_instance_valid(attachment_node):
@@ -80,7 +87,8 @@ func _attach_to_target(particle: Node, target: Node) -> void:
 ## 在指定位置生成特效（不附加到目标）
 ## [param] particle: Node 粒子节点
 ## [param] location: Vector3 生成位置（世界坐标）
-func _spawn_at_location(particle: Node, location: Vector3) -> void:
+## [param] context: Dictionary 上下文信息（可选）
+func _spawn_at_location(particle: Node, location: Vector3, context: Dictionary = {}) -> void:
 	var root = Engine.get_main_loop().root
 	if not is_instance_valid(root):
 		push_warning("CueAttachedParticle: Cannot spawn particle, no valid root node")
