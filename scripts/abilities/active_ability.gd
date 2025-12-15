@@ -214,6 +214,30 @@ func _apply_initial_effects(instigator: Node, input_target: Node, context: Dicti
 			for target in targets:
 				if is_instance_valid(target):
 					_apply_single_effect_to_target(effect_data, target, instigator, effect_context)
+	
+	# 应用 Modifier 追加的额外效果（如果存在）
+	var extra_effects = context.get("extra_effects", [])
+	if extra_effects is Array and not extra_effects.is_empty():
+		var apply_to_all = context.get("apply_extra_effects_to_all_targets", true)
+		
+		# 确定目标列表
+		var targets: Array[Node] = []
+		if apply_to_all:
+			# 应用到所有目标（使用 targeting_strategy）
+			targets = _get_targets_for_application(instigator, input_target, effect_context)
+		else:
+			# 只应用到 input_target
+			if is_instance_valid(input_target):
+				targets = [input_target]
+		
+		# 为所有目标应用额外效果
+		for effect_data in extra_effects:
+			if not is_instance_valid(effect_data):
+				continue
+			
+			for target in targets:
+				if is_instance_valid(target):
+					_apply_single_effect_to_target(effect_data, target, instigator, effect_context)
 
 ## 应用初始状态（提取为独立方法，便于子类复用）
 ## [param] instigator: Node 施法者
@@ -300,6 +324,14 @@ func _apply_effects_to_targets(effects_to_apply: Array, instigator: Node, target
 func _apply_single_effect_to_target(effect: GameplayEffect, target: Node, instigator: Node, context: Dictionary) -> void:
 	if not is_instance_valid(effect) or not is_instance_valid(target):
 		return
+	
+	# 【Modifier 钩子】效果应用前通知（用于 DamageMultiplierModifier 等）
+	var modifier_comp: GameplayModifierComponent = GameplayAbilitySystem.get_component_by_interface(
+		instigator,
+		"GameplayModifierComponent"
+	)
+	if is_instance_valid(modifier_comp):
+		modifier_comp.notify_effect_applied(effect, target, instigator, context)
 	
 	var effect_inst = effect.duplicate(true) as GameplayEffect
 	if is_instance_valid(effect_inst):

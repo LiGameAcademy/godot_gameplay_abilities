@@ -44,6 +44,11 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 
 	var base_damage = attribute_comp.get_value(base_damage_attribute)
 	var base_final_damage = base_damage * damage_multiplier
+	
+	# 应用 Modifier 提供的伤害倍率（如果存在）
+	var modifier_multiplier = context.get("damage_multiplier_modifier", 1.0)
+	base_final_damage *= modifier_multiplier
+	
 	var damage_info = DamageInfo.new(instigator, ability_comp, base_final_damage)
 	
 	# 应用伤害（HealthVital 内部会计算最终伤害并返回）

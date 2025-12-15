@@ -78,6 +78,17 @@ enum StackingPolicy {
 ## 状态移除时，会自动停止持续 Cue（如附加粒子特效）
 @export var cue: GameplayCue = null
 
+@export_group("Ability Modifiers")
+## 技能行为修改器列表
+## 当状态应用时，这些修改器会被注册到 GameplayModifierComponent
+## 当状态移除时，这些修改器会被自动移除
+## 
+## 使用场景：
+## - "狂暴状态"：普攻变成 AOE（通过修改器追加范围效果）
+## - "法术连击"：下一个技能 +3 投射物（通过修改器增加投射物数量）
+## - "元素共鸣"：所有火系技能伤害 +50%（通过修改器修改伤害倍率）
+@export var ability_modifiers: Array[GameplayAbilityModifier] = []
+
 ## 检查此状态是否可以被指定事件触发
 func can_trigger_on_event(event_type: StringName) -> bool:
 	return trigger_on_events.has(event_type)

@@ -61,8 +61,14 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 	# 5. 获取追踪目标（用于投射物追踪）
 	var target_for_homing: Node3D = _get_homing_target(instigator, input_target, context)
 	
-	# 6. 循环生成投射物
-	for i in range(projectile_count):
+	# 6. 计算实际发射数量（支持 Modifier 修改）
+	var actual_projectile_count = projectile_count
+	# 读取 Modifier 通过 context 传递的额外投射物数量
+	actual_projectile_count += context.get("extra_projectiles", 0)
+	actual_projectile_count = max(1, actual_projectile_count)  # 至少发射 1 个
+	
+	# 7. 循环生成投射物
+	for i in range(actual_projectile_count):
 		var projectile = _spawn_projectile(
 			instigator, 
 			spawn_transform, 

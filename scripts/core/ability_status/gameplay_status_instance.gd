@@ -93,7 +93,10 @@ func apply(context: Dictionary = {}) -> void:
 	# 6. 应用状态标签（标签系统集成）
 	_apply_status_tags()
 	
-	# 7. 执行状态 Cue（视觉反馈）
+	# 7. 注册技能行为修改器（如果配置了）
+	_register_ability_modifiers()
+	
+	# 8. 执行状态 Cue（视觉反馈）
 	_execute_status_cue()
 
 ## 状态被移除时，移除所有效果
@@ -122,10 +125,13 @@ func remove() -> void:
 	# 5. 移除状态标签（标签系统集成）
 	_remove_status_tags()
 	
-	# 6. 停止状态 Cue（清理视觉反馈）
+	# 6. 移除技能行为修改器（清理修改器）
+	_unregister_ability_modifiers()
+	
+	# 7. 停止状态 Cue（清理视觉反馈）
 	_stop_status_cue()
 	
-	# 7. 发出完成信号（持续状态在移除时完成）
+	# 8. 发出完成信号（持续状态在移除时完成）
 	status_completed.emit(self)
 
 ## 处理事件（用于事件监听型效果）
@@ -427,6 +433,55 @@ func _stop_status_cue() -> void:
 		# 如果 Cue 组件实现了 stop 方法，调用它
 		if cue_component.has_method("stop"):
 			cue_component.stop(target)
+
+## 注册技能行为修改器（状态应用时调用）
+func _register_ability_modifiers() -> void:
+	if not is_instance_valid(status_data) or status_data.ability_modifiers.is_empty():
+		return
+	
+	var status_holder = get_target_entity()
+	if not is_instance_valid(status_holder):
+		return
+	
+	# 获取 ModifierComponent
+	var modifier_comp: GameplayModifierComponent = GameplayAbilitySystem.get_component_by_interface(
+		status_holder,
+		"GameplayModifierComponent"
+	)
+	
+	if not is_instance_valid(modifier_comp):
+		# 如果没有 ModifierComponent，静默失败（不是所有实体都需要修改器）
+		return
+	
+	# 为每个修改器设置来源（使用状态 ID 作为来源标识）
+	var source_id = "status." + status_data.status_id
+	
+	# 注册所有修改器
+	for mod in status_data.ability_modifiers:
+		if is_instance_valid(mod):
+			modifier_comp.add_modifier(mod, source_id)
+
+## 移除技能行为修改器（状态移除时调用）
+func _unregister_ability_modifiers() -> void:
+	if not is_instance_valid(status_data):
+		return
+	
+	var status_holder = get_target_entity()
+	if not is_instance_valid(status_holder):
+		return
+	
+	# 获取 ModifierComponent
+	var modifier_comp: GameplayModifierComponent = GameplayAbilitySystem.get_component_by_interface(
+		status_holder,
+		"GameplayModifierComponent"
+	)
+	
+	if not is_instance_valid(modifier_comp):
+		return
+	
+	# 使用来源标识批量移除（更高效）
+	var source_id = "status." + status_data.status_id
+	modifier_comp.remove_modifiers_by_source(source_id)
 	
 	# 清理 Cue 实例引用
 	_cue_instance = null

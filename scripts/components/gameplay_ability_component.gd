@@ -213,10 +213,22 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 					push_warning("GameplayAbilityComponent: Ability %s toggle-off rejected." % ability_id)
 				return result
 	
+	# 【Modifier 钩子】施法前通知
+	var modifier_comp: GameplayModifierComponent = GameplayAbilitySystem.get_component_by_interface(
+		get_parent(),
+		"GameplayModifierComponent"
+	)
+	if is_instance_valid(modifier_comp):
+		modifier_comp.notify_before_ability_cast(self, ability_data, context)
+	
 	# 正常执行技能：检查消耗
 	if not ability_data.commit_cast(self, context):
 		push_error("GameplayAbilityComponent: Ability %s commit cast failed." % ability_id)
 		return false
+	
+	# 【Modifier 钩子】施法成功后通知
+	if is_instance_valid(modifier_comp):
+		modifier_comp.notify_after_ability_commit(self, ability_data, context)
 	
 	# 检查是否跳过冷却（用于技能链式调用）
 	if not context.get("skip_cooldown", false):
@@ -225,6 +237,13 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 		
 		# 获取冷却时间（使用方法，支持 CombatAbility 重写）
 		var cooldown = ability_data.get_cooldown_duration()
+		
+		# 应用冷却缩减（如果 Modifier 提供了）
+		var cooldown_reduction = context.get("cooldown_reduction", 0.0)
+		if cooldown_reduction > 0.0:
+			cooldown = cooldown * (1.0 - cooldown_reduction)
+			cooldown = max(0.0, cooldown)  # 确保冷却时间不为负
+		
 		if cooldown > 0.0:
 			ability_data.start_cooldown(cooldown)
 	
@@ -373,6 +392,19 @@ func _apply_ability_effect(ability_id: StringName, target: Node = null, context:
 	if not is_instance_valid(ability_data): 
 		push_error("GameplayAbilityComponent: Ability data is not valid")
 		return
+	
+	# 【Modifier 钩子】技能真正生效前通知（修改参数的最佳时机）
+	var modifier_comp: GameplayModifierComponent = GameplayAbilitySystem.get_component_by_interface(
+		get_parent(),
+		"GameplayModifierComponent"
+	)
+	
+	# 将 ability 和 ability_comp 添加到 context，供 Modifier 使用（如 DamageMultiplierModifier）
+	context["ability"] = ability_data
+	context["ability_comp"] = self
+	
+	if is_instance_valid(modifier_comp):
+		modifier_comp.notify_before_apply_ability(self, ability_data, target, context)
 	
 	# 订阅技能完成信号（如果尚未订阅）
 	if not ability_data.ability_completed.is_connected(_on_ability_completed):
