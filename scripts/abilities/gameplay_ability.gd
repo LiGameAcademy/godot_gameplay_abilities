@@ -13,6 +13,12 @@ class_name GameplayAbility
 @export var disabled: bool = false                  	## 技能是否禁用
 @export var targeting_scorer: TargetingScorer = null   	## 目标评分器
 
+@export_group("Level System")
+## 最大等级
+@export var max_level: int = 10
+## 当前等级（运行时）
+var current_level: int = 1
+
 @export_group("Status")
 ## 技能应用的状态列表（新架构）
 ## Status 系统会处理目标检测、筛选和应用效果
@@ -140,6 +146,18 @@ func get_cooldown_progress() -> float:
 		return 0.0
 	return _cooldown_remaining / total_cooldown
 
+## 设置技能等级
+## [param] level: int 等级值
+func set_level(level: int) -> void:
+	current_level = clamp(level, 1, max_level)
+	_on_level_changed()
+
+## 等级改变时的回调（子类可重写）
+## 当技能等级改变时，会调用此方法
+## 子类可以重写此方法来实现等级相关的逻辑（如重新计算冷却、消耗等）
+func _on_level_changed() -> void:
+	pass
+
 ## 检查技能是否完成
 func _check_ability_completion() -> void:
 	# 发出技能完成信号
@@ -242,7 +260,7 @@ func _on_forgotten(_ability_comp: Node, _status_comp: Node) -> void: pass
 ## [子类可重写] 检查是否可以施法
 ## 默认返回 true，子类应重写此方法以实现具体的施法条件检查
 ## [param] context: AbilityContext 上下文信息
-func _can_cast(_ability_comp: Node, _target: Node, _context: AbilityContext) -> bool: return true
+func _can_cast(_ability_comp: Node, _target: Node, _context: Variant = {}) -> bool: return true
 
 ## [子类可重写] 提交施法（消耗资源、开始冷却等）
 ## 默认返回 true，子类应重写此方法以实现具体的资源消耗逻辑

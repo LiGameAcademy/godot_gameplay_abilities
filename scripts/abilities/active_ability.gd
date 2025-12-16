@@ -5,9 +5,19 @@ class_name ActiveAbility
 ## 核心改进：分离了"对己效果"和"对敌效果"，解耦了目标获取逻辑
 
 @export_group("Casting Rules")
-@export var cooldown_duration: float = 0.0  ## 技能冷却时间
+@export var cooldown_duration: float = 0.0  ## 技能冷却时间（基础值）
 @export var costs: Array[AbilityCostBase] = []  ## 技能消耗器数组（支持多种消耗类型）
 @export var cast_point: float = 0.5  ## 施法前摇时间 (动画关键帧)
+
+@export_group("Level Scaling")
+## 冷却时间随等级变化（可选）
+## 如果设置了此值，冷却时间会根据技能等级自动计算
+## 如果未设置，则使用固定的 cooldown_duration
+@export var cooldown_scalable: ScalableValue = null
+## 消耗随等级变化（可选）
+## 如果设置了此值，消耗会根据技能等级自动计算
+## 注意：当前版本消耗系统暂不支持等级成长，此属性为预留接口
+@export var cost_scalable: ScalableValue = null
 ## 技能执行时间（秒）
 ## 如果 > 0，技能会在执行时间结束后自动完成
 ## 如果 <= 0，则使用 cast_point 作为执行时间
@@ -50,6 +60,10 @@ func get_cast_point() -> float:
 	return cast_point
 
 func get_cooldown_duration() -> float:
+	# 如果设置了 cooldown_scalable，根据等级计算冷却时间
+	if is_instance_valid(cooldown_scalable):
+		return cooldown_scalable.get_value_at_level(current_level)
+	# 否则使用固定值
 	return cooldown_duration
 
 func get_animation_name() -> StringName:
@@ -91,8 +105,18 @@ func get_effects_description() -> String:
 
 	return "\n".join(descriptions)
 
+## [重写] 等级改变时的回调
+## 当技能等级改变时，重新计算冷却和消耗
+func _on_level_changed() -> void:
+	super()
+	# 重新计算冷却时间（如果设置了 cooldown_scalable）
+	# 注意：这里只是更新基础值，实际冷却时间在 get_cooldown_duration() 中动态计算
+	# 如果需要立即更新当前冷却，可以在这里处理
+	# 当前设计：冷却时间在每次 get_cooldown_duration() 时动态计算，无需手动更新
+
 ## 检查是否可以施法
-func _can_cast(ability_comp: Node, target: Node = null, context: Dictionary = {}) -> bool:
+func _can_cast(ability_comp: Node, target: Node = null, context: Variant = {}) -> bool:
+	var ctx = ContextUtils.to_context(context)
 	if not is_instance_valid(ability_comp): 
 		push_error("ActiveAbility: Ability %s can not cast." % ability_id)
 		return false
@@ -131,9 +155,9 @@ func _can_cast(ability_comp: Node, target: Node = null, context: Dictionary = {}
 
 	return true
 
-func _commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
+func _commit_cast(ability_comp: Node, context: AbilityContext) -> bool:
 	# 检查是否跳过消耗（用于技能链式调用）
-	if context.get("skip_cost", false):
+	if context.skip_cost:
 		return true
 	
 	var instigator = ability_comp.get_parent() if ability_comp.has_method("get_parent") else null
@@ -169,7 +193,7 @@ func _commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
 ## 1. 优先应用 statuses 数组中的状态.
 ## 2. 如果 statuses 为空, 则回退到旧的, 直接应用 effects 数组.
 ## 3. 启动执行计时器 (如果 execution_duration > 0), 在时间到期时自动完成技能.
-func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
+func _on_cast(ability_comp: Node, input_target: Node, context: AbilityContext) -> void:
 	var instigator = ability_comp.get_parent()
 	if not is_instance_valid(instigator):
 		push_warning("ActiveAbility: Cannot cast, instigator is not valid")
@@ -196,29 +220,28 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 
 
 ## 应用由 Modifier 动态追加的额外效果
-func _apply_modifier_effects(instigator: Node, input_target: Node, context: Dictionary) -> void:
-	var extra_effects = context.get("extra_effects", [])
-	if not (extra_effects is Array and not extra_effects.is_empty()):
+func _apply_modifier_effects(instigator: Node, input_target: Node, context: AbilityContext) -> void:
+	if context.extra_effects.is_empty():
 		return
 
 	var effect_context = context.duplicate()
-	effect_context["input_target"] = input_target
-	effect_context["ability_id"] = ability_id
-	
-	var apply_to_all = context.get("apply_extra_effects_to_all_targets", true)
+	effect_context.input_target = input_target
+	effect_context.ability_id = ability_id
 	
 	# 确定目标列表
 	var targets: Array[Node] = []
-	if apply_to_all:
+	if context.apply_extra_effects_to_all_targets:
 		# 应用到所有目标（使用 targeting_strategy）
-		targets = _get_targets_for_application(instigator, input_target, effect_context)
+		# 需要转换为 Dictionary 传递给策略
+		var strategy_dict = effect_context.to_dict()
+		targets = _get_targets_for_application(instigator, input_target, strategy_dict)
 	else:
 		# 只应用到 input_target
 		if is_instance_valid(input_target):
 			targets = [input_target]
 	
 	# 为所有目标应用额外效果
-	for effect_data in extra_effects:
+	for effect_data in context.extra_effects:
 		if not is_instance_valid(effect_data):
 			continue
 		
@@ -228,11 +251,11 @@ func _apply_modifier_effects(instigator: Node, input_target: Node, context: Dict
 
 
 ## [已弃用] 应用初始直接效果（为向后兼容保留）
-func _apply_initial_effects(instigator: Node, input_target: Node, context: Dictionary) -> void:
+func _apply_initial_effects(instigator: Node, input_target: Node, context: AbilityContext) -> void:
 	# 准备效果上下文
 	var effect_context = context.duplicate()
-	effect_context["input_target"] = input_target
-	effect_context["ability_id"] = ability_id
+	effect_context.input_target = input_target
+	effect_context.ability_id = ability_id
 	
 	# 应用直接效果
 	if not effects.is_empty():
@@ -240,7 +263,9 @@ func _apply_initial_effects(instigator: Node, input_target: Node, context: Dicti
 			if not is_instance_valid(effect_data):
 				continue
 			
-			var targets: Array[Node] = _get_targets_for_application(instigator, input_target, effect_context)
+			# 需要转换为 Dictionary 传递给策略
+			var strategy_dict = effect_context.to_dict()
+			var targets: Array[Node] = _get_targets_for_application(instigator, input_target, strategy_dict)
 			
 			for target in targets:
 				if is_instance_valid(target):
@@ -249,8 +274,8 @@ func _apply_initial_effects(instigator: Node, input_target: Node, context: Dicti
 ## 应用初始状态（提取为独立方法，便于子类复用）
 ## [param] instigator: Node 施法者
 ## [param] input_target: Node 输入目标
-## [param] context: Dictionary 上下文信息
-func _apply_initial_statuses(instigator: Node, input_target: Node, context: Dictionary) -> void:
+## [param] context: AbilityContext 上下文信息
+func _apply_initial_statuses(instigator: Node, input_target: Node, context: AbilityContext) -> void:
 	# 使用基类方法，传入本技能的 targeting_strategy
 	_apply_statuses_to_targets(instigator, input_target, context, targeting_strategy)
 
@@ -310,8 +335,8 @@ func _get_targets_for_application(instigator: Node, input_target: Node, context:
 ## [param] effects_to_apply: Array[GameplayEffect]
 ## [param] instigator: Node 施法者
 ## [param] targets: Array[Node] 目标列表
-## [param] context: Dictionary 上下文
-func _apply_effects_to_targets(effects_to_apply: Array, instigator: Node, targets: Array, context: Dictionary) -> void:
+## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
+func _apply_effects_to_targets(effects_to_apply: Array, instigator: Node, targets: Array, context: Variant) -> void:
 	if effects_to_apply.is_empty():
 		return
 	
@@ -327,10 +352,12 @@ func _apply_effects_to_targets(effects_to_apply: Array, instigator: Node, target
 ## [param] effect: GameplayEffect 要应用的效果模板
 ## [param] target: Node 目标单位
 ## [param] instigator: Node 施法者
-## [param] context: Dictionary 上下文
-func _apply_single_effect_to_target(effect: GameplayEffect, target: Node, instigator: Node, context: Dictionary) -> void:
+## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
+func _apply_single_effect_to_target(effect: GameplayEffect, target: Node, instigator: Node, context: Variant) -> void:
 	if not is_instance_valid(effect) or not is_instance_valid(target):
 		return
+	
+	var ctx = ContextUtils.to_context(context)
 	
 	# 【Modifier 钩子】效果应用前通知（用于 DamageMultiplierModifier 等）
 	var modifier_comp: GameplayModifierComponent = GameplayAbilitySystem.get_component_by_interface(
@@ -338,11 +365,11 @@ func _apply_single_effect_to_target(effect: GameplayEffect, target: Node, instig
 		"GameplayModifierComponent"
 	)
 	if is_instance_valid(modifier_comp):
-		modifier_comp.notify_effect_applied(effect, target, instigator, context)
+		modifier_comp.notify_effect_applied(effect, target, instigator, ctx)
 	
 	var effect_inst = effect.duplicate(true) as GameplayEffect
 	if is_instance_valid(effect_inst):
-		effect_inst.apply(target, instigator, context)
+		effect_inst.apply(target, instigator, ctx)
 
 ## 使用策略对目标进行筛选（向后兼容，供子类使用）
 ## [param] targets: Array 原始目标列表
