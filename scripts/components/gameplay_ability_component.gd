@@ -145,9 +145,9 @@ func enable_ability(ability_id: StringName) -> void:
 ## 检查是否可以施法
 ## [param] ability_id: StringName 技能ID
 ## [param] target: Node 目标
-## [param] context: Dictionary 上下文信息
+## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
 ## [return] bool 是否可以施法
-func can_cast(ability_id: StringName, target: Node = null, context: Dictionary = {}) -> bool:
+func can_cast(ability_id: StringName, target: Node = null, context: Variant = {}) -> bool:
 	var ability_data = get_ability_data(ability_id)
 	if not is_instance_valid(ability_data):
 		push_error("GameplayAbilityComponent: Ability %s not found." % ability_id)
@@ -172,21 +172,35 @@ func can_cast(ability_id: StringName, target: Node = null, context: Dictionary =
 ## 提交施法（消耗资源，让技能进入冷却）
 ## [param] ability_id: StringName 技能ID
 ## [param] target: Node 目标节点
-## [param] context: Dictionary 上下文信息
+## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
 ## [return] bool 是否成功提交
-func commit_cast(ability_id: StringName, target: Node = null, context: Dictionary = {}) -> bool:
+func commit_cast(ability_id: StringName, target: Node = null, context: Variant = {}) -> bool:
+	var ctx = ContextUtils.to_context(context)
 	var ability_data = get_ability_data(ability_id)
 	if not is_instance_valid(ability_data): 
 		push_error("GameplayAbilityComponent: Ability %s not found." % ability_id)
 		return false
 	
+	# 设置上下文的基础信息
+	ctx.ability = ability_data
+	ctx.ability_comp = self
+	ctx.ability_id = ability_id
+	ctx.instigator = get_parent()
+	ctx.input_target = target
+	if ability_data.has("current_level"):
+		ctx.ability_level = ability_data.current_level
+	
 	# 处理连击技能的特殊逻辑
-	if ability_data is CombatAbility:
-		var combat_ability = ability_data as CombatAbility
+	# 检查是否是 CombatAbility（通过检查是否有连击相关方法）
+	if ability_data.has_method("_reset_combo") and ability_data.has("_combo_reset_timer"):
 		# 检查连击窗口是否还在有效期内
-		if combat_ability._combo_reset_timer >= combat_ability._combo_reset_time:
+		var combo_reset_timer = ability_data.get("_combo_reset_timer")
+		var combo_reset_time = 0.0
+		if ability_data.has("_combo_reset_time"):
+			combo_reset_time = ability_data.get("_combo_reset_time")
+		if combo_reset_timer >= combo_reset_time:
 			# 连击窗口已超时，重置连击索引
-			combat_ability._reset_combo()
+			ability_data.call("_reset_combo")
 		# 连击窗口检查通过，继续执行后续逻辑（检查消耗、冷却等）
 		# 注意：不检查 _current_casting_ability_id，因为连击系统不占用该变量
 	else:
@@ -195,7 +209,7 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 			# 检查是否是可切换技能
 			if ability_data.is_toggleable():
 				# 可切换技能：交由技能自身处理切换逻辑
-				var result = ability_data.commit_cast(self, context)
+				var result = ability_data.commit_cast(self, ctx)
 				if not result:
 					push_warning("GameplayAbilityComponent: Ability %s toggle-off rejected." % ability_id)
 				return result
@@ -208,7 +222,7 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 		if ability_data.is_toggleable():
 			if ability_data.has_method("is_toggled_on") and ability_data.is_toggled_on():
 				# 可切换技能已经开启，交由技能自身处理切换逻辑
-				var result = ability_data.commit_cast(self, context)
+				var result = ability_data.commit_cast(self, ctx)
 				if not result:
 					push_warning("GameplayAbilityComponent: Ability %s toggle-off rejected." % ability_id)
 				return result
@@ -219,19 +233,19 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 		"GameplayModifierComponent"
 	)
 	if is_instance_valid(modifier_comp):
-		modifier_comp.notify_before_ability_cast(self, ability_data, context)
+		modifier_comp.notify_before_ability_cast(self, ability_data, ctx)
 	
 	# 正常执行技能：检查消耗
-	if not ability_data.commit_cast(self, context):
+	if not ability_data.commit_cast(self, ctx):
 		push_error("GameplayAbilityComponent: Ability %s commit cast failed." % ability_id)
 		return false
 	
 	# 【Modifier 钩子】施法成功后通知
 	if is_instance_valid(modifier_comp):
-		modifier_comp.notify_after_ability_commit(self, ability_data, context)
+		modifier_comp.notify_after_ability_commit(self, ability_data, ctx)
 	
 	# 检查是否跳过冷却（用于技能链式调用）
-	if not context.get("skip_cooldown", false):
+	if not ctx.skip_cooldown:
 		if not ability_data.is_cooldown_ready():
 			return false
 		
@@ -239,9 +253,8 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 		var cooldown = ability_data.get_cooldown_duration()
 		
 		# 应用冷却缩减（如果 Modifier 提供了）
-		var cooldown_reduction = context.get("cooldown_reduction", 0.0)
-		if cooldown_reduction > 0.0:
-			cooldown = cooldown * (1.0 - cooldown_reduction)
+		if ctx.cooldown_reduction > 0.0:
+			cooldown = cooldown * (1.0 - ctx.cooldown_reduction)
 			cooldown = max(0.0, cooldown)  # 确保冷却时间不为负
 		
 		if cooldown > 0.0:
@@ -263,22 +276,23 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Dictionar
 	
 	# 分支：瞬发 vs 延迟生效
 	# 检查是否跳过逻辑计时器（用于引导技能等自己管理生命周期的技能）
-	if context.get("skip_cast_point_timer", false):
+	if ctx.custom_data.get("skip_cast_point_timer", false):
 		# 跳过计时器，直接应用效果（引导技能自己管理生命周期）
-		_apply_ability_effect(ability_id, target, context)
+		_apply_ability_effect(ability_id, target, ctx)
 	elif cast_point_time <= 0.001:
 		# 瞬发：直接生效
-		_apply_ability_effect(ability_id, target, context)
+		_apply_ability_effect(ability_id, target, ctx)
 	else:
 		# 延迟生效：启动逻辑计时器
-		_start_cast_point_timer(ability_id, cast_point_time, target, context)
+		_start_cast_point_timer(ability_id, cast_point_time, target, ctx)
 	
 	return true
 
 ## 强制中断当前技能
 ## [param] ability_id: StringName 技能ID（可选，如果不提供则取消当前执行的技能）
-## [param] context: Dictionary 上下文信息（可选，传递给技能的 on_cancel 方法）
-func cancel_ability(ability_id: StringName = &"", context: Dictionary = {}) -> void:
+## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
+func cancel_ability(ability_id: StringName = &"", context: Variant = {}) -> void:
+	var ctx = ContextUtils.to_context(context)
 	var target_id = ability_id
 	if target_id.is_empty():
 		target_id = _current_casting_ability_id
@@ -294,7 +308,7 @@ func cancel_ability(ability_id: StringName = &"", context: Dictionary = {}) -> v
 		return
 	
 	# 调用技能的取消方法（允许技能自己处理清理逻辑，包括状态移除）
-	ability_data.handle_cancel(self, context)
+	ability_data.handle_cancel(self, ctx)
 	
 	# 强制重置状态
 	if _current_casting_ability_id == target_id:
@@ -386,22 +400,30 @@ func can_autocast(ability_id: StringName) -> bool:
 ## 应用技能效果（内部方法，供 commit_cast 和计时器回调使用）
 ## [param] ability_id: StringName 技能ID
 ## [param] target: Node 目标
-## [param] context: Dictionary 上下文信息
-func _apply_ability_effect(ability_id: StringName, target: Node = null, context: Dictionary = {}) -> void:
+## [param] context: AbilityContext 上下文信息
+func _apply_ability_effect(ability_id: StringName, target: Node = null, context: AbilityContext = null) -> void:
+	if context == null:
+		context = AbilityContext.create()
+	
 	var ability_data = get_ability_data(ability_id)
 	if not is_instance_valid(ability_data): 
 		push_error("GameplayAbilityComponent: Ability data is not valid")
 		return
+	
+	# 确保上下文信息完整
+	context.ability = ability_data
+	context.ability_comp = self
+	context.ability_id = ability_id
+	context.instigator = get_parent()
+	context.input_target = target
+	if ability_data.has("current_level"):
+		context.ability_level = ability_data.current_level
 	
 	# 【Modifier 钩子】技能真正生效前通知（修改参数的最佳时机）
 	var modifier_comp: GameplayModifierComponent = GameplayAbilitySystem.get_component_by_interface(
 		get_parent(),
 		"GameplayModifierComponent"
 	)
-	
-	# 将 ability 和 ability_comp 添加到 context，供 Modifier 使用（如 DamageMultiplierModifier）
-	context["ability"] = ability_data
-	context["ability_comp"] = self
 	
 	if is_instance_valid(modifier_comp):
 		modifier_comp.notify_before_apply_ability(self, ability_data, target, context)
@@ -424,15 +446,15 @@ func _clear_current_casting_ability() -> void:
 ## [param] ability_id: StringName 技能ID
 ## [param] time: float 前摇时间
 ## [param] target: Node 目标节点
-## [param] context: Dictionary 上下文信息
-func _start_cast_point_timer(ability_id: StringName, time: float, target: Node, context: Dictionary) -> void:
+## [param] context: AbilityContext 上下文信息
+func _start_cast_point_timer(ability_id: StringName, time: float, target: Node, context: AbilityContext) -> void:
 	# 先清理旧的（防止快速连点）
 	_cancel_cast_timer(ability_id)
 	
 	# 存储上下文（供计时器回调使用）
 	_cast_contexts[ability_id] = {
 		"target": target,
-		"context": context
+		"context": context  # 存储 AbilityContext
 	}
 	
 	# 创建计时器
@@ -445,10 +467,14 @@ func _start_cast_point_timer(ability_id: StringName, time: float, target: Node, 
 		if _cast_point_timers.has(ability_id) and _cast_point_timers[ability_id] == timer:
 			var saved_context = _cast_contexts.get(ability_id, {})
 			var saved_target = saved_context.get("target", null)
-			var saved_context_dict = saved_context.get("context", {})
+			var saved_ctx = saved_context.get("context", null)
+			
+			# 确保是 AbilityContext
+			if saved_ctx == null or not saved_ctx is AbilityContext:
+				saved_ctx = ContextUtils.to_context(saved_ctx if saved_ctx != null else {})
 			
 			# 应用技能效果
-			_apply_ability_effect(ability_id, saved_target, saved_context_dict)
+			_apply_ability_effect(ability_id, saved_target, saved_ctx as AbilityContext)
 			
 			# 清理
 			_cast_point_timers.erase(ability_id)

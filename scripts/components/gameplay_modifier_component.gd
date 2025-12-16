@@ -84,67 +84,79 @@ func get_all_modifiers() -> Array[GameplayAbilityModifier]:
 ## 通知：施法前
 ## [param] ability_comp: GameplayAbilityComponent 技能组件
 ## [param] ability: GameplayAbility 技能实例
-## [param] context: Dictionary 上下文（可修改）
+## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
 func notify_before_ability_cast(
 	ability_comp: GameplayAbilityComponent,
 	ability: GameplayAbility,
-	context: Dictionary
+	context: Variant
 ) -> void:
+	var ctx = ContextUtils.to_context(context)
 	var relevant_modifiers = _get_relevant_modifiers(ability, ability_comp)
 	for mod in relevant_modifiers:
 		if not is_instance_valid(mod):
 			continue
-		mod.on_before_ability_cast(ability_comp, ability, context)
+		# Modifier 可能仍使用 Dictionary，转换后传递
+		var mod_dict = ctx.to_dict()
+		mod.on_before_ability_cast(ability_comp, ability, mod_dict)
 
 ## 通知：施法成功后
 ## [param] ability_comp: GameplayAbilityComponent 技能组件
 ## [param] ability: GameplayAbility 技能实例
-## [param] context: Dictionary 上下文（可修改）
+## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
 func notify_after_ability_commit(
 	ability_comp: GameplayAbilityComponent,
 	ability: GameplayAbility,
-	context: Dictionary
+	context: Variant
 ) -> void:
+	var ctx = ContextUtils.to_context(context)
 	var relevant_modifiers = _get_relevant_modifiers(ability, ability_comp)
 	for mod in relevant_modifiers:
 		if not is_instance_valid(mod):
 			continue
-		mod.on_after_ability_commit(ability_comp, ability, context)
+		# Modifier 可能仍使用 Dictionary，转换后传递
+		var mod_dict = ctx.to_dict()
+		mod.on_after_ability_commit(ability_comp, ability, mod_dict)
 
 ## 通知：技能真正生效前
 ## [param] ability_comp: GameplayAbilityComponent 技能组件
 ## [param] ability: GameplayAbility 技能实例
 ## [param] target: Node 目标
-## [param] context: Dictionary 上下文（可修改）
+## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
 func notify_before_apply_ability(
 	ability_comp: GameplayAbilityComponent,
 	ability: GameplayAbility,
 	target: Node,
-	context: Dictionary
+	context: Variant
 ) -> void:
+	var ctx = ContextUtils.to_context(context)
 	var relevant_modifiers = _get_relevant_modifiers(ability, ability_comp)
 	for mod in relevant_modifiers:
 		if not is_instance_valid(mod):
 			continue
-		mod.on_before_apply_ability(ability_comp, ability, target, context)
+		# Modifier 可能仍使用 Dictionary，转换后传递
+		var mod_dict = ctx.to_dict()
+		mod.on_before_apply_ability(ability_comp, ability, target, mod_dict)
 
 ## 通知：效果应用时
 ## [param] effect: GameplayEffect 效果实例
 ## [param] target: Node 目标
 ## [param] instigator: Node 施法者
-## [param] context: Dictionary 上下文（可修改）
+## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
 func notify_effect_applied(
 	effect: GameplayEffect,
 	target: Node,
 	instigator: Node,
-	context: Dictionary
+	context: Variant
 ) -> void:
+	var ctx = ContextUtils.to_context(context)
 	# 效果层暂时遍历所有修改器（因为效果没有 ability_id）
 	# 如果未来需要优化，可以给 Effect 也加 ID/Tag 过滤
 	for mod in active_modifiers:
 		if not is_instance_valid(mod):
 			continue
-		mod.on_effect_applied(effect, target, instigator, context)
+		# Modifier 可能仍使用 Dictionary，转换后传递
+		var mod_dict = ctx.to_dict()
+		mod.on_effect_applied(effect, target, instigator, mod_dict)
 
 # ========== 内部方法 ==========
 

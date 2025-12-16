@@ -44,21 +44,25 @@ func handle_forgotten(ability_comp: Node, status_comp: Node) -> void:
 	_on_forgotten(ability_comp, status_comp)
 
 ## 检查是否可以施法
-func can_cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> bool:
-	return _can_cast(ability_comp, target, context)
+## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
+func can_cast(ability_comp: Node, target: Node, context: Variant = {}) -> bool:
+	var ctx = ContextUtils.to_context(context)
+	return _can_cast(ability_comp, target, ctx)
 
 ## 提交施法（消耗资源、开始冷却等）
 ## [param] ability_comp: Node 技能组件
-## [param] context: Dictionary 上下文信息（可选，可包含 skip_cost 等标志）
-func commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
-	return _commit_cast(ability_comp, context)
+## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容，可包含 skip_cost 等标志）
+func commit_cast(ability_comp: Node, context: Variant = {}) -> bool:
+	var ctx = ContextUtils.to_context(context)
+	return _commit_cast(ability_comp, ctx)
 
 ## 施放技能（应用效果）
 ## [param] ability_comp: Node 技能组件
 ## [param] target: Node 目标节点
-## [param] context: Dictionary 上下文信息（可选）
-func cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> void:
-	_on_cast(ability_comp, target, context)
+## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
+func cast(ability_comp: Node, target: Node, context: Variant = {}) -> void:
+	var ctx = ContextUtils.to_context(context)
+	_on_cast(ability_comp, target, ctx)
 
 ## [子类可重写] 每帧更新（用于需要持续更新的技能，如连击计时器、引导技能）
 ## [param] delta: float 帧时间
@@ -74,9 +78,10 @@ func update(delta: float) -> void:
 ## [子类可重写] 技能被取消时的处理
 ## 当技能被主动取消时（如被打断、资源不足等），由 GameplayAbilityComponent 调用此方法
 ## [param] ability_comp: Node 技能组件
-## [param] context: Dictionary 上下文信息（可选）
-func handle_cancel(ability_comp: Node, context: Dictionary = {}) -> void:
-	_on_cancel(ability_comp, context)
+## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
+func handle_cancel(ability_comp: Node, context: Variant = {}) -> void:
+	var ctx = ContextUtils.to_context(context)
+	_on_cancel(ability_comp, ctx)
 
 ## 获取效果描述
 func get_effects_description() -> String:
@@ -143,21 +148,23 @@ func _check_ability_completion() -> void:
 ## 应用状态到目标列表（私有辅助方法）
 ## [param] instigator: Node 施法者
 ## [param] input_target: Node 输入目标（用于策略解析）
-## [param] context: Dictionary 上下文信息
+## [param] context: AbilityContext 上下文信息
 ## [param] targeting_strategy: TargetingStrategy 可选的目标获取策略（如果为 null，则应用到 instigator）
-func _apply_statuses_to_targets(instigator: Node, input_target: Node, context: Dictionary, targeting_strategy: TargetingStrategy = null) -> void:
+func _apply_statuses_to_targets(instigator: Node, input_target: Node, context: AbilityContext, targeting_strategy: TargetingStrategy = null) -> void:
 	if not is_instance_valid(instigator) or statuses.is_empty():
 		return
 	
-	# 准备状态上下文
+	# 准备状态上下文（复制上下文）
 	var status_context = context.duplicate()
-	status_context["input_target"] = input_target
-	status_context["ability_id"] = ability_id
+	status_context.input_target = input_target
+	status_context.ability_id = ability_id
 	
-	# 获取目标列表
+	# 获取目标列表（需要将 AbilityContext 转换为 Dictionary 传递给策略）
 	var targets: Array[Node] = []
 	if is_instance_valid(targeting_strategy):
-		targets = targeting_strategy.resolve_targets(instigator, input_target, status_context)
+		# 策略可能仍使用 Dictionary，转换后传递
+		var strategy_context = status_context.to_dict()
+		targets = targeting_strategy.resolve_targets(instigator, input_target, strategy_context)
 	else:
 		# 默认：只应用到施法者
 		targets = [instigator]
@@ -180,8 +187,8 @@ func _apply_statuses_to_targets(instigator: Node, input_target: Node, context: D
 ## [param] target: Node 目标实体
 ## [param] status_data: GameplayStatusData 状态数据
 ## [param] instigator: Node 施法者
-## [param] context: Dictionary 上下文信息
-func _apply_status_to_target(target: Node, status_data: GameplayStatusData, instigator: Node, context: Dictionary) -> void:
+## [param] context: AbilityContext 上下文信息
+func _apply_status_to_target(target: Node, status_data: GameplayStatusData, instigator: Node, context: AbilityContext) -> void:
 	if not is_instance_valid(status_data) or not is_instance_valid(target):
 		return
 	
@@ -191,8 +198,9 @@ func _apply_status_to_target(target: Node, status_data: GameplayStatusData, inst
 		push_warning("GameplayAbility: Target %s has no GameplayStatusComponent, cannot apply status %s" % [target.name, status_data.status_id])
 		return
 	
-	# 应用状态
-	status_comp.apply_status(status_data, instigator, 1, context)
+	# 应用状态（状态组件可能仍使用 Dictionary，转换后传递）
+	var status_dict = context.to_dict()
+	status_comp.apply_status(status_data, instigator, 1, status_dict)
 
 ## 移除技能应用的所有状态（私有辅助方法）
 ## [param] entity: Node 实体（状态持有者）
@@ -220,7 +228,8 @@ func _get_icon() -> Texture:
 
 ## [子类必须重写] 施放技能（应用效果）
 ## 这是技能系统的核心方法，所有子类都必须实现
-@abstract func _on_cast(ability_comp: Node, target: Node, context: Dictionary = {}) -> void
+## [param] context: AbilityContext 上下文信息
+@abstract func _on_cast(ability_comp: Node, target: Node, context: AbilityContext) -> void
 
 ## [子类可重写] 技能学习时的处理
 ## 默认实现为空，子类可按需重写（如 PassiveAbility 需要应用状态）
@@ -232,11 +241,13 @@ func _on_forgotten(_ability_comp: Node, _status_comp: Node) -> void: pass
 
 ## [子类可重写] 检查是否可以施法
 ## 默认返回 true，子类应重写此方法以实现具体的施法条件检查
-func _can_cast(_ability_comp: Node, _target: Node, _context: Dictionary = {}) -> bool: return true
+## [param] context: AbilityContext 上下文信息
+func _can_cast(_ability_comp: Node, _target: Node, _context: AbilityContext) -> bool: return true
 
 ## [子类可重写] 提交施法（消耗资源、开始冷却等）
 ## 默认返回 true，子类应重写此方法以实现具体的资源消耗逻辑
-func _commit_cast(_ability_comp: Node, _context: Dictionary = {}) -> bool: return true
+## [param] context: AbilityContext 上下文信息
+func _commit_cast(_ability_comp: Node, _context: AbilityContext) -> bool: return true
 
 ## [子类可重写] 清除施法效果
 ## 默认实现为空，子类可按需重写（如需要移除持续效果）
@@ -245,7 +256,8 @@ func _clear_cast(_ability_comp: Node, _target: Node) -> void: pass
 ## [子类可重写] 技能被取消时的处理
 ## 默认实现：清理 Status 订阅和移除技能应用的状态
 ## 子类可按需重写（如需要清理持续效果、停止计时器等），但应调用 super._on_cancel()
-func _on_cancel(ability_comp: Node, context: Dictionary = {}) -> void:
+## [param] context: AbilityContext 上下文信息
+func _on_cancel(ability_comp: Node, context: AbilityContext) -> void:
 	# 移除由该技能应用的所有状态（新架构：技能通过 Status 系统应用效果）
 	if is_instance_valid(ability_comp):
 		var instigator = ability_comp.get_parent()

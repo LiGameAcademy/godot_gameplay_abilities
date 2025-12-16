@@ -39,14 +39,15 @@ signal effect_completed(effect: GameplayEffect)
 ## 应用效果（核心入口）
 ## [param] target: Node 目标节点
 ## [param] instigator: Node 施法者节点
-## [param] context: Dictionary 上下文信息（可选）
+## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
 ## 注意：此方法期望接收的是已经克隆的 Effect 实例
 ## Effect 的克隆和订阅逻辑由 Ability 负责（见 ActiveAbility._apply_single_effect_to_target）
 ## 
 ## 注意：在新三层架构下，Effect 只执行单次动作（同步完成）
 ## 延迟执行应该由 Status 系统管理（通过 Status 的 period 或事件触发）
-func apply(target: Node, instigator: Node, context: Dictionary = {}) -> void:
-	if not _check_filters(target, instigator, context):
+func apply(target: Node, instigator: Node, context: Variant = {}) -> void:
+	var ctx = ContextUtils.to_context(context)
+	if not _check_filters(target, instigator, ctx):
 		# 如果被过滤器过滤掉，仍然发出完成信号（避免技能卡死）
 		# 因为 Ability 已经订阅了这个 Effect 的信号，需要通知它已完成
 		effect_completed.emit(self)
@@ -56,10 +57,10 @@ func apply(target: Node, instigator: Node, context: Dictionary = {}) -> void:
 	_signal_handled_by_subclass = false
 	
 	# 1. 执行具体逻辑（子类实现）
-	_apply(target, instigator, context)
+	_apply(target, instigator, ctx)
 	
 	# 2. 执行 Cue（逻辑与表现分离）
-	_execute_cue(target, context)
+	_execute_cue(target, ctx)
 	
 	# 3. 通知完成（信号驱动模式）
 	# 如果子类已经处理了信号发射（异步效果），则不再发射
@@ -73,7 +74,7 @@ func apply(target: Node, instigator: Node, context: Dictionary = {}) -> void:
 	# - 如果 _should_auto_apply_sub_effects() 返回 true，基类会自动应用子效果到同一个 target
 	# - Meta Effect 应该返回 false，自己控制子效果的应用（如应用到不同目标）
 	if _should_auto_apply_sub_effects():
-		_apply_sub_effects(target, instigator, context)
+		_apply_sub_effects(target, instigator, ctx)
 
 
 ## 移除效果（用于状态型效果）
@@ -100,8 +101,8 @@ func get_description() -> String:
 ## [子类重写] 应用效果的具体实现
 ## [param] target: Node 目标节点
 ## [param] instigator: Node 施法者节点
-## [param] context: Dictionary 上下文信息
-@abstract func _apply(target: Node, instigator: Node, context: Dictionary) -> void
+## [param] context: AbilityContext 上下文信息
+@abstract func _apply(target: Node, instigator: Node, context: AbilityContext) -> void
 
 
 ## [子类重写] 移除效果的具体实现
@@ -124,8 +125,8 @@ func _should_auto_apply_sub_effects() -> bool:
 ## 应用子效果（内部方法，供基类和子类使用）
 ## [param] target: Node 目标节点
 ## [param] instigator: Node 施法者节点
-## [param] context: Dictionary 上下文信息
-func _apply_sub_effects(target: Node, instigator: Node, context: Dictionary) -> void:
+## [param] context: AbilityContext 上下文信息
+func _apply_sub_effects(target: Node, instigator: Node, context: AbilityContext) -> void:
 	# 注意：子效果也需要克隆，避免运行时状态共享
 	for effect in sub_effects:
 		if not is_instance_valid(effect):
@@ -141,11 +142,12 @@ func _apply_sub_effects(target: Node, instigator: Node, context: Dictionary) -> 
 ## 检查过滤器
 ## [param] target: Node 目标
 ## [param] instigator: Node 施法者
-## [param] context: Dictionary 上下文
-func _check_filters(target: Node, instigator: Node, context: Dictionary) -> bool:
-	# 1. 检查传统过滤器
+## [param] context: AbilityContext 上下文
+func _check_filters(target: Node, instigator: Node, context: AbilityContext) -> bool:
+	# 1. 检查传统过滤器（过滤器可能仍使用 Dictionary，转换后传递）
+	var filter_dict = context.to_dict()
 	for filter in filters:
-		if not filter.check(target, instigator, context):
+		if not filter.check(target, instigator, filter_dict):
 			return false
 	
 	# 2. 检查标签要求（标签系统集成）
@@ -169,13 +171,14 @@ func _get_description() -> String:
 
 ## 执行 Cue（逻辑与表现分离）
 ## [param] target: Node 目标节点
-## [param] context: Dictionary 上下文信息
-func _execute_cue(target: Node, context: Dictionary = {}) -> void:
+## [param] context: AbilityContext 上下文信息
+func _execute_cue(target: Node, context: AbilityContext) -> void:
 	if not is_instance_valid(cue):
 		return
 	
-	# 执行 Cue（Manager 会处理挂点计算）
-	GameplayCueManager.execute_cue(cue, target, context)
+	# 执行 Cue（Manager 可能仍使用 Dictionary，转换后传递）
+	var cue_dict = context.to_dict()
+	GameplayCueManager.execute_cue(cue, target, cue_dict)
 
 ## 停止 Cue（用于持续效果）
 ## [param] target: Node 目标节点
