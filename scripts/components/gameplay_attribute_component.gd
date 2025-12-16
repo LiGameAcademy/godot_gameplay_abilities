@@ -1,110 +1,97 @@
 extends Node
 class_name GameplayAttributeComponent
 
-## 属性组件
+## 游戏性属性组件
 ## 管理角色的属性系统（攻击力、防御力等）
 
-## 如果传入的属性集不为空，则使用传入的属性集，否则使用默认的属性集
+## 如果传入的属性集不为空，则使用传入的属性集
 @export var _active_sets: Array[GameplayAttributeSet] = []
-
-# ID -> Instance
+# ID -> Instance（运行时实例）
 var _attributes: Dictionary[StringName, GameplayAttributeInstance] = {}
-# 记录活跃的 Set，用于触发依赖逻辑
 
-## 当前等级（用于计算 ScalableValue）
-var current_level: int = 1 : set = _set_current_level
-
+# 信号：当属性值发生变化时发出
 signal attribute_value_changed(id: StringName, new_val: float)
-signal level_changed(old_level: int, new_level: int)
 
 ## 初始化属性组件
 ## [param] sets: Array[GameplayAttributeSet] 属性集数组
 func initialize(sets: Array[GameplayAttributeSet] = []) -> void:
 	if not sets.is_empty():
 		_active_sets = sets.duplicate(true)
+	
 	# 1. 先注册所有属性 (此时属性实例尚未创建，无法互相读取)
-	for atr_set in _active_sets:
-		var new_instances = atr_set.instantiate_attributes()
+	for attr_set in _active_sets:
+		var new_instances : Dictionary[StringName, GameplayAttributeInstance] = attr_set.instantiate_attributes()
 		for id in new_instances:
 			_register_instance(id, new_instances[id])
+
 	# 2. 再处理依赖关系 (此时所有属性都已存在，可以互相读取)
 	for atr_set in _active_sets:
 		atr_set.resolve_dependencies(self)
 
-# --- Public API ---
-
+## 获取属性值
+## [param] id: StringName 属性ID
+## [param] default: float 默认值（如果属性不存在）
+## [return] float 属性值
 func get_value(id: StringName, default: float = 0.0) -> float:
-	if not _attributes.has(id):
+	if not has_attribute(id):
 		push_warning("GameplayAttributeComponent: Attribute with id %s not found" % id)
 		return default
 	return _attributes[id].get_value()
 
+## 获取属性实例
+## [param] id: StringName 属性ID
+## [return] GameplayAttributeInstance 属性实例（如果不存在返回 null）
 func get_attribute(id: StringName) -> GameplayAttributeInstance:
 	return _attributes.get(id, null)
 
-func set_base_value(id: StringName, val: float):
-	if _attributes.has(id):
+## 设置基础值
+## [param] id: StringName 属性ID
+## [param] val: float 新的基础值
+func set_base_value(id: StringName, val: float) -> bool:
+	if has_attribute(id):
 		_attributes[id].base_value = val
+		return true
+	push_warning("AttributeComponent: can not set base value: %s" %id)
+	return false
 
-func add_modifier(mod: GameplayAttributeModifier):
-	if _attributes.has(mod.attribute_id):
-		_attributes[mod.attribute_id].add_modifier(mod)
-
-func remove_modifier(mod: GameplayAttributeModifier):
-	if _attributes.has(mod.attribute_id):
-		_attributes[mod.attribute_id].remove_modifier(mod)
-
+## 检查属性是否存在
+## [param] id: StringName 属性ID
+## [return] bool 是否存在
 func has_attribute(id: StringName) -> bool:
 	return _attributes.has(id)
 
-func get_gameplay_attribute_component() -> GameplayAttributeComponent:
-	return self
+## 添加属性修改器
+## [param] mod: GameplayAttributeModifier 修改器实例
+func add_modifier(mod: GameplayAttributeModifier) -> void:
+	if _attributes.has(mod.attribute_id):
+		_attributes[mod.attribute_id].add_modifier(mod)
 
-func _register_instance(id: StringName, instance: GameplayAttributeInstance) -> void:
+## 移除属性修改器
+## [param] mod: GameplayAttributeModifier 修改器实例
+func remove_modifier(mod: GameplayAttributeModifier) -> void:
+	if _attributes.has(mod.attribute_id):
+		_attributes[mod.attribute_id].remove_modifier(mod)
+
+## 注册属性实例（内部方法）
+## [param] id: StringName 属性ID
+## [param] instance: GameplayAttributeInstance 属性实例
+func _register_instance(id: StringName, instance: GameplayAttributeInstance) -> bool:
 	if has_attribute(id):
 		push_warning("Attribute with id %s already registered" % id)
+		return false
 	_attributes[id] = instance
-	
-	# 设置实例的等级（用于 ScalableValue 计算）
-	instance.current_level = current_level
-	
-	# 转发信号
-	instance.value_changed.connect(func(old, new): 
-		attribute_value_changed.emit(id, new)
-		_handle_dependency(id, new)
+	# 转发信号：当实例值变化时，组件也发出信号
+	instance.value_changed.connect(
+		func(old, new) -> void: 
+			attribute_value_changed.emit(id, new)
+			_handle_dependency(id, new)
 	)
+	return true
 
-## 获取当前等级
-func get_level() -> int:
-	return current_level
-
-## 设置等级（公共接口）
-func set_level(level: int) -> void:
-	_set_current_level(level)
-
-## 提升等级
-func level_up(level: int = 1) -> void:
-	_set_current_level(current_level + level)
-
-# --- 依赖处理 ---
-func _handle_dependency(attr_id: StringName, new_val: float):
-	# 这里加一个锁或者检查，防止循环依赖导致死循环
-	# 简单的做法是：衍生属性的变化不应该再触发 _handle_dependency
-	# 或者信任 AttributeSet 的设计是无环的 (DAG)
-
+## 处理依赖关系
+## [param] attr_id: StringName 变化的属性ID
+## [param] new_val: float 新值
+func _handle_dependency(attr_id: StringName, new_val: float) -> void:
 	# 通知所有 Set，看看有没有人关心这个属性的变化
-	for set in _active_sets:
-		set.on_attribute_changed(self, attr_id, new_val)
-
-## 设置等级（会更新所有使用 ScalableValue 的属性）
-func _set_current_level(level: int) -> void:
-	if current_level == level: return
-	var old_level = current_level
-	current_level = max(1, level)
-	
-	# 更新所有使用 ScalableValue 的属性实例
-	for instance in _attributes.values():
-		if is_instance_valid(instance):
-			instance.current_level = current_level
-	
-	level_changed.emit(old_level, current_level)
+	for attribute_set in _active_sets:
+		attribute_set.on_attribute_changed(self, attr_id, new_val)
