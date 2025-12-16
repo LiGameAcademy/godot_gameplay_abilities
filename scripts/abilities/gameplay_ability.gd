@@ -260,7 +260,7 @@ func _on_forgotten(_ability_comp: Node, _status_comp: Node) -> void: pass
 ## [子类可重写] 检查是否可以施法
 ## 默认返回 true，子类应重写此方法以实现具体的施法条件检查
 ## [param] context: AbilityContext 上下文信息
-func _can_cast(_ability_comp: Node, _target: Node, _context: Variant = {}) -> bool: return true
+func _can_cast(_ability_comp: Node, _target: Node, context: AbilityContext) -> bool: return true
 
 ## [子类可重写] 提交施法（消耗资源、开始冷却等）
 ## 默认返回 true，子类应重写此方法以实现具体的资源消耗逻辑

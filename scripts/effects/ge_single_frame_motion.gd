@@ -31,7 +31,7 @@ enum DirectionType {
 var _cached_direction: Vector3 = Vector3.ZERO
 var _direction_cached: bool = false
 
-func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
+func _apply(target: Node, instigator: Node, context: AbilityContext) -> void:
 	# 1. 守卫：必须是物理实体
 	var body = target as CharacterBody3D
 	if not body:
@@ -78,9 +78,9 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 ## [param] body: Node3D 目标节点
 ## [param] context: Dictionary 上下文信息
 ## [return] Vector3 面朝方向向量（已归一化，-Z 为默认前方）
-func _get_facing_direction(body: Node3D, context: Dictionary) -> Vector3:
+func _get_facing_direction(body: Node3D, context: AbilityContext) -> Vector3:
 	if context.has("facing_angle"):
-		var facing_angle: float = context.get("facing_angle")
+		var facing_angle: float = context.facing_angle
 		return Vector3(-sin(facing_angle), 0.0, -cos(facing_angle)).normalized()
 	
 	# 回退：从 Visuals 节点获取
@@ -96,7 +96,7 @@ func _get_facing_direction(body: Node3D, context: Dictionary) -> Vector3:
 ## [param] body: Node3D 目标节点
 ## [param] context: Dictionary 上下文信息
 ## [return] Vector3 方向向量（已归一化）
-func _resolve_direction(body: Node3D, context: Dictionary) -> Vector3:
+func _resolve_direction(body: Node3D, context: AbilityContext) -> Vector3:
 	var dir: Vector3 = Vector3.ZERO
 	
 	match direction_type:
@@ -150,4 +150,3 @@ func _resolve_direction(body: Node3D, context: Dictionary) -> Vector3:
 func _get_description() -> String:
 	var dir_name = DirectionType.keys()[direction_type]
 	return "单帧位移: 向 %s 方向移动 %.2f 米" % [dir_name, distance]
-

@@ -35,7 +35,7 @@ class_name ProjectileAbility
 ## [重写] 施放技能
 ## 逻辑：应用直接效果（如发射时对施法者的效果），然后生成投射物
 ## 投射物携带 statuses 中的效果作为"弹头"传递给目标
-func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
+func _on_cast(ability_comp: Node, input_target: Node, context: AbilityContext) -> void:
 	var instigator = ability_comp.get_parent()
 	if not is_instance_valid(instigator):
 		push_warning("ProjectileAbility: Cannot cast, instigator is not valid")
@@ -56,15 +56,15 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 		return
 	
 	# 4. 确定发射基准信息
-	var spawn_transform = _get_muzzle_transform(instigator, context)
+	var spawn_transform = _get_muzzle_transform(instigator, context.to_dict())
 	
 	# 5. 获取追踪目标（用于投射物追踪）
-	var target_for_homing: Node3D = _get_homing_target(instigator, input_target, context)
+	var target_for_homing: Node3D = _get_homing_target(instigator, input_target, context.to_dict())
 	
 	# 6. 计算实际发射数量（支持 Modifier 修改）
 	var actual_projectile_count = projectile_count
 	# 读取 Modifier 通过 context 传递的额外投射物数量
-	actual_projectile_count += context.get("extra_projectiles", 0)
+	actual_projectile_count += context.to_dict().get("extra_projectiles", 0)
 	actual_projectile_count = max(1, actual_projectile_count)  # 至少发射 1 个
 	
 	# 7. 循环生成投射物
@@ -74,12 +74,12 @@ func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) 
 			spawn_transform, 
 			projectile_data.duplicate(), 
 			target_for_homing, 
-			context
+			context.to_dict()
 		)
 		
 		# 7. 连接信号（用于超时处理）
 		if is_instance_valid(projectile):
-			_connect_projectile_signals(projectile, ability_comp, context)
+			_connect_projectile_signals(projectile, ability_comp, context.to_dict())
 	
 	# 注意：投射物是"发射即不管"（Fire and Forget），所以这里不需要阻塞
 	# 如果投射物需要阻塞技能完成，可以在 ProjectileBase 中实现

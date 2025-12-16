@@ -94,7 +94,7 @@ func get_effects_description() -> String:
 ## 
 ## 如果连击技能正在执行（_current_casting_ability_id == ability_id），
 ## 检查连击窗口是否还在有效期内，决定是否可以继续连击
-func _can_cast(ability_comp: Node, target: Node = null, context: Dictionary = {}) -> bool:
+func _can_cast(ability_comp: Node, target: Node = null, context: AbilityContext = null) -> bool:
 	# 检查是否有连击能力配置
 	if _combo_abilities.is_empty():
 		push_warning("CombatAbility: No combo abilities configured")
@@ -120,7 +120,7 @@ func _can_cast(ability_comp: Node, target: Node = null, context: Dictionary = {}
 ## 重写：提交施法
 ## CombatAbility 只检查自己的消耗
 ## 子技能不会经过 Component 的 commit_cast，所以不需要检查子技能的消耗
-func _commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
+func _commit_cast(ability_comp: Node, context: AbilityContext) -> bool:
 	# 调用父类方法检查 CombatAbility 自己的消耗
 	var success = super(ability_comp, context)
 	if success:
@@ -132,7 +132,7 @@ func _commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
 ## 重写：施放技能
 ## CombatAbility 可以在连击开始时应用自己的效果，然后执行子技能
 ## 子技能通过执行时间自动完成，CombatAbility 订阅完成信号推进连击
-func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
+func _on_cast(ability_comp: Node, input_target: Node, context: AbilityContext) -> void:
 	var instigator = ability_comp.get_parent()
 	if not is_instance_valid(instigator):
 		push_warning("CombatAbility: Cannot cast, instigator is not valid")

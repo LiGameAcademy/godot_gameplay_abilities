@@ -21,7 +21,7 @@ func _init() -> void:
 	if target_blocked_tags.is_empty() and not invulnerable_block_tag.is_empty():
 		target_blocked_tags = [invulnerable_block_tag]
 
-func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
+func _apply(target: Node, instigator: Node, context: AbilityContext) -> void:
 	var vital_comp = GameplayAbilitySystem.get_component_by_interface(target, vital_comp_name)
 	if not vital_comp:
 		push_error("GE_ApplyDamage: Target %s has no %s component" % [target.name, vital_comp_name])
@@ -46,7 +46,7 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 	var base_final_damage = base_damage * damage_multiplier
 	
 	# 应用 Modifier 提供的伤害倍率（如果存在）
-	var modifier_multiplier = context.get("damage_multiplier_modifier", 1.0)
+	var modifier_multiplier = context.damage_multiplier_modifier
 	base_final_damage *= modifier_multiplier
 	
 	var damage_info = DamageInfo.new(instigator, ability_comp, base_final_damage)

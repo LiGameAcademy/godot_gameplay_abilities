@@ -223,4 +223,3 @@ func _update_index(mod: GameplayAbilityModifier, is_add: bool) -> void:
 ## 接口方法（用于 GameplayAbilitySystem.get_component_by_interface）
 func get_gameplay_modifier_component() -> GameplayModifierComponent:
 	return self
-

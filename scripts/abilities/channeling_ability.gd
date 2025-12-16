@@ -62,7 +62,7 @@ var stop_on_input_release: bool:
 ## [重写] 提交施法
 ## 引导技能需要接管生命周期，阻止基类启动自动执行计时器。
 ## 对于 Toggle 技能，如果已经开启，则执行关闭逻辑。
-func _commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
+func _commit_cast(ability_comp: Node, context: AbilityContext) -> bool:
 	# 1. Toggle 模式的关闭逻辑
 	if channeling_mode == ChannelingMode.TOGGLE and _is_active:
 		stop_channeling("toggle_off")
@@ -98,7 +98,7 @@ func _commit_cast(ability_comp: Node, context: Dictionary = {}) -> bool:
 
 ## [重写] 施法开始
 ## 引导技能自己管理生命周期，不依赖基类的执行计时器
-func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
+func _on_cast(ability_comp: Node, input_target: Node, context: AbilityContext) -> void:
 	var instigator = ability_comp.get_parent()
 	if not is_instance_valid(instigator):
 		push_warning("ChannelingAbility: Cannot cast, instigator is not valid")
@@ -264,7 +264,7 @@ func _pay_tick_costs() -> bool:
 		
 	return true
 
-func _on_cancel(ability_comp: Node, context: Dictionary = {}) -> void:
+func _on_cancel(ability_comp: Node, context: AbilityContext) -> void:
 	# 1. 先调用父类方法，确保状态被移除（即使引导未激活也能正确清理）
 	super(ability_comp, context)
 	

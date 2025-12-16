@@ -115,7 +115,7 @@ func _on_level_changed() -> void:
 	# 当前设计：冷却时间在每次 get_cooldown_duration() 时动态计算，无需手动更新
 
 ## 检查是否可以施法
-func _can_cast(ability_comp: Node, target: Node = null, context: Variant = {}) -> bool:
+func _can_cast(ability_comp: Node, target: Node = null, context: AbilityContext = null) -> bool:
 	var ctx = ContextUtils.to_context(context)
 	if not is_instance_valid(ability_comp): 
 		push_error("ActiveAbility: Ability %s can not cast." % ability_id)
