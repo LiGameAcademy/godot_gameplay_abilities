@@ -1,11 +1,10 @@
 extends DamageLogicStrategy
 class_name SimpleDamageLogic
 
-@export var defense_attribute: StringName = &"defense"
+## 简单伤害计算策略
+## 公式：最终伤害 = max(1, 基础伤害)
 
 func calculate(damage_info: DamageInfo, target_attributes: GameplayAttributeComponent) -> float:
-    # 1. 简单的减法公式
-    var defense = target_attributes.get_value(defense_attribute)
-    var damage = max(1.0, damage_info.base_damage - defense)
-    
-    return damage
+	var damage = max(1.0, damage_info.base_damage)
+	
+	return damage

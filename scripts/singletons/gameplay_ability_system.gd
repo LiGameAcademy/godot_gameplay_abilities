@@ -26,10 +26,3 @@ func get_component_by_interface(entity: Node, component_name: String) -> Node:
 	
 	push_error("AbilitySystem: can not found component name: %s !" % component_name)
 	return null
-
-## 查询实体是否有指定组件
-## [param] entity: Node 实体节点
-## [param] component_name: String 组件名称
-## [returns] bool 是否存在
-func has_component(entity: Node, component_name: String) -> bool:
-	return get_component_by_interface(entity, component_name) != null

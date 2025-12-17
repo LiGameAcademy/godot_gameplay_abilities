@@ -10,4 +10,3 @@ player_data = ExtResource("2_r74q7")
 
 [node name="GameplayAttributeComponent" type="Node" parent="."]
 script = ExtResource("1_diqd3")
-metadata/_custom_type_script = "uid://cyyqof6fbsfyc"

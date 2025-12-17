@@ -11,7 +11,6 @@ class_name GameplayVitalAttributeComponent
 ## 活跃的 Vital 实例 { vital_id: GameplayVital }
 var _active_vitals: Dictionary[StringName, GameplayVital] = {}
 
-## 信号
 signal vital_value_changed(vital_id: StringName, current: float, max: float, percent: float, is_regen: bool)
 signal vital_depleted(vital_id: StringName)
 
@@ -29,54 +28,19 @@ func _process(delta: float) -> void:
 ## [param] sets: Array[GameplayAttributeSet] 属性集数组
 ## [param] vitals: Array[GameplayVital] Vital 数组
 func initialize(sets: Array[GameplayAttributeSet] = [], vitals: Array[GameplayVital] = []) -> void:
-	# 先初始化属性系统
+	# 先初始化属性系统（重要：必须在 Vital 之前）
 	super(sets)
-	
+
 	# 再初始化 Vitals
 	_initialize_vitals(vitals)
 
-## 初始化 Vitals
-## [param] vitals: Array[GameplayVital] Vital 模板数组
-func _initialize_vitals(vitals: Array[GameplayVital]) -> void:
-	if not vitals.is_empty():
-		_vitals = vitals.duplicate(true)
-	
-	_active_vitals.clear()
-	
-	for vital_template in _vitals:
-		if not is_instance_valid(vital_template):
-			continue
-		
-		# 检查 vital_id 是否设置
-		if vital_template.vital_id.is_empty():
-			push_warning("GameplayVitalAttributeComponent: Vital skipped: vital_id is empty")
-			continue
-		
-		# 检查依赖的属性是否存在
-		if not has_attribute(vital_template.max_value_attribute):
-			push_warning("GameplayVitalAttributeComponent: Vital [%s] skipped: Missing max attribute [%s]" % [vital_template.vital_id, vital_template.max_value_attribute])
-			continue
-		
-		# 创建运行时实例 (Template -> Instance)
-		# 使用 Vital 的 create_instance 方法，封装实例化逻辑
-		# create_instance 内部会调用 initialize，自动处理属性变化信号的连接
-		var vital_instance = vital_template.create_instance(self)
-		
-		# 注册实例
-		_active_vitals[vital_instance.vital_id] = vital_instance
-		
-		# 转发信号（组件监听 Vital 的变化，转发给外部）
-		vital_instance.value_changed.connect(_on_vital_value_changed.bind(vital_instance.vital_id))
-		vital_instance.depleted.connect(_on_vital_depleted.bind(vital_instance.vital_id))
-
 # --- API: 操作 Vital ---
-
 ## 检查是否有指定的 Vital
 ## [param] vital_id: StringName Vital ID
 ## [return] bool 是否存在
 func has_vital(vital_id: StringName) -> bool:
 	return _active_vitals.has(vital_id)
-
+	
 ## 获取 Vital 实例
 ## [param] vital_id: StringName Vital ID
 ## [return] GameplayVital Vital 实例，如果不存在则返回 null
@@ -90,7 +54,7 @@ func get_vital_value(vital_id: StringName) -> float:
 	if has_vital(vital_id):
 		return get_vital(vital_id).current_value
 	return 0.0
-
+	
 ## 检查是否有足够的 Vital
 ## [param] vital_id: StringName Vital ID
 ## [param] amount: float 需要的数量
@@ -113,42 +77,42 @@ func get_vital_percent(vital_id: StringName) -> float:
 func modify_vital(vital_id: StringName, amount: float) -> bool:
 	if not has_vital(vital_id):
 		return false
-	
 	if amount < 0 and not has_sufficient_vital(vital_id, -amount):
 		return false
 	
 	get_vital(vital_id).modify_value(amount)
 	return true
 
-## 注册 Vital 实例（运行时动态添加）
-## [param] vital: GameplayVital Vital 实例
-## [return] bool 是否成功注册
-func register_vital(vital: GameplayVital) -> bool:
-	if not is_instance_valid(vital):
-		push_warning("GameplayVitalAttributeComponent: Invalid vital instance")
-		return false
-	
-	# 检查 vital_id 是否设置
-	if vital.vital_id == &"":
-		push_warning("GameplayVitalAttributeComponent: Vital missing vital_id")
-		return false
-	
-	# 检查依赖的属性是否存在
-	if not has_attribute(vital.max_value_attribute):
-		push_warning("GameplayVitalAttributeComponent: Vital [%s] skipped: Missing max attribute [%s]" % [vital.vital_id, vital.max_value_attribute])
-		return false
-	
-	# 使用公共方法初始化 Vital（避免直接访问私有成员）
-	vital.initialize(self)
-	
-	# 注册实例
-	_active_vitals[vital.vital_id] = vital
-	
-	# 转发信号（组件监听 Vital 的变化，转发给外部）
-	vital.value_changed.connect(_on_vital_value_changed.bind(vital.vital_id))
-	vital.depleted.connect(_on_vital_depleted.bind(vital.vital_id))
-	
-	return true
+## 初始化 Vitals
+## [param] vitals: Array[GameplayVital] Vital 模板数组
+func _initialize_vitals(vitals: Array[GameplayVital]) -> void:
+	if not vitals.is_empty():
+		_vitals = vitals.duplicate(true)
+
+	_active_vitals.clear()
+
+	for vital_template in _vitals:
+		if not is_instance_valid(vital_template): continue
+		
+		# 检查 vital_id 是否设置
+		if vital_template.vital_id.is_empty():
+			push_warning("GameplayVitalAttributeComponent: Vital skipped: vital_id is empty")
+			continue
+		
+		# 检查依赖的属性是否存在
+		if not has_attribute(vital_template.max_value_attribute):
+			push_warning("GameplayVitalAttributeComponent: Vital [%s] skipped: Missing max attribute [%s]" % [vital_template.vital_id, vital_template.max_value_attribute])
+			continue
+
+		# 创建运行时实例 (Template -> Instance)
+		var vital_instance = vital_template.create_instance(self)
+
+		# 注册实例
+		_active_vitals[vital_instance.vital_id] = vital_instance
+
+		# 转发信号
+		vital_instance.value_changed.connect(_on_vital_value_changed.bind(vital_instance.vital_id))
+		vital_instance.depleted.connect(_on_vital_depleted.bind(vital_instance.vital_id))
 
 ## Vital 值变化回调
 ## [param] current: float 当前值

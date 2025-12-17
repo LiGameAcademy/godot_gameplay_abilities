@@ -6,104 +6,72 @@ class_name HealthVital
 
 const DEATH_GROUP_NAME: String = "death"
 
-func _init(p_comp: GameplayAttributeComponent = null) -> void:
-	# 设置 HealthVital 的默认值（在调用 super 之前设置）
-	vital_id = &"health"
-	display_name = "生命值"
-	max_value_attribute = &"health"
-	# regen_rate_attribute = &"health_regen"
-	
-	# 调用父类初始化
-	super(p_comp)
-
 ## 是否存活
 var is_alive: bool:
 	get:
 		return current_value > 0
 
-## 生命值恢复
-signal health_restored() 
-## 生命值耗尽
-signal health_depleted(instigator: Node) 
+func _init(p_comp: GameplayAttributeComponent = null) -> void:
+	# 设置 HealthVital 的默认值（在调用 super 之前设置）
+	vital_id = &"health"
+	display_name = "生命值"
+	max_value_attribute = &"max_health"  # 依赖 "health" 属性作为上限
+	regen_rate_attribute = &"health_regen"  # 可选：自动回复
+
+## 生命值恢复信号
+signal health_restored()
+## 生命值耗尽信号
+signal health_depleted(instigator: Node)
 ## 接受伤害时发出（在计算减免之前）
-signal damage_received(damage_info: DamageInfo) 
+signal damage_received(damage_info: DamageInfo)
 ## 受到伤害时发出（在计算减免之后）
-signal damage_applied(damage_info: DamageInfo, final_damage: float) 
+signal damage_applied(damage_info: DamageInfo, final_damage: float)
 
 ## 核心伤害应用接口
 ## [param] damage_info: DamageInfo 伤害信息
-## [param] owner_entity: Node 拥有此 Vital 的实体
+## [param] owner_entity: Node 拥有者实体
 ## [return] float 最终伤害值（用于 Cue 系统）
 func apply_damage(damage_info: DamageInfo, owner_entity: Node) -> float:
-	if not is_alive:
-		return 0.0
-	
-	# 触发统一游戏事件：damage_received（在计算减免之前）
-	AbilityEventBus.trigger_game_event(&"damage_received", {
-		"source": damage_info.instigator,
-		"target": owner_entity,
-		"damage_info": damage_info
-	})
-	
-	# 同时发出细粒度信号（向后兼容）
+	if not is_alive: return 0.0
+	# 发出伤害接收信号（在计算减免之前）
 	damage_received.emit(damage_info)
 	
 	# 在应用伤害前被BUFF修改为0或更少
-	if damage_info.base_damage <= 0:
-		return 0.0
-	
-	# 计算最终伤害（HealthVital 本身可以作为目标）
+	if damage_info.base_damage <= 0: return 0.0
+
+	# 计算最终伤害（通过 DamageCalculator）
 	var final_damage = DamageCalculator.calculate_final_damage(damage_info, _owner_comp)
-	
-	# 触发统一游戏事件：damage_dealt（在计算减免之后）
-	AbilityEventBus.trigger_game_event(&"damage_dealt", {
-		"instigator": damage_info.instigator,
-		"target": owner_entity,
-		"damage_info": damage_info,
-		"final_damage": final_damage
-	})
-	
-	# UI系统可以监听这个信号来显示伤害飘字
-	damage_applied.emit(damage_info, final_damage)
-	
+
 	# 应用伤害
 	if final_damage > 0:
 		modify_value(-final_damage)
 	
+	# UI系统可以监听这个信号来显示伤害飘字
+	damage_applied.emit(damage_info, final_damage)
+
 	# 处理死亡
 	if not is_alive:
 		_die(damage_info.instigator, owner_entity)
-	
+
 	# 返回最终伤害值（供 Cue 系统使用）
 	return final_damage
 
 ## 受到治疗
 ## [param] amount: float 要增加的生命值数量
+## [param] owner_entity: Node 拥有者实体
 func heal(amount: float, owner_entity: Node) -> void:
-	if not is_alive:
-		return
+	if not is_alive: return
 
 	modify_value(amount)
-	
-	# 触发统一游戏事件：healing_applied
-	AbilityEventBus.trigger_game_event(&"healing_applied", {
-		"target": owner_entity,
-		"amount": amount
-	})
-	
-	# 同时发出细粒度信号（向后兼容）
+
+	# 发出治疗信号
 	health_restored.emit()
 
 ## 死亡处理
+## [param] instigator: Node 造成死亡的实体
+## [param] owner_entity: Node 拥有者实体
 func _die(instigator: Node, owner_entity: Node) -> void:
-	if owner_entity:
+	if is_instance_valid(owner_entity):
 		owner_entity.add_to_group(DEATH_GROUP_NAME)
-	
-	# 触发统一游戏事件：entity_died
-	AbilityEventBus.trigger_game_event(&"entity_died", {
-		"entity": owner_entity,
-		"instigator": instigator
-	})
-	
-	# 同时发出细粒度信号（向后兼容）
+	# 发出死亡信号
 	health_depleted.emit(instigator)
