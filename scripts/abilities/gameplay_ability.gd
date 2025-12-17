@@ -26,11 +26,19 @@ var current_level: int = 1
 ## 适用：所有效果（瞬时、周期性、永久）
 @export var statuses: Array[GameplayStatusData] = []
 
+@export_group("Metadata")
+## 元数据字典（供业务层扩展使用）
+## 业务层可以使用此字典存储自定义数据，如：
+## - 自动施法配置：metadata["autocast_enabled"] = true
+## - AI优先级：metadata["ai_priority"] = 5
+## - 自定义标签：metadata["custom_tags"] = ["heal", "support"]
+## 插件层不解析此字典，完全由业务层管理
+@export var metadata: Dictionary = {}
+
 ## 冷却剩余时间（秒，由技能自己管理）
 var _cooldown_remaining: float = 0.0
 
 ## 技能完成信号
-## 当所有 Status 完成时，会发出此信号
 ## Component 会订阅此信号来判断技能是否完成
 signal ability_completed(ability: GameplayAbility)
 

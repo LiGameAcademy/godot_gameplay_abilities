@@ -12,7 +12,7 @@ class_name GameplayVitalAttributeComponent
 var _active_vitals: Dictionary[StringName, GameplayVital] = {}
 
 ## 信号
-signal vital_value_changed(vital_id: StringName, current: float, max: float, percent: float)
+signal vital_value_changed(vital_id: StringName, current: float, max: float, percent: float, is_regen: bool)
 signal vital_depleted(vital_id: StringName)
 
 func _ready() -> void:
@@ -48,7 +48,7 @@ func _initialize_vitals(vitals: Array[GameplayVital]) -> void:
 			continue
 		
 		# 检查 vital_id 是否设置
-		if vital_template.vital_id == &"":
+		if vital_template.vital_id.is_empty():
 			push_warning("GameplayVitalAttributeComponent: Vital skipped: vital_id is empty")
 			continue
 		
@@ -58,22 +58,14 @@ func _initialize_vitals(vitals: Array[GameplayVital]) -> void:
 			continue
 		
 		# 创建运行时实例 (Template -> Instance)
-		var vital_instance = vital_template.duplicate(true)
-		vital_instance._owner_comp = self
-		
-		# 初始化数值
-		vital_instance._update_cached_max()
-		vital_instance.current_value = vital_instance._cached_max
-		
-		# 连接属性变化信号（确保 Vital 能响应属性变化）
-		if attribute_value_changed.is_connected(vital_instance._on_attribute_changed):
-			attribute_value_changed.disconnect(vital_instance._on_attribute_changed)
-		attribute_value_changed.connect(vital_instance._on_attribute_changed)
+		# 使用 Vital 的 create_instance 方法，封装实例化逻辑
+		# create_instance 内部会调用 initialize，自动处理属性变化信号的连接
+		var vital_instance = vital_template.create_instance(self)
 		
 		# 注册实例
 		_active_vitals[vital_instance.vital_id] = vital_instance
 		
-		# 转发信号
+		# 转发信号（组件监听 Vital 的变化，转发给外部）
 		vital_instance.value_changed.connect(_on_vital_value_changed.bind(vital_instance.vital_id))
 		vital_instance.depleted.connect(_on_vital_depleted.bind(vital_instance.vital_id))
 
@@ -146,34 +138,26 @@ func register_vital(vital: GameplayVital) -> bool:
 		push_warning("GameplayVitalAttributeComponent: Vital [%s] skipped: Missing max attribute [%s]" % [vital.vital_id, vital.max_value_attribute])
 		return false
 	
-	# 设置属性组件引用
-	vital._owner_comp = self
-	
-	# 初始化 Vital（更新最大值等）
-	vital._update_cached_max()
-	vital.current_value = vital._cached_max
-	
-	# 连接属性变化信号（确保 Vital 能响应属性变化）
-	if attribute_value_changed.is_connected(vital._on_attribute_changed):
-		attribute_value_changed.disconnect(vital._on_attribute_changed)
-	attribute_value_changed.connect(vital._on_attribute_changed)
+	# 使用公共方法初始化 Vital（避免直接访问私有成员）
+	vital.initialize(self)
 	
 	# 注册实例
 	_active_vitals[vital.vital_id] = vital
 	
-	# 转发信号
+	# 转发信号（组件监听 Vital 的变化，转发给外部）
 	vital.value_changed.connect(_on_vital_value_changed.bind(vital.vital_id))
 	vital.depleted.connect(_on_vital_depleted.bind(vital.vital_id))
 	
 	return true
 
 ## Vital 值变化回调
-## [param] vital_id: StringName Vital ID
 ## [param] current: float 当前值
 ## [param] max: float 最大值
 ## [param] percent: float 百分比
-func _on_vital_value_changed(current: float, max: float, percent: float, vital_id: StringName) -> void:
-	vital_value_changed.emit(vital_id, current, max, percent)
+## [param] is_regen: bool 是否为自动回复
+## [param] vital_id: StringName Vital ID（通过 bind 传入）
+func _on_vital_value_changed(current: float, max: float, percent: float, is_regen: bool, vital_id: StringName) -> void:
+	vital_value_changed.emit(vital_id, current, max, percent, is_regen)
 
 ## Vital 耗尽回调
 ## [param] vital_id: StringName Vital ID

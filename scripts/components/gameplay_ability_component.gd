@@ -367,33 +367,15 @@ func get_current_casting_ability_id() -> StringName:
 func has_casting_ability() -> bool:
 	return not _current_casting_ability_id.is_empty()
 
-## 设置是否允许中断当前攻击（由 VisualAdapter 调用）
+## 设置是否允许中断（由 VisualAdapter 调用）
 ## [param] can_interrupt: bool 是否允许中断
 func set_can_interrupt(can_interrupt: bool) -> void:
 	can_interrupt_current = can_interrupt
 
-## 检查是否可以中断当前攻击
+## 检查是否可以中断
 ## [return] bool 是否可以中断
 func can_interrupt() -> bool:
 	return can_interrupt_current
-
-## 检查是否正在自动施法
-## [param] ability_id: StringName 技能ID
-## [return] bool 是否正在自动施法
-func is_autocast_active(ability_id: StringName) -> bool:
-	var ability_data = get_ability_data(ability_id)
-	if not is_instance_valid(ability_data):
-		return false
-	return ability_data.is_autocast()
-
-## 检查是否可以自动施法
-## [param] ability_id: StringName 技能ID
-## [return] bool 是否可以自动施法
-func can_autocast(ability_id: StringName) -> bool:
-	var ability_data = get_ability_data(ability_id)
-	if not is_instance_valid(ability_data):
-		return false
-	return ability_data.can_autocast()
 #endregion
 
 #region ========== 内部方法（供技能系统内部使用） ==========
@@ -439,6 +421,7 @@ func _apply_ability_effect(ability_id: StringName, target: Node = null, context:
 func _clear_current_casting_ability() -> void:
 	_current_casting_ability_id = &""
 	can_interrupt_current = false
+
 #endregion
 
 #region ========== 私有方法 - 计时器管理 ==========
