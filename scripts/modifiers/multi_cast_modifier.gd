@@ -41,4 +41,3 @@ func on_before_apply_ability(
 		ability.ability_id,
 		context.get("extra_projectiles", 0)
 	])
-

@@ -231,4 +231,3 @@ func _save_to_dict(dict: Dictionary) -> void:
 	# 合并 custom_data
 	for key in custom_data:
 		dict[key] = custom_data[key]
-

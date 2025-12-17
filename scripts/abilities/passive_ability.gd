@@ -60,5 +60,3 @@ func _on_forgotten(_ability_comp: Node, status_comp: Node) -> void:
 	
 	# 使用基类方法移除状态
 	_remove_all_statuses_from_entity(entity, status_comp)
-
-

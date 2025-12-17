@@ -187,8 +187,6 @@ func commit_cast(ability_id: StringName, target: Node = null, context: Variant =
 	ctx.ability_id = ability_id
 	ctx.instigator = get_parent()
 	ctx.input_target = target
-	if ability_data.has("current_level"):
-		ctx.ability_level = ability_data.current_level
 	
 	# 处理连击技能的特殊逻辑
 	# 检查是否是 CombatAbility（通过检查是否有连击相关方法）
@@ -398,8 +396,7 @@ func _apply_ability_effect(ability_id: StringName, target: Node = null, context:
 	context.ability_id = ability_id
 	context.instigator = get_parent()
 	context.input_target = target
-	if ability_data.has("current_level"):
-		context.ability_level = ability_data.current_level
+	context.ability_level = ability_data.current_level
 	
 	# 【Modifier 钩子】技能真正生效前通知（修改参数的最佳时机）
 	var modifier_comp: GameplayModifierComponent = GameplayAbilitySystem.get_component_by_interface(
