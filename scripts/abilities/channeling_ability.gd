@@ -84,10 +84,10 @@ func _commit_cast(ability_comp: Node, context: AbilityContext) -> bool:
 	# 【关键】引导技能在开启时不进入冷却，在关闭时才开始冷却
 	# 所以我们需要跳过冷却检查（通过 context 传递 skip_cooldown）
 	# 注意：直接修改 context，让 GameplayAbilityComponent.commit_cast 能读取到 skip_cooldown
-	context["skip_cooldown"] = true
+	context.skip_cooldown = true
 	# 【关键】引导技能自己管理生命周期，不应该启动逻辑计时器（cast_point_timer）
 	# 设置此标志，让 GameplayAbilityComponent 跳过计时器启动，直接应用效果
-	context["skip_cast_point_timer"] = true
+	context.custom_data["skip_cast_point_timer"] = true
 	var result = super(ability_comp, context)
 	if not result:
 		return false

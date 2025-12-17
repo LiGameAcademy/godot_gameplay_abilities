@@ -11,7 +11,7 @@ class_name GE_AttributeModifier
 
 var _applied_modifier: GameplayAttributeModifier  ## 存储已应用的修改器，用于移除
 
-func _apply(target: Node, _instigator: Node, context: Dictionary) -> void:
+func _apply(target: Node, _instigator: Node, context: AbilityContext) -> void:
 	# 使用鸭子类型查询组件
 	var attr_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayAttributeComponent")
 	if not attr_comp:
@@ -26,7 +26,7 @@ func _apply(target: Node, _instigator: Node, context: Dictionary) -> void:
 	_applied_modifier = attribute_modifier.duplicate()
 
 	# 根据层数计算最终值（如果context中有stacks信息）
-	var stacks = context.get("stacks", 1)
+	var stacks = context.custom_data.get("stacks", 1)
 	if value_per_stack != 0.0:
 		# (stacks - 1) 意味着第1层是 base_value，第2层是 base + value_per_stack
 		_applied_modifier.value = base_value + (value_per_stack * (stacks - 1))

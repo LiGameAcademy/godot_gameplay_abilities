@@ -84,4 +84,3 @@ func _validate_property(property: Dictionary) -> void:
 		if mutually_exclusive_tags.has(id):
 			property["usage"] = PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR
 			property["hint_string"] = "Tag cannot be mutually exclusive with itself"
-

@@ -6,7 +6,7 @@ class_name GE_StealStatus
 
 @export var is_debuff_only: bool = false  ## 是否只窃取Debuff
 
-func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
+func _apply(target: Node, instigator: Node, context: AbilityContext) -> void:
 	# 使用鸭子类型查询GameplayStatusComponent
 	var target_status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
 	var instigator_status_comp = GameplayAbilitySystem.get_component_by_interface(instigator, "GameplayStatusComponent")

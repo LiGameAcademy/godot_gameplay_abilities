@@ -23,7 +23,7 @@ class_name GE_StatusTransform
 ## 需要应用的新状态列表（可以是一个或多个）
 @export var statuses_to_apply: Array[GameplayStatusData] = []
 
-func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
+func _apply(target: Node, instigator: Node, context: AbilityContext) -> void:
 	if match_tags.is_empty() and statuses_to_apply.is_empty():
 		return
 	
@@ -40,10 +40,11 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 		if status_comp.has_method("remove_statuses_by_tags"):
 			status_comp.remove_statuses_by_tags(match_tags)
 	
-	# 3. 应用新的状态列表
+	# 3. 应用新的状态列表（需要转换为Dictionary）
+	var status_dict = context.to_dict()
 	for status_data in statuses_to_apply:
 		if is_instance_valid(status_data):
-			status_comp.apply_status(status_data, instigator, 1, context)
+			status_comp.apply_status(status_data, instigator, 1, status_dict)
 
 func _check_match_tags(target: Node) -> bool:
 	if match_tags.is_empty():

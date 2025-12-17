@@ -55,7 +55,7 @@ func _apply(target: Node, instigator: Node, context: AbilityContext) -> void:
 	var final_damage = health_vital.apply_damage(damage_info, target)
 	
 	# 将最终伤害值添加到上下文，供 Cue 使用
-	context["final_damage"] = final_damage
+	context.final_damage = final_damage
 	
 	AbilityEventBus.trigger_game_event(&"damage_applied", {
 		"target": target,

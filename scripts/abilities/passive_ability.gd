@@ -11,15 +11,15 @@ class_name PassiveAbility
 ## 被动技能是否可以在 UI 中显示（例如天赋树），默认 true
 @export var visible_in_ui: bool = true
 
-func _on_cast(_ability_comp: Node, _target: Node, _context: Dictionary = {}) -> void:
+func _on_cast(_ability_comp: Node, _target: Node, _context: AbilityContext) -> void:
 	# 被动技能不支持主动施放
 	pass
 
-func _can_cast(_ability_comp: Node, _target: Node, _context: Dictionary = {}) -> bool:
+func _can_cast(_ability_comp: Node, _target: Node, _context: AbilityContext) -> bool:
 	# 被动技能永远不可施放
 	return false
 
-func _commit_cast(_ability_comp: Node, _context: Dictionary = {}) -> bool:
+func _commit_cast(_ability_comp: Node, _context: AbilityContext) -> bool:
 	# 被动技能没有消耗与冷却逻辑
 	return false
 
@@ -43,7 +43,10 @@ func _on_learned(ability_comp: Node, status_comp: Node) -> void:
 		return
 	
 	# 使用基类方法应用状态（被动技能默认应用到拥有者自己，不需要 targeting_strategy）
-	_apply_statuses_to_targets(instigator, instigator, {}, null)
+	var context = AbilityContext.create()
+	context.instigator = instigator
+	context.input_target = instigator
+	_apply_statuses_to_targets(instigator, instigator, context, null)
 
 ## 遗忘被动技能时：移除对应状态
 func _on_forgotten(_ability_comp: Node, status_comp: Node) -> void:

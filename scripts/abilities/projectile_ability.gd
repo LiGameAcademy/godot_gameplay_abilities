@@ -64,7 +64,7 @@ func _on_cast(ability_comp: Node, input_target: Node, context: AbilityContext) -
 	# 6. 计算实际发射数量（支持 Modifier 修改）
 	var actual_projectile_count = projectile_count
 	# 读取 Modifier 通过 context 传递的额外投射物数量
-	actual_projectile_count += context.to_dict().get("extra_projectiles", 0)
+	actual_projectile_count += context.extra_projectiles
 	actual_projectile_count = max(1, actual_projectile_count)  # 至少发射 1 个
 	
 	# 7. 循环生成投射物

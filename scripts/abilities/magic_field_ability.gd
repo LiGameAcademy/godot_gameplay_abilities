@@ -22,7 +22,7 @@ class_name MagicFieldAbility
 ## [重写] 施放技能
 ## 逻辑：应用直接效果（如放置时对施法者的效果），然后生成魔法场
 ## 魔法场携带 statuses 中的效果作为"弹头"传递给进入区域的目标
-func _on_cast(ability_comp: Node, input_target: Node, context: Dictionary = {}) -> void:
+func _on_cast(ability_comp: Node, input_target: Node, context: AbilityContext) -> void:
 	var instigator = ability_comp.get_parent()
 	if not is_instance_valid(instigator):
 		push_warning("MagicFieldAbility: Cannot cast, instigator is not valid")
@@ -64,7 +64,7 @@ func _spawn_magic_field(
 		instigator: Node, 
 		spawn_position: Vector3, 
 		data: MagicFieldData, 
-		context: Dictionary = {}) -> void:
+		context: AbilityContext) -> void:
 	var magic_field = data.magic_field_scene.instantiate()
 	
 	# 类型检查
@@ -98,13 +98,18 @@ func _spawn_magic_field(
 ## 获取生成位置
 ## [param] instigator: Node 施法者
 ## [param] input_target: Node 输入目标（可选）
-## [param] context: Dictionary 上下文信息
+## [param] context: AbilityContext 上下文信息
 ## [return] Vector3 生成位置
-func _get_spawn_position(instigator: Node, input_target: Node, context: Dictionary) -> Vector3:
-	# 优先级1: 从 context 获取 spawn_position
-	if context.has("target_position") and context["target_position"] is Vector3:
-		var pos = context["target_position"] as Vector3
-		print("MagicFieldAbility: Using target_position from context: %s" % pos)
+func _get_spawn_position(instigator: Node, input_target: Node, context: AbilityContext) -> Vector3:
+	# 优先级1: 从 context 的 custom_data 或 hit_position 获取 spawn_position
+	if context.hit_position != Vector3.ZERO:
+		var pos = context.hit_position
+		print("MagicFieldAbility: Using hit_position from context: %s" % pos)
+		return pos
+	
+	if context.custom_data.has("target_position") and context.custom_data["target_position"] is Vector3:
+		var pos = context.custom_data["target_position"] as Vector3
+		print("MagicFieldAbility: Using target_position from custom_data: %s" % pos)
 		return pos
 	
 	# 优先级2: 使用目标位置

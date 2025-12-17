@@ -16,7 +16,7 @@ class_name GE_SpawnProjectile
 ## 是否使用 instigator 的 Transform 作为出生点（否则尝试使用 context["muzzle_transform"]）
 @export var use_instigator_transform: bool = true
 
-func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
+func _apply(target: Node, instigator: Node, context: AbilityContext) -> void:
 	if not is_instance_valid(projectile_scene) or not is_instance_valid(projectile_data):
 		return
 	if not is_instance_valid(instigator):
@@ -32,8 +32,8 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 	# 1. 决定出生 Transform
 	var spawn_transform := Transform3D.IDENTITY
 	
-	if not use_instigator_transform and context.has("muzzle_transform") and context["muzzle_transform"] is Transform3D:
-		spawn_transform = context["muzzle_transform"]
+	if not use_instigator_transform and context.muzzle_transform != Transform3D.IDENTITY:
+		spawn_transform = context.muzzle_transform
 	elif instigator is Node3D:
 		spawn_transform = (instigator as Node3D).global_transform
 	

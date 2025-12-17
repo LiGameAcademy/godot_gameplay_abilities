@@ -6,10 +6,10 @@ class_name GE_DamageModification
 
 @export var reduction_multiplier: float = 0.6  ## 伤害的减少倍率（<1.0为减少，>1.0为增加）
 
-func _apply(_target: Node, _instigator: Node, context: Dictionary) -> void:
+func _apply(_target: Node, _instigator: Node, context: AbilityContext) -> void:
 	# 这个效果需要在伤害事件触发时修改伤害值
 	# 通过context中的damage_info来修改
-	var damage_info: DamageInfo = context.get("damage_info")
+	var damage_info: DamageInfo = context.damage_info
 	if not is_instance_valid(damage_info): 
 		return
 	
@@ -17,7 +17,7 @@ func _apply(_target: Node, _instigator: Node, context: Dictionary) -> void:
 	damage_info.base_damage *= reduction_multiplier
 	
 	# 如果context中有stacks信息，应用层数
-	var stacks = context.get("stacks", 1)
+	var stacks = context.custom_data.get("stacks", 1)
 	if stacks > 1:
 		damage_info.base_damage *= stacks
 	

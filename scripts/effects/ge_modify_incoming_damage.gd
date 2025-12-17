@@ -12,11 +12,11 @@ class_name GE_ModifyIncomingDamage
 
 @export_range(0.0, 10.0, 0.01) var damage_multiplier: float = 0.5
 
-func _apply(target: Node, _instigator: Node, context: Dictionary) -> void:
-	if not context.has("damage_info"):
+func _apply(target: Node, _instigator: Node, context: AbilityContext) -> void:
+	if not is_instance_valid(context.damage_info):
 		return
 	
-	var damage_info: DamageInfo = context["damage_info"]
+	var damage_info: DamageInfo = context.damage_info
 	if not is_instance_valid(damage_info):
 		push_error("GE_ModifyIncomingDamage: damage_info is invalid")
 		return

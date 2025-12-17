@@ -7,7 +7,7 @@ class_name GE_ModifyVital
 @export var amount: float = 0.0
 @export var vital_comp_name : StringName = &"GameplayAttributeComponent"
 
-func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
+func _apply(target: Node, instigator: Node, context: AbilityContext) -> void:
     var vital_comp = GameplayAbilitySystem.get_component_by_interface(target, vital_comp_name)
 
     if not vital_comp:

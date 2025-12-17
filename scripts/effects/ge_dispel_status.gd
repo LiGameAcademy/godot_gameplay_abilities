@@ -31,7 +31,7 @@ enum DispelMode {
 @export_range(0, 999) var min_dispel_count: int = 1
 @export_range(0, 999) var max_dispel_count: int = 1
 
-func _apply(target: Node, _instigator: Node, _context: Dictionary) -> void:
+func _apply(target: Node, _instigator: Node, _context: AbilityContext) -> void:
 	var status_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayStatusComponent")
 	if not status_comp:
 		return

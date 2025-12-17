@@ -7,7 +7,7 @@ class_name GE_ApplyStatus
 @export var status_data: GameplayStatusData = null  ## 状态数据
 @export var stacks: int = 1  ## 层数
 
-func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
+func _apply(target: Node, instigator: Node, context: AbilityContext) -> void:
 	if not is_instance_valid(status_data):
 		push_error("GE_ApplyStatus: status_data is not set!")
 		return
@@ -18,9 +18,10 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 		push_error("GE_ApplyStatus: Target %s has no GameplayStatusComponent!" % target.name)
 		return
 	
-	# 应用状态（使用鸭子类型调用方法）
+	# 应用状态（使用鸭子类型调用方法，需要转换为Dictionary）
 	if status_comp.has_method("apply_status"):
-		status_comp.apply_status(status_data, instigator, stacks, context)
+		var status_dict = context.to_dict()
+		status_comp.apply_status(status_data, instigator, stacks, status_dict)
 	else:
 		push_error("GE_ApplyStatus: GameplayStatusComponent does not have apply_status method!")
 

@@ -1,13 +1,12 @@
 extends Node
 class_name GameplayStatusComponent
 
-## 状态组件（采用鸭子类型设计，不继承基类）
+## 状态组件
 ## 管理实体的所有状态（Buff/Debuff）
 
 const GROUP_NAME := "StatusEntities"
 
 var _active_statuses: Dictionary[StringName, GameplayStatusInstance] = {}
-var _health_comp: Node = null  ## 用于订阅伤害事件（采用鸭子类型）
 
 signal status_applied(status_id: StringName, instance: GameplayStatusInstance)
 signal status_removed(status_id: StringName)
@@ -19,13 +18,9 @@ func _ready() -> void:
 	if is_instance_valid(entity) and not entity.is_in_group(GROUP_NAME):
 		entity.add_to_group(GROUP_NAME)
 	
-	# 使用鸭子类型查询HealthComponent
-	_health_comp = GameplayAbilitySystem.get_component_by_interface(get_parent(), "HealthComponent")
-	
-	if is_instance_valid(_health_comp):
-		# 订阅 HealthComponent 的伤害事件（使用鸭子类型检查信号）
-		if _health_comp.has_signal("damage_received") and not _health_comp.damage_received.is_connected(_on_damage_received):
-			_health_comp.damage_received.connect(_on_damage_received)
+	# 订阅事件总线的统一游戏事件（用于监听伤害事件等）
+	if not AbilityEventBus.game_event_occurred.is_connected(_on_game_event_occurred):
+		AbilityEventBus.game_event_occurred.connect(_on_game_event_occurred)
 
 ## 添加状态
 ## [param] gsd: GameplayStatusData 状态数据
@@ -213,8 +208,20 @@ func handle_event(event_id: StringName, context: Dictionary) -> void:
 		if is_instance_valid(instance):
 			instance.handle_event(event_id, context)
 
-## 订阅 HealthComponent 的伤害事件
-## 注意：此方法仍然保留用于向后兼容，但状态现在主要通过统一事件系统响应
-func _on_damage_received(damage_info: DamageInfo) -> void:
-	var context = {"damage_info": damage_info}
-	handle_event(&"damage_received", context)
+## 处理事件总线的统一游戏事件
+## 监听伤害事件等，并转发给状态系统
+func _on_game_event_occurred(event_type: StringName, context: Dictionary) -> void:
+	# 只处理与当前实体相关的事件
+	var entity = get_parent()
+	if not is_instance_valid(entity):
+		return
+	
+	# 检查事件是否与当前实体相关
+	# 对于伤害事件，检查 target 是否是当前实体
+	if event_type == &"damage_received":
+		var target = context.get("target", null)
+		if target == entity:
+			var damage_info = context.get("damage_info", null)
+			if damage_info:
+				var event_context = {"damage_info": damage_info}
+				handle_event(&"damage_received", event_context)

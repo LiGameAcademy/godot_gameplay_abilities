@@ -149,8 +149,8 @@ func _on_cast(ability_comp: Node, input_target: Node, context: AbilityContext) -
 		_apply_initial_effects(instigator, input_target, context)
 	
 	# 2. 将当前连击索引添加到上下文，供动画系统使用
-	context["combo_index"] = _current_combo_index
-	context["combo_count"] = _combo_abilities.size()
+	context.custom_data["combo_index"] = _current_combo_index
+	context.custom_data["combo_count"] = _combo_abilities.size()
 	
 	# 3. 订阅子技能的完成信号（子技能通过执行时间自动完成）
 	if not current_ability.ability_completed.is_connected(_on_combo_segment_completed):

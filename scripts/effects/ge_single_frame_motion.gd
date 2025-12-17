@@ -79,8 +79,8 @@ func _apply(target: Node, instigator: Node, context: AbilityContext) -> void:
 ## [param] context: Dictionary 上下文信息
 ## [return] Vector3 面朝方向向量（已归一化，-Z 为默认前方）
 func _get_facing_direction(body: Node3D, context: AbilityContext) -> Vector3:
-	if context.has("facing_angle"):
-		var facing_angle: float = context.facing_angle
+	if context.custom_data.has("facing_angle") and context.custom_data["facing_angle"] is float:
+		var facing_angle: float = context.custom_data["facing_angle"]
 		return Vector3(-sin(facing_angle), 0.0, -cos(facing_angle)).normalized()
 	
 	# 回退：从 Visuals 节点获取
@@ -123,8 +123,8 @@ func _resolve_direction(body: Node3D, context: AbilityContext) -> Vector3:
 		
 		DirectionType.MOUSE:
 			# 向鼠标方向（首次计算时锁定）
-			if context.has("mouse_direction") and context["mouse_direction"] is Vector3:
-				dir = (context["mouse_direction"] as Vector3).normalized()
+			if context.custom_data.has("mouse_direction") and context.custom_data["mouse_direction"] is Vector3:
+				dir = (context.custom_data["mouse_direction"] as Vector3).normalized()
 				# 确保方向在 XZ 平面上（忽略 Y 轴）
 				dir.y = 0.0
 				dir = dir.normalized()
@@ -135,8 +135,8 @@ func _resolve_direction(body: Node3D, context: AbilityContext) -> Vector3:
 		
 		DirectionType.CUSTOM:
 			# 自定义方向（首次计算时锁定）
-			if context.has("direction") and context["direction"] is Vector3:
-				dir = (context["direction"] as Vector3).normalized()
+			if context.custom_data.has("direction") and context.custom_data["direction"] is Vector3:
+				dir = (context.custom_data["direction"] as Vector3).normalized()
 				# 确保方向在 XZ 平面上
 				dir.y = 0.0
 				dir = dir.normalized()

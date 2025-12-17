@@ -7,11 +7,11 @@ class_name GE_ApplyToAreaTargets
 
 @export var hit_detector: HitDetectorBase = null  ## 区域命中检测器（如果为null，从context中获取）
 
-func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
+func _apply(target: Node, instigator: Node, context: AbilityContext) -> void:
 	# 1. 获取 hit_detector（优先使用配置的，否则从context中获取）
 	var detector = hit_detector
 	if not is_instance_valid(detector):
-		detector = context.get("hit_detector", null) as HitDetectorBase
+		detector = context.custom_data.get("hit_detector", null) as HitDetectorBase
 	
 	if not is_instance_valid(detector):
 		push_warning("GE_ApplyToAreaTargets: No hit_detector found in config or context")
@@ -22,8 +22,9 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 		push_warning("GE_ApplyToAreaTargets: Instigator is not Node3D, cannot detect targets")
 		return
 	
-	# 3. 检测区域内的目标
-	var area_targets = detector.get_targets(instigator as Node3D, context)
+	# 3. 检测区域内的目标（hit_detector需要Dictionary，转换后传递）
+	var detector_dict = context.to_dict()
+	var area_targets = detector.get_targets(instigator as Node3D, detector_dict)
 	if area_targets.is_empty():
 		# 没有目标，静默失败
 		return
