@@ -1,6 +1,5 @@
-@icon("res://icons/bt_runner.svg")
-class_name BTRunner
 extends Node
+class_name BTRunner
 
 const NodeStatus := BTNode.Status
 

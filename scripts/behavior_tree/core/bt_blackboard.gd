@@ -46,3 +46,38 @@ func erase_node_data(node: BTNode) -> void:
 func clear() -> void:
 	_data.clear()
 	value_cleared.emit()
+
+## [调试] 获取所有变量（用于调试面板）
+func get_all_vars() -> Dictionary:
+	return _data.duplicate()
+
+## [调试] 获取所有节点数据（用于调试面板）
+## 返回 Array[Dictionary]，每个 Dictionary 包含 node_name 和 data
+func get_all_node_data() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for node in _node_memory.keys():
+		if is_instance_valid(node):
+			var node_name = _get_node_name(node)
+			result.append({
+				"node_name": node_name,
+				"data": _node_memory[node],
+				"node_ref": node  # 保留引用用于后续操作
+			})
+	return result
+
+## 获取节点名称（辅助方法）
+func _get_node_name(node: BTNode) -> String:
+	if node == null:
+		return "null"
+	
+	var script = node.get_script()
+	if script:
+		var script_name = script.get_global_name()
+		if script_name != "":
+			return script_name
+	
+	var resource_path = node.resource_path
+	if resource_path != "":
+		return resource_path.get_file()
+	
+	return node.get_class()

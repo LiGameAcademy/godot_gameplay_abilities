@@ -1,0 +1,156 @@
+[gd_scene load_steps=3 format=3 uid="uid://8cm7of0bkv8r"]
+
+[ext_resource type="Script" uid="uid://d3ux0ouo7d7v3" path="res://addons/godot_gameplay_abilities/ui/bt_debug_panel.gd" id="1_bt_debug"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1"]
+bg_color = Color(0.1, 0.1, 0.1, 0.95)
+
+[node name="Window" type="Window"]
+oversampling_override = 1.0
+title = "行为树调试面板"
+position = Vector2i(0, 36)
+size = Vector2i(1280, 1060)
+script = ExtResource("1_bt_debug")
+
+[node name="BTDebugPanel" type="MarginContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="Panel" parent="BTDebugPanel"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_1")
+
+[node name="MarginContainer" type="MarginContainer" parent="BTDebugPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="VBoxContainer" type="VBoxContainer" parent="BTDebugPanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="HeaderContainer" type="HBoxContainer" parent="BTDebugPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_constants/separation = 8
+
+[node name="TitleLabel" type="Label" parent="BTDebugPanel/MarginContainer/VBoxContainer/HeaderContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 20
+text = "行为树调试面板"
+horizontal_alignment = 1
+
+[node name="RefreshButton" type="Button" parent="BTDebugPanel/MarginContainer/VBoxContainer/HeaderContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+text = "刷新"
+
+[node name="HSeparator" type="HSeparator" parent="BTDebugPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 0
+
+[node name="MainContainer" type="HBoxContainer" parent="BTDebugPanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 16
+
+[node name="LeftPanel" type="VBoxContainer" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="EntityListLabel" type="Label" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer/LeftPanel"]
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 16
+text = "实体列表"
+
+[node name="EntityList" type="ItemList" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer/LeftPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="MiddlePanel" type="VBoxContainer" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="TreeViewLabel" type="Label" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer/MiddlePanel"]
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 16
+text = "行为树结构"
+
+[node name="TreeView" type="Tree" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer/MiddlePanel"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+hide_root = true
+
+[node name="RightPanel" type="VBoxContainer" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="BlackboardLabel" type="Label" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer/RightPanel"]
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 16
+text = "黑板变量"
+
+[node name="BlackboardView" type="RichTextLabel" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer/RightPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(250, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+bbcode_enabled = true
+scroll_following = true
+
+[node name="HSeparator2" type="HSeparator" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer/RightPanel"]
+layout_mode = 2
+size_flags_vertical = 0
+
+[node name="ActiveNodesLabel" type="Label" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer/RightPanel"]
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 16
+text = "活动节点"
+
+[node name="ActiveNodesView" type="RichTextLabel" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer/RightPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(250, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+bbcode_enabled = true
+scroll_following = true
+
+[node name="HSeparator3" type="HSeparator" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer/RightPanel"]
+layout_mode = 2
+size_flags_vertical = 0
+
+[node name="ExecutionHistoryLabel" type="Label" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer/RightPanel"]
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 16
+text = "执行记录"
+
+[node name="ExecutionHistoryView" type="RichTextLabel" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer/RightPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(250, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+bbcode_enabled = true
+scroll_following = true

@@ -1,6 +1,9 @@
 extends BTDecorator
 class_name BTCooldown
 
+## 冷却节点
+## 检查黑板中的变量是否大于指定的值
+
 @export var cooldown_time: float = 5.0
 
 func _tick_decorator(instance: BTInstance, delta: float) -> int:

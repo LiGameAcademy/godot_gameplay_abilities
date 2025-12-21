@@ -1,6 +1,9 @@
 extends BTDecorator
 class_name BTInverter
 
+## 反转节点
+## 将子节点的成功/失败状态反转
+
 func _tick_decorator(instance: BTInstance, delta: float) -> int:
 	var result = child.tick(instance, delta)
 	

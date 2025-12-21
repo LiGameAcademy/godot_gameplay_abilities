@@ -13,10 +13,9 @@ func _enter(instance: BTInstance):
 	_set_storage(instance, end_time)
 
 func _tick(instance: BTInstance, delta: float) -> int:
-	var end_time = _get_storage(instance)
 	var current_time = Time.get_ticks_msec() / 1000.0
 	
-	if current_time >= end_time:
+	if current_time >= _get_storage(instance):
 		return Status.SUCCESS
 	
 	return Status.RUNNING

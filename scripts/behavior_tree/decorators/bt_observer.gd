@@ -1,6 +1,9 @@
 extends BTDecorator
 class_name BTObserver
 
+## 观察者节点
+## 观察黑板中的变量是否发生变化
+
 ## 中断类型
 enum AbortType {
 	NONE,           # 不中断，仅作为普通条件使用

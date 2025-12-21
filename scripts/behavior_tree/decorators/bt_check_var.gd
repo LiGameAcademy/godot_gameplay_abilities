@@ -1,6 +1,9 @@
 extends BTObserver
 class_name BTCheckVar
 
+## 检查变量节点
+## 检查黑板中的变量是否等于指定的值
+
 @export var key: String
 @export var value: Variant
 @export var check_exist_only: bool = false
