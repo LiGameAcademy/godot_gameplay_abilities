@@ -38,6 +38,14 @@ func _apply(target: Node, instigator: Node, context: AbilityContext) -> void:
 		push_warning("GE_SingleFrameMotion: Target is not CharacterBody3D")
 		return
 	
+	# 1.1. 检查标签：如果目标有 state.rooted 或 state.stunned 标签，且方向类型是 INPUT，则不执行移动
+	# 注意：这允许状态效果中的移动（如冲刺），但阻止玩家通过输入控制移动
+	if direction_type == DirectionType.INPUT:
+		if TagManager.has_tag(target, &"state.rooted") or TagManager.has_tag(target, &"state.stunned"):
+			# 有定身/眩晕标签，且方向类型是 INPUT，则不执行移动
+			# 但如果是其他方向类型（如 FORWARD），仍然允许移动（因为这是状态效果本身）
+			return
+	
 	# 2. 计算方向（首次调用时缓存，后续使用缓存的方向）
 	# 注意：对于周期性效果，通常希望方向在状态应用时锁定，而不是每帧重新计算
 	if not _direction_cached or direction_type == DirectionType.INPUT:
