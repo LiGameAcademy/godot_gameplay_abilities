@@ -185,5 +185,6 @@ func _record_execution(node: BTNode, status: int) -> void:
 func _on_blackboard_changed(key: String, value: Variant):
 	# 当黑板变化时，通知所有注册的观察者
 	# 注意：为了防止遍历中修改数组，最好用 duplicate
-	for obs : BTObserver in _observers.duplicate():
-		obs.on_blackboard_change(self, key)
+	for obs in _observers.duplicate():
+		if is_instance_valid(obs) and obs.has_method("on_blackboard_change"):
+			obs.on_blackboard_change(self, key)

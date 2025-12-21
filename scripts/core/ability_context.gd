@@ -10,8 +10,10 @@ class_name AbilityContext
 var instigator: Node = null
 ## 输入目标（用户指定的目标）
 var input_target: Node = null
+## 实际目标
+var targets: Array[Node] = []
 ## 当前技能数据
-var ability: GameplayAbility = null
+var ability: GameplayAbilityInstance = null
 ## 技能组件
 var ability_comp: GameplayAbilityComponent = null
 ## 技能ID

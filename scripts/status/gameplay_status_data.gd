@@ -78,6 +78,28 @@ enum StackingPolicy {
 ## 状态移除时，会自动停止持续 Cue（如附加粒子特效）
 @export var cue: GameplayCue = null
 
+@export_group("Attribute Modifiers")
+## 属性修改器列表
+## 当状态应用时，这些修改器会被应用到目标的 GameplayAttributeComponent
+## 当状态移除时，这些修改器会被自动移除
+## 
+## 使用场景：
+## - "力量祝福"：力量 +10（ADD 类型）
+## - "狂暴状态"：攻击力 +50%（MULTIPLY 类型）
+## - "虚弱诅咒"：所有属性 -20%（MULTIPLY 类型）
+## 
+## 注意：
+## - 支持层数计算：如果状态有层数，可以通过 base_value 和 value_per_stack 配置
+## - 与 ability_modifiers 类似，属性修改器由状态系统直接管理生命周期
+## - 如果需要在技能中直接应用属性修改（不通过状态），使用 GE_AttributeModifier 效果
+@export var attribute_modifiers: Array[GameplayAttributeModifier] = []
+## 属性修改器的基础值（用于层数计算）
+## 如果 value_per_stack 不为 0，第1层的值为 base_value，第2层为 base_value + value_per_stack
+@export var attribute_modifier_base_value: float = 0.0
+## 每层增加的值（用于层数计算）
+## 如果为 0，则使用 attribute_modifiers 中配置的固定值
+@export var attribute_modifier_value_per_stack: float = 0.0
+
 @export_group("Ability Modifiers")
 ## 技能行为修改器列表
 ## 当状态应用时，这些修改器会被注册到 GameplayModifierComponent

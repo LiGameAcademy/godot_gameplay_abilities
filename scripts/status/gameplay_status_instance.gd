@@ -17,6 +17,7 @@ var _periodic_timer: Timer = null  # 周期性效果计时器（状态只有一�
 var _is_connected_to_event_bus: bool = false  # 是否已连接到统一事件系统
 var _initial_context: Dictionary = {}  # 保存应用时的上下文（用于周期性效果）
 var _cue_instance: GameplayCue = null  # 保存克隆的 Cue 实例（用于停止时清理）
+var _applied_attribute_modifiers: Array[GameplayAttributeModifier] = []  # 存储已应用的属性修改器（用于移除时清理）
 
 ## 状态完成信号
 ## 当状态完成时（瞬时状态立即完成，持续状态在移除时完成）发出此信号
@@ -72,8 +73,6 @@ func apply(context: Dictionary = {}) -> void:
 	
 	# 3. 如果是瞬时效果（duration = 0），立即移除并发出完成信号
 	if status_data.duration == 0.0:
-		remove()
-		# 发出完成信号（瞬时状态在应用完成后立即完成）
 		status_completed.emit(self)
 		return
 	
@@ -93,10 +92,13 @@ func apply(context: Dictionary = {}) -> void:
 	# 6. 应用状态标签（标签系统集成）
 	_apply_status_tags()
 	
-	# 7. 注册技能行为修改器（如果配置了）
+	# 7. 注册属性修改器（如果配置了）
+	_register_attribute_modifiers()
+	
+	# 8. 注册技能行为修改器（如果配置了）
 	_register_ability_modifiers()
 	
-	# 8. 执行状态 Cue（视觉反馈）
+	# 9. 执行状态 Cue（视觉反馈）
 	_execute_status_cue()
 
 ## 状态被移除时，移除所有效果
@@ -125,10 +127,13 @@ func remove() -> void:
 	# 5. 移除状态标签（标签系统集成）
 	_remove_status_tags()
 	
-	# 6. 移除技能行为修改器（清理修改器）
+	# 6. 移除属性修改器（清理属性修改）
+	_unregister_attribute_modifiers()
+	
+	# 7. 移除技能行为修改器（清理修改器）
 	_unregister_ability_modifiers()
 	
-	# 7. 停止状态 Cue（清理视觉反馈）
+	# 8. 停止状态 Cue（清理视觉反馈）
 	_stop_status_cue()
 	
 	# 8. 发出完成信号（持续状态在移除时完成）
@@ -155,18 +160,6 @@ func handle_event(event_id: StringName, context: Dictionary) -> void:
 			if is_instance_valid(target):
 				_apply_all_effects_to_target(target, context)
 
-## 统一游戏事件系统的回调
-## 当任何游戏事件发生时，此方法会被调用
-func _on_game_event_occurred(event_type: StringName, context: Dictionary) -> void:
-	var target = get_target_entity()
-	if not is_instance_valid(target):
-		return
-	
-	# 简化：只检查事件类型是否匹配
-	# 事件相关性应该由事件系统在发送时保证，或者在效果系统中过滤
-	if status_data.can_trigger_on_event(event_type) or status_data.event_to_listen == event_type:
-		handle_event(event_type, context)
-
 ## 刷新持续时间
 func refresh_duration() -> void:
 	if not is_instance_valid(_duration_timer):
@@ -192,22 +185,28 @@ func add_stack(amount: int = 1, is_refresh_duration: bool = true) -> void:
 		# --- 核心：重建需要存储的效果（属性修改器等）---
 		# 1. 移除所有旧的需要存储的效果
 		_remove_all_effects()
+		
+		# 2. 移除旧的属性修改器（使用旧层数）
+		_unregister_attribute_modifiers()
 
-		# 2. 增加层数
+		# 3. 增加层数
 		stacks = min(stacks + amount, status_data.max_stacks)
 
-		# 3. 用 *新* 的层数，重新施加所有效果
-		# 注意：虽然会重新触发所有效果，但这是必要的，因为属性修改器需要重新应用
+		# 4. 重新注册属性修改器（使用新层数）
+		_register_attribute_modifiers()
+
+		# 5. 用 *新* 的层数，重新施加所有效果
+		# 注意：虽然会重新触发所有效果，但这是必要的，因为其他状态型效果需要重新应用
 		# 瞬时效果（如伤害）虽然会被重新触发，但这是可以接受的权衡
 		# 如果希望避免重新触发瞬时效果，应该在 GameplayStatusData 中将它们分离到 instant_effects
 		var target_entity = get_target_entity()
 		if is_instance_valid(target_entity):
 			var context = {"stacks": stacks}
 			# 重新应用所有效果（包括瞬时效果）
-			# 这是为了确保属性修改器等需要存储的效果能够正确更新
+			# 这是为了确保其他需要存储的效果能够正确更新
 			_apply_all_effects_to_target(target_entity, context, false)
 	
-	# 4. 刷新持续时间
+	# 6. 刷新持续时间
 	if is_refresh_duration:
 		refresh_duration()
 
@@ -310,16 +309,6 @@ func _apply_all_effects_to_target(target: Node, context: Dictionary, only_statef
 		if not only_stateful:
 			stateful_effects.append(effect_clone)
 
-## 应用所有效果（统一入口，所有效果都克隆）
-## [已弃用] 使用 _apply_all_effects_to_target 替代
-## 保留此方法以保持向后兼容
-func _apply_all_effects(context: Dictionary) -> void:
-	var target = get_target_entity()
-	if not is_instance_valid(target):
-		return
-	
-	_apply_all_effects_to_target(target, context)
-
 ## 移除所有效果
 func _remove_all_effects() -> void:
 	var target = get_target_entity()
@@ -338,9 +327,7 @@ func _on_duration_timer_timeout() -> void:
 	if not is_instance_valid(owner_component):
 		return
 	
-	# 通过接口调用remove_status方法（鸭子类型）
-	if owner_component.has_method("remove_status"):
-		owner_component.remove_status(get_id())
+	owner_component.remove_status(get_id())
 
 ## 周期性效果到期时，应用周期性效果
 ## 注意：周期性效果不会存储到 stateful_effects，每次触发时直接应用
@@ -434,21 +421,77 @@ func _stop_status_cue() -> void:
 		if cue_component.has_method("stop"):
 			cue_component.stop(target)
 
+## 注册属性修改器（状态应用时调用）
+func _register_attribute_modifiers() -> void:
+	if not is_instance_valid(status_data) or status_data.attribute_modifiers.is_empty():
+		return
+	
+	# 通过 owner_component 获取属性组件（降低耦合）
+	if not is_instance_valid(owner_component) or not owner_component.has_method("get_attribute_component"):
+		return
+	
+	var attr_comp = owner_component.get_attribute_component()
+	if not is_instance_valid(attr_comp):
+		# 如果没有 AttributeComponent，静默失败（不是所有实体都需要属性）
+		return
+	
+	# 注册所有属性修改器
+	for mod_template in status_data.attribute_modifiers:
+		if not is_instance_valid(mod_template):
+			continue
+		
+		# 创建修改器的副本（避免修改模板）
+		var mod = mod_template.duplicate() as GameplayAttributeModifier
+		if not is_instance_valid(mod):
+			continue
+		
+		# 根据层数计算最终值（如果配置了 value_per_stack）
+		if status_data.attribute_modifier_value_per_stack != 0.0:
+			# (stacks - 1) 意味着第1层是 base_value，第2层是 base + value_per_stack
+			mod.value = status_data.attribute_modifier_base_value + (status_data.attribute_modifier_value_per_stack * (stacks - 1))
+		elif status_data.attribute_modifier_base_value != 0.0:
+			# 如果只配置了 base_value，使用 base_value
+			mod.value = status_data.attribute_modifier_base_value
+		# 否则，使用模板中定义的固定值
+		
+		# 应用修改器
+		attr_comp.add_modifier(mod)
+		
+		# 存储已应用的修改器（用于移除时清理）
+		if not _applied_attribute_modifiers:
+			_applied_attribute_modifiers = []
+		_applied_attribute_modifiers.append(mod)
+
+## 移除属性修改器（状态移除时调用）
+func _unregister_attribute_modifiers() -> void:
+	if not is_instance_valid(status_data) or not _applied_attribute_modifiers:
+		return
+	
+	# 通过 owner_component 获取属性组件（降低耦合）
+	if not is_instance_valid(owner_component) or not owner_component.has_method("get_attribute_component"):
+		return
+	
+	var attr_comp = owner_component.get_attribute_component()
+	if not is_instance_valid(attr_comp):
+		return
+	
+	# 移除所有已应用的属性修改器
+	for mod in _applied_attribute_modifiers:
+		if is_instance_valid(mod):
+			attr_comp.remove_modifier(mod)
+	
+	_applied_attribute_modifiers.clear()
+
 ## 注册技能行为修改器（状态应用时调用）
 func _register_ability_modifiers() -> void:
 	if not is_instance_valid(status_data) or status_data.ability_modifiers.is_empty():
 		return
 	
-	var status_holder = get_target_entity()
-	if not is_instance_valid(status_holder):
+	# 通过 owner_component 获取修改器组件（降低耦合）
+	if not is_instance_valid(owner_component) or not owner_component.has_method("get_modifier_component"):
 		return
 	
-	# 获取 ModifierComponent
-	var modifier_comp: GameplayModifierComponent = GameplayAbilitySystem.get_component_by_interface(
-		status_holder,
-		"GameplayModifierComponent"
-	)
-	
+	var modifier_comp = owner_component.get_modifier_component()
 	if not is_instance_valid(modifier_comp):
 		# 如果没有 ModifierComponent，静默失败（不是所有实体都需要修改器）
 		return
@@ -466,16 +509,11 @@ func _unregister_ability_modifiers() -> void:
 	if not is_instance_valid(status_data):
 		return
 	
-	var status_holder = get_target_entity()
-	if not is_instance_valid(status_holder):
+	# 通过 owner_component 获取修改器组件（降低耦合）
+	if not is_instance_valid(owner_component) or not owner_component.has_method("get_modifier_component"):
 		return
 	
-	# 获取 ModifierComponent
-	var modifier_comp: GameplayModifierComponent = GameplayAbilitySystem.get_component_by_interface(
-		status_holder,
-		"GameplayModifierComponent"
-	)
-	
+	var modifier_comp = owner_component.get_modifier_component()
 	if not is_instance_valid(modifier_comp):
 		return
 	
@@ -485,3 +523,15 @@ func _unregister_ability_modifiers() -> void:
 	
 	# 清理 Cue 实例引用
 	_cue_instance = null
+
+## 统一游戏事件系统的回调
+## 当任何游戏事件发生时，此方法会被调用
+func _on_game_event_occurred(event_type: StringName, context: Dictionary) -> void:
+	var target = get_target_entity()
+	if not is_instance_valid(target):
+		return
+	
+	# 简化：只检查事件类型是否匹配
+	# 事件相关性应该由事件系统在发送时保证，或者在效果系统中过滤
+	if status_data.can_trigger_on_event(event_type) or status_data.event_to_listen == event_type:
+		handle_event(event_type, context)

@@ -22,8 +22,8 @@ var source: String = ""
 ## [param] ability: GameplayAbility 技能实例
 ## [param] ability_comp: GameplayAbilityComponent 技能组件（可选，用于 Tag 检查）
 ## [return] bool 是否影响此技能
-func affects_ability(ability: GameplayAbility, ability_comp: GameplayAbilityComponent = null) -> bool:
-	if not is_instance_valid(ability):
+func affects_ability(ability_instance: GameplayAbilityInstance, ability_comp: GameplayAbilityComponent = null) -> bool:
+	if not is_instance_valid(ability_instance):
 		return false
 	
 	# 如果未设置过滤条件，默认影响所有技能
@@ -32,7 +32,7 @@ func affects_ability(ability: GameplayAbility, ability_comp: GameplayAbilityComp
 	
 	# 检查 ID 匹配
 	if not affected_ability_ids.is_empty():
-		if ability.ability_id in affected_ability_ids:
+		if ability_instance.get_definition().ability_id in affected_ability_ids:
 			return true
 	
 	# 检查 Tag 匹配（需要查询 TagManager）
@@ -42,8 +42,8 @@ func affects_ability(ability: GameplayAbility, ability_comp: GameplayAbilityComp
 		if is_instance_valid(ability_comp):
 			ability_entity = ability_comp.get_parent()
 		# 回退：尝试从 ability 获取实体（通常需要通过 ability_comp）
-		elif ability.has_method("get_instigator"):
-			ability_entity = ability.call("get_instigator")
+		elif ability_instance.has_method("get_instigator"):
+			ability_entity = ability_instance.get_instigator()
 		
 		if is_instance_valid(ability_entity):
 			return TagManager.has_any_tag(ability_entity, affected_ability_tags)
@@ -57,7 +57,7 @@ func affects_ability(ability: GameplayAbility, ability_comp: GameplayAbilityComp
 ## [param] context: Dictionary 上下文（可修改）
 func on_before_ability_cast(
 	ability_comp: GameplayAbilityComponent,
-	ability: GameplayAbility,
+	ability_instance: GameplayAbilityInstance,
 	context: Dictionary
 ) -> void:
 	pass
@@ -65,11 +65,11 @@ func on_before_ability_cast(
 ## 钩子：施法成功后（已经 commit 成功，准备进入前摇/释放）
 ## 可以追加效果、修改参数等
 ## [param] ability_comp: GameplayAbilityComponent 技能组件
-## [param] ability: GameplayAbility 技能实例
+## [param] ability_instance: GameplayAbilityInstance 技能实例
 ## [param] context: Dictionary 上下文（可修改）
 func on_after_ability_commit(
 	ability_comp: GameplayAbilityComponent,
-	ability: GameplayAbility,
+	ability_instance: GameplayAbilityInstance,
 	context: Dictionary
 ) -> void:
 	pass
@@ -77,12 +77,12 @@ func on_after_ability_commit(
 ## 钩子：技能真正生效时（_on_cast 要执行前）
 ## 这是修改技能参数的最佳时机（如投射物数量、伤害倍率等）
 ## [param] ability_comp: GameplayAbilityComponent 技能组件
-## [param] ability: GameplayAbility 技能实例
+## [param] ability_instance: GameplayAbilityInstance 技能实例
 ## [param] target: Node 目标
 ## [param] context: Dictionary 上下文（可修改）
 func on_before_apply_ability(
 	ability_comp: GameplayAbilityComponent,
-	ability: GameplayAbility,
+	ability_instance: GameplayAbilityInstance,
 	target: Node,
 	context: Dictionary
 ) -> void:
@@ -101,4 +101,3 @@ func on_effect_applied(
 	context: Dictionary
 ) -> void:
 	pass
-

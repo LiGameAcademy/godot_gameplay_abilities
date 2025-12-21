@@ -17,11 +17,11 @@ class_name CooldownReductionModifier
 ## 钩子：施法成功后（修改冷却时间）
 func on_after_ability_commit(
 	ability_comp: GameplayAbilityComponent,
-	ability: GameplayAbility,
+	ability_instance: GameplayAbilityInstance,
 	context: Dictionary
 ) -> void:
 	# 检查是否影响此技能
-	if not affects_ability(ability, ability_comp):
+	if not affects_ability(ability_instance, ability_comp):
 		return
 	
 	# 累加冷却缩减（多个修改器会累加）
@@ -32,4 +32,3 @@ func on_after_ability_commit(
 		cooldown_reduction * 100.0,
 		context.get("cooldown_reduction", 0.0) * 100.0
 	])
-

@@ -18,12 +18,12 @@ class_name EffectAppenderModifier
 ## 钩子：技能真正生效前（追加效果）
 func on_before_apply_ability(
 	ability_comp: GameplayAbilityComponent,
-	ability: GameplayAbility,
+	ability_instance: GameplayAbilityInstance,
 	target: Node,
 	context: Dictionary
 ) -> void:
 	# 检查是否影响此技能
-	if not affects_ability(ability, ability_comp):
+	if not affects_ability(ability_instance, ability_comp):
 		return
 	
 	if additional_effects.is_empty():
@@ -44,6 +44,6 @@ func on_before_apply_ability(
 	
 	print("EffectAppenderModifier: Added %d extra effects to ability %s" % [
 		additional_effects.size(),
-		ability.ability_id
+		ability_instance.get_definition().ability_id
 	])
 

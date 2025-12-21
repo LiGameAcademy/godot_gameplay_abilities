@@ -19,18 +19,13 @@ class_name MultiCastModifier
 ## 钩子：技能真正生效前（修改投射物数量）
 func on_before_apply_ability(
 	ability_comp: GameplayAbilityComponent,
-	ability: GameplayAbility,
+	ability_instance: GameplayAbilityInstance,
 	target: Node,
 	context: Dictionary
 ) -> void:
 	# 检查是否影响此技能
-	if not affects_ability(ability, ability_comp):
+	if not affects_ability(ability_instance, ability_comp):
 		return
-	
-	# 如果设置了只影响投射物技能，检查类型
-	if only_projectile_abilities:
-		if not ability is ProjectileAbility:
-			return
 	
 	# 修改 context，增加额外投射物数量
 	var current_extra = context.get("extra_projectiles", 0)
@@ -38,6 +33,6 @@ func on_before_apply_ability(
 	
 	print("MultiCastModifier: Added %d extra projectiles to ability %s (total: %d)" % [
 		extra_projectiles,
-		ability.ability_id,
+		ability_instance.get_definition().ability_id,
 		context.get("extra_projectiles", 0)
 	])

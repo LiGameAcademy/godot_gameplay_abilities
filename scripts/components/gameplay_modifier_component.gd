@@ -87,17 +87,17 @@ func get_all_modifiers() -> Array[GameplayAbilityModifier]:
 ## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
 func notify_before_ability_cast(
 	ability_comp: GameplayAbilityComponent,
-	ability: GameplayAbility,
+	ability_instance: GameplayAbilityInstance,
 	context: Variant
 ) -> void:
 	var ctx = ContextUtils.to_context(context)
-	var relevant_modifiers = _get_relevant_modifiers(ability, ability_comp)
+	var relevant_modifiers = _get_relevant_modifiers(ability_instance, ability_comp)
 	for mod in relevant_modifiers:
 		if not is_instance_valid(mod):
 			continue
 		# Modifier 可能仍使用 Dictionary，转换后传递
 		var mod_dict = ctx.to_dict()
-		mod.on_before_ability_cast(ability_comp, ability, mod_dict)
+		mod.on_before_ability_cast(ability_comp, ability_instance, mod_dict)
 
 ## 通知：施法成功后
 ## [param] ability_comp: GameplayAbilityComponent 技能组件
@@ -105,11 +105,11 @@ func notify_before_ability_cast(
 ## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
 func notify_after_ability_commit(
 	ability_comp: GameplayAbilityComponent,
-	ability: GameplayAbility,
+	ability_instance: GameplayAbilityInstance,
 	context: Variant
 ) -> void:
 	var ctx = ContextUtils.to_context(context)
-	var relevant_modifiers = _get_relevant_modifiers(ability, ability_comp)
+	var relevant_modifiers = _get_relevant_modifiers(ability_instance, ability_comp)
 	
 	# 在循环外创建一次字典，让所有修改器修改同一个字典
 	var mod_dict = ctx.to_dict()
@@ -118,7 +118,7 @@ func notify_after_ability_commit(
 		if not is_instance_valid(mod):
 			continue
 		# Modifier 可能仍使用 Dictionary，所有修改器共享同一个字典
-		mod.on_after_ability_commit(ability_comp, ability, mod_dict)
+		mod.on_after_ability_commit(ability_comp, ability_instance, mod_dict)
 	
 	# 所有修改器调用完成后，将 Dictionary 的修改同步回 AbilityContext
 	_sync_dict_to_context(mod_dict, ctx)
@@ -130,12 +130,12 @@ func notify_after_ability_commit(
 ## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
 func notify_before_apply_ability(
 	ability_comp: GameplayAbilityComponent,
-	ability: GameplayAbility,
+	ability_instance: GameplayAbilityInstance,
 	target: Node,
 	context: Variant
 ) -> void:
 	var ctx = ContextUtils.to_context(context)
-	var relevant_modifiers = _get_relevant_modifiers(ability, ability_comp)
+	var relevant_modifiers = _get_relevant_modifiers(ability_instance, ability_comp)
 	
 	# 在循环外创建一次字典，让所有修改器修改同一个字典
 	var mod_dict = ctx.to_dict()
@@ -144,7 +144,7 @@ func notify_before_apply_ability(
 		if not is_instance_valid(mod):
 			continue
 		# Modifier 可能仍使用 Dictionary，所有修改器共享同一个字典
-		mod.on_before_apply_ability(ability_comp, ability, target, mod_dict)
+		mod.on_before_apply_ability(ability_comp, ability_instance, target, mod_dict)
 	
 	# 所有修改器调用完成后，将 Dictionary 的修改同步回 AbilityContext
 	_sync_dict_to_context(mod_dict, ctx)
@@ -210,11 +210,11 @@ func _sync_dict_to_context(mod_dict: Dictionary, ctx: AbilityContext) -> void:
 				ctx.custom_data[key] = mod_dict[key]
 
 ## 获取与指定技能相关的修改器（性能优化：使用索引）
-## [param] ability: GameplayAbility 技能实例
+## [param] ability_instance: GameplayAbilityInstance 技能实例
 ## [param] ability_comp: GameplayAbilityComponent 技能组件（用于 Tag 检查）
 ## [return] Array[GameplayAbilityModifier] 相关修改器列表
-func _get_relevant_modifiers(ability: GameplayAbility, ability_comp: GameplayAbilityComponent = null) -> Array[GameplayAbilityModifier]:
-	if not is_instance_valid(ability):
+func _get_relevant_modifiers(ability_instance: GameplayAbilityInstance, ability_comp: GameplayAbilityComponent = null) -> Array[GameplayAbilityModifier]:
+	if not is_instance_valid(ability_instance):
 		return []
 	
 	var result: Array[GameplayAbilityModifier] = []
@@ -223,14 +223,14 @@ func _get_relevant_modifiers(ability: GameplayAbility, ability_comp: GameplayAbi
 	result.append_array(_universal_modifiers)
 	
 	# 2. 添加针对此技能的修改器（通过 ID 索引）
-	var ability_id = ability.ability_id
+	var ability_id = ability_instance.get_definition().ability_id
 	if _modifiers_by_ability_id.has(ability_id):
 		result.append_array(_modifiers_by_ability_id[ability_id])
 	
 	# 3. 过滤：检查每个修改器是否真的影响此技能（处理 Tag 过滤）
 	var filtered_result: Array[GameplayAbilityModifier] = []
 	for mod in result:
-		if mod.affects_ability(ability, ability_comp):
+		if mod.affects_ability(ability_instance, ability_comp):
 			filtered_result.append(mod)
 	
 	return filtered_result

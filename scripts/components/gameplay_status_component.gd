@@ -6,6 +6,9 @@ class_name GameplayStatusComponent
 
 const GROUP_NAME := "StatusEntities"
 
+@export var attribute_component : GameplayAttributeComponent = null
+@export var modifier_component: GameplayModifierComponent = null
+
 var _active_statuses: Dictionary[StringName, GameplayStatusInstance] = {}
 
 signal status_applied(status_id: StringName, instance: GameplayStatusInstance)
@@ -50,6 +53,91 @@ func apply_status(gsd: GameplayStatusData, instigator: Node, stacks: int = 1, co
 	
 	# 3. 创建并应用新的状态实例
 	return _create_and_apply_new_status_instance(gsd, instigator, stacks, context)
+
+## 移除状态
+## [param] status_id: StringName 状态ID
+func remove_status(status_id: StringName) -> void:
+	var instance = _active_statuses.get(status_id)
+	if not is_instance_valid(instance): 
+		return
+	
+	_active_statuses.erase(status_id)
+	instance.remove()
+	status_removed.emit(status_id)
+	
+	# 触发统一游戏事件：status_removed
+	AbilityEventBus.trigger_game_event(&"status_removed", {
+		"entity": get_parent(),
+		"status_id": status_id
+	})
+	
+	# 同时发送细粒度事件（向后兼容）
+	AbilityEventBus.emit_status_removed(get_parent(), status_id)
+
+## 移除所有匹配标签的状态
+## [param] tags_to_remove: Array[StringName] 要移除的标签数组
+func remove_statuses_by_tags(tags_to_remove: Array[StringName]) -> void:
+	for status_id in _active_statuses.keys():
+		var instance = _active_statuses.get(status_id)
+		if not is_instance_valid(instance): 
+			continue
+		
+		var gsd = instance.status_data
+		
+		# 检查这个Status的tags是否与我们要移除的tags有交集
+		for tag in gsd.tags:
+			if tags_to_remove.has(tag):
+				# 找到了一个匹配！移除这个Status
+				remove_status(status_id)
+				break  # 移动到下一个状态实例
+
+## 获取所有激活的状态
+func get_active_statuses() -> Array[GameplayStatusInstance]:
+	return _active_statuses.values()
+
+## 获取指定状态
+## [param] status_id: StringName 状态ID
+func get_status(status_id: StringName) -> GameplayStatusInstance:
+	return _active_statuses.get(status_id, null)
+
+## 检查是否有指定状态
+## [param] status_id: StringName 状态ID
+func has_status(status_id: StringName) -> bool:
+	return _active_statuses.has(status_id)
+
+## 获取随机状态
+## [param] is_debuff: bool 是否只获取Debuff
+func get_random_status(is_debuff: bool = false) -> GameplayStatusInstance:
+	if _active_statuses.size() == 0:
+		return null
+	
+	var statuses: Array[GameplayStatusInstance] = []
+	for status in _active_statuses.values():
+		if status.status_data.is_debuff == is_debuff:
+			statuses.append(status)
+	
+	if statuses.size() == 0:
+		return null
+	
+	return statuses.pick_random()
+
+## 处理事件（供外部调用，触发事件监听型效果）
+## [param] event_id: StringName 事件ID
+## [param] context: Dictionary 上下文信息
+func handle_event(event_id: StringName, context: Dictionary) -> void:
+	for instance in _active_statuses.values():
+		if is_instance_valid(instance):
+			instance.handle_event(event_id, context)
+
+## 获取属性组件（供状态实例使用）
+## [return] GameplayAttributeComponent 属性组件，如果不存在则返回 null
+func get_attribute_component() -> GameplayAttributeComponent:
+	return attribute_component
+
+## 获取修改器组件（供状态实例使用）
+## [return] GameplayModifierComponent 修改器组件，如果不存在则返回 null
+func get_modifier_component() -> GameplayModifierComponent:
+	return modifier_component
 
 ## 处理已有状态的优先级比较
 ## [return] bool 是否允许继续后续流程（false 表示应直接拒绝新状态）
@@ -132,81 +220,6 @@ func _create_and_apply_new_status_instance(
 	AbilityEventBus.emit_status_applied(get_parent(), status_id)
 	
 	return instance
-
-## 移除状态
-## [param] status_id: StringName 状态ID
-func remove_status(status_id: StringName) -> void:
-	var instance = _active_statuses.get(status_id)
-	if not is_instance_valid(instance): 
-		return
-	
-	_active_statuses.erase(status_id)
-	instance.remove()
-	status_removed.emit(status_id)
-	
-	# 触发统一游戏事件：status_removed
-	AbilityEventBus.trigger_game_event(&"status_removed", {
-		"entity": get_parent(),
-		"status_id": status_id
-	})
-	
-	# 同时发送细粒度事件（向后兼容）
-	AbilityEventBus.emit_status_removed(get_parent(), status_id)
-
-## 移除所有匹配标签的状态
-## [param] tags_to_remove: Array[StringName] 要移除的标签数组
-func remove_statuses_by_tags(tags_to_remove: Array[StringName]) -> void:
-	for status_id in _active_statuses.keys():
-		var instance = _active_statuses.get(status_id)
-		if not is_instance_valid(instance): 
-			continue
-		
-		var gsd = instance.status_data
-		
-		# 检查这个Status的tags是否与我们要移除的tags有交集
-		for tag in gsd.tags:
-			if tags_to_remove.has(tag):
-				# 找到了一个匹配！移除这个Status
-				remove_status(status_id)
-				break  # 移动到下一个状态实例
-
-## 获取所有激活的状态
-func get_active_statuses() -> Array[GameplayStatusInstance]:
-	return _active_statuses.values()
-
-## 获取指定状态
-## [param] status_id: StringName 状态ID
-func get_status(status_id: StringName) -> GameplayStatusInstance:
-	return _active_statuses.get(status_id, null)
-
-## 检查是否有指定状态
-## [param] status_id: StringName 状态ID
-func has_status(status_id: StringName) -> bool:
-	return _active_statuses.has(status_id)
-
-## 获取随机状态
-## [param] is_debuff: bool 是否只获取Debuff
-func get_random_status(is_debuff: bool = false) -> GameplayStatusInstance:
-	if _active_statuses.size() == 0:
-		return null
-	
-	var statuses: Array[GameplayStatusInstance] = []
-	for status in _active_statuses.values():
-		if status.status_data.is_debuff == is_debuff:
-			statuses.append(status)
-	
-	if statuses.size() == 0:
-		return null
-	
-	return statuses.pick_random()
-
-## 处理事件（供外部调用，触发事件监听型效果）
-## [param] event_id: StringName 事件ID
-## [param] context: Dictionary 上下文信息
-func handle_event(event_id: StringName, context: Dictionary) -> void:
-	for instance in _active_statuses.values():
-		if is_instance_valid(instance):
-			instance.handle_event(event_id, context)
 
 ## 处理事件总线的统一游戏事件
 ## 监听伤害事件等，并转发给状态系统

@@ -33,7 +33,7 @@ func _ready() -> void:
 		_ability_component = GameplayAbilitySystem.get_component_by_interface(_character, "GameplayAbilityComponent")
 	
 	if is_instance_valid(_ability_component):
-		_ability_component.ability_cast.connect(_on_ability_cast)
+		_ability_component.ability_activated.connect(_on_ability_cast)
 		_ability_component.ability_completed.connect(_on_ability_completed)
 		_initialize_adapter()
 	else:
@@ -82,17 +82,12 @@ func _on_animation_event(event_name: StringName, data: Dictionary = {}) -> void:
 ## 能力施放时的回调（由能力组件信号触发）
 ## 【逻辑驱动重构】现在只负责播放动画，不再触发技能效果
 ## 技能效果由 GameplayAbilityComponent 的逻辑计时器控制
-func _on_ability_cast(ability_id: StringName) -> void:
+func _on_ability_cast(ability_instance: GameplayAbilityInstance) -> void:
 	if not is_instance_valid(_ability_component):
 		return
 	
-	var ability_data = _ability_component.get_ability_data(ability_id)
-	if not is_instance_valid(ability_data):
-		push_error("VisualAdapter: Ability data is not valid for ability_id: %s" % ability_id)
-		return
-	
 	# 获取动画名称并播放（由技能自己决定动画名称）
-	var anim_name: StringName = ability_data.get_animation_name()
+	var anim_name: StringName = ability_instance.get_animation_name()
 	if anim_name != &"":
 		# 【简化设计】每次技能开始时，先切换到 movement 状态
 		# 这样可以简化动画状态机的配置，只需要 movement -> attack 和 attack -> movement 的过渡
@@ -107,13 +102,12 @@ func _on_ability_cast(ability_id: StringName) -> void:
 		if is_instance_valid(_ability_component) and _ability_component.has_method("set_can_interrupt"):
 			_ability_component.set_can_interrupt(false)
 		_play_animation(anim_name)
-		_current_ability_id = ability_id
-		print("VisualAdapter: Ability casted: %s (animation: %s)" % [ability_id, anim_name])
+		_current_ability_id = ability_instance.get_definition().ability_id
+		print("VisualAdapter: Ability casted: %s (animation: %s)" % [ability_instance.get_definition().ability_id, anim_name])
 	else:
 		# 没有动画的技能（瞬发技能），表现层无需处理
-		print("VisualAdapter: Instant cast ability (no animation): %s" % ability_id)
+		print("VisualAdapter: Instant cast ability (no animation): %s" % ability_instance.get_definition().ability_id)
 	
-
 ## 能力完成时的回调（由能力组件信号触发）
 ## 技能完成 = 所有逻辑执行完毕 = 进入后摇阶段 = 可以中断
 ## 注意：此时技能效果已应用，但动画可能还在播放后摇部分

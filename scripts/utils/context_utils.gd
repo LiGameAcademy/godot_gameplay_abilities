@@ -38,4 +38,3 @@ static func to_dict(context: Variant) -> Dictionary:
 ## [return] AbilityContext 确保是 AbilityContext 类型
 static func ensure_context(context: Variant) -> AbilityContext:
 	return to_context(context)
-
