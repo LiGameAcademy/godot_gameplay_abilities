@@ -43,17 +43,17 @@ func _build_combo_tree() -> BTNode:
 	# 如果你想只在第一段消耗，可以在 Switch 内部的第一段里加 Cost
 	# 但根据你的描述"连击开始时产生消耗"，通常放在这里比较稳妥（或者依赖 CostFeature 自身的逻辑）
 	var cost_node = AbilityNodeCommitCost.new()
-	cost_node.node_name = "应用消耗"
+	cost_node.node_id = "commit_cost"
 	root_sequence.children.append(cost_node)
 	
 	# 2. 【中部】RepeatUntilFailure 包裹 Switch 选择器
 	# 逻辑：循环执行连击段，直到某一段超时失败（BTWaitSignal 返回 FAILURE）
 	var repeat_node = BTRepeatUntilFailure.new()
-	repeat_node.node_name = "连击循环"
+	repeat_node.node_id = "combo_loop"
 	
 	var switch_node = BTSwitch.new()
 	switch_node.variable_key = "combo_index"
-	switch_node.node_name = "连击选择器"
+	switch_node.node_id = "combo_switch"
 	# 注意：BTSwitch 只负责根据索引选择子节点，不处理超时逻辑
 	# 超时由连击段内部的 BTWaitSignal 返回 FAILURE 来处理
 	var switch_children: Array[BTNode] = []
@@ -64,7 +64,7 @@ func _build_combo_tree() -> BTNode:
 		
 		# 构建子树包装器
 		var wrapper = BTSequence.new()
-		wrapper.node_name = "连击段 %d" % (i + 1)
+		wrapper.node_id = "combo_step_%d" % (i + 1)
 		
 		# A. 执行段的能力树（包含前摇、打击、后摇等）
 		# 注意：连击段不应该包含CD，CD只在连击整体结束时应用
@@ -77,8 +77,8 @@ func _build_combo_tree() -> BTNode:
 			var duplicated_tree = step_tree.duplicate(true)
 			# 移除可能存在的CD节点（如果用户手动配置了execution_tree）
 			_remove_cooldown_nodes(duplicated_tree)
-			if duplicated_tree.node_name.is_empty():
-				duplicated_tree.node_name = "段 %d 执行树" % (i + 1)
+			if duplicated_tree.node_id.is_empty():
+				duplicated_tree.node_id = "step_%d_execution_tree" % (i + 1)
 			wrapper.children.append(duplicated_tree)
 		
 		# B. 【关键】添加 BTWaitSignal 等待连击输入
@@ -87,7 +87,7 @@ func _build_combo_tree() -> BTNode:
 		wait_signal.signal_key = "event_input_received"
 		wait_signal.timeout = window_duration  # 使用连击窗口期作为超时时间
 		wait_signal.consume_signal = true  # 消费信号，避免重复触发
-		wait_signal.node_name = "等待连击输入"
+		wait_signal.node_id = "wait_combo_input"
 		wrapper.children.append(wait_signal)
 		
 		# C. 推进索引（使用 BTModifyInt 或 AbilityNodeAdvanceCombo）
@@ -96,7 +96,7 @@ func _build_combo_tree() -> BTNode:
 		var advance_node = AbilityNodeAdvanceCombo.new()
 		advance_node.reset_timer = window_duration
 		advance_node.is_finisher = is_last_step
-		advance_node.node_name = "推进连击索引"
+		advance_node.node_id = "advance_combo"
 		wrapper.children.append(advance_node)
 		
 		# D. 设置下一段的图标
@@ -110,7 +110,7 @@ func _build_combo_tree() -> BTNode:
 			# 比如当前是 i，打完后 UI 应该显示 i+1 的样子
 			if i + 1 < combo_steps.size():
 				icon_node.icon_texture = combo_steps[i+1].icon
-		icon_node.node_name = "更新连击图标"
+		icon_node.node_id = "set_combo_icon"
 		wrapper.children.append(icon_node)
 		
 		switch_children.append(wrapper)
@@ -122,11 +122,11 @@ func _build_combo_tree() -> BTNode:
 	# 3. 【尾部】应用冷却
 	# 当 RepeatUntilFailure 返回 FAILURE（某一段超时）时，执行 CD 并完成技能
 	var cd_node = AbilityNodeCommitCooldown.new()
-	cd_node.node_name = "应用冷却"
+	cd_node.node_id = "commit_cooldown"
 	root_sequence.children.append(cd_node)
 	
 	# 为根序列设置名称
-	root_sequence.node_name = "连击根序列"
+	root_sequence.node_id = "combo_root_sequence"
 	
 	return root_sequence
 

@@ -18,6 +18,10 @@ class_name ActiveAbilityDefinition
 @export var cooldown_duration : float = 0.0
 ## 技能效果列表
 @export var effects : Array[GameplayEffect] = []
+## 技能状态列表（Buff/Debuff）
+@export var statuses : Array[GameplayStatusData] = []
+## 状态执行时间
+@export var status_execution_time : float = 0.0
 ## 目标 Key
 @export var target_key: String = "targets" # 修正默认为单数，符合直觉
 ## 目标获取策略
@@ -67,12 +71,14 @@ func _build_default_behavior_tree(include_cooldown: bool = true) -> BTNode:
 		anim_node.animation_name = animation_name
 		anim_node.animation_speed = animation_speed
 		anim_node.wait_for_finish = false 
+		anim_node.node_id = "play_animation"
 		nodes.append(anim_node)
 	
 	# 2. 前摇等待
 	if pre_cast_delay > 0.0:
 		var wait = BTWait.new()
 		wait.duration = pre_cast_delay
+		wait.node_id = "pre_cast_delay"
 		nodes.append(wait)
 		
 	# 3. 提交冷却 (前摇结束后进CD)
@@ -80,27 +86,46 @@ func _build_default_behavior_tree(include_cooldown: bool = true) -> BTNode:
 	# 注意：连击段通常不需要单独的CD，只在连击整体结束时应用CD
 	if include_cooldown:
 		var commit_cd = AbilityNodeCommitCooldown.new()
+		commit_cd.node_id = "commit_cooldown"
 		nodes.append(commit_cd)
 	
 	# 4. 查找目标
 	if is_instance_valid(targeting_strategy):
 		var target_search_node = AbilityNodeTargetSearch.new()
 		target_search_node.strategy = targeting_strategy
+		target_search_node.node_id = "target_search"
 		nodes.append(target_search_node)
 
-	# 4. 应用效果
+	# 5. 应用状态（Buff/Debuff）
+	if not statuses.is_empty():
+		var status_node = AbilityNodeApplyStatus.new()
+		status_node.statuses = statuses.duplicate() # 浅拷贝引用
+		status_node.target_key = target_key
+		status_node.node_id = "apply_status"
+		nodes.append(status_node)
+		
+		if status_execution_time > 0.0:
+			var status_wait = BTWait.new()
+			status_wait.duration = status_execution_time
+			status_wait.node_id = "wait_status_duration"
+			nodes.append(status_wait)
+
+	# 6. 应用效果
 	if not effects.is_empty():
 		var effect_node = AbilityNodeApplyEffect.new()
 		effect_node.effects = effects.duplicate() # 浅拷贝引用
 		effect_node.target_key = target_key
+		effect_node.node_id = "apply_effect"
 		nodes.append(effect_node)
 		
-	# 5. 后摇等待
+	# 7. 后摇等待
 	if post_cast_delay > 0.0:
 		var wait = BTWait.new()
 		wait.duration = post_cast_delay
+		wait.node_id = "post_cast_delay"
 		nodes.append(wait)
 	
 	# 赋值子节点
 	sequence.children = nodes
+	sequence.node_id = "ability_sequence"
 	return sequence

@@ -3,7 +3,7 @@ class_name BTNode
 
 enum Status { SUCCESS, FAILURE, RUNNING }
 
-@export var node_name: StringName = ""
+@export var node_id: StringName = ""
 
 ## 增加 delta 参数，这对计时类节点至关重要
 func tick(instance: BTInstance, delta: float) -> int:
@@ -92,4 +92,4 @@ func _exit(instance: BTInstance) -> void:
 	pass
 
 func _get_node_name() -> StringName:
-	return node_name if not node_name.is_empty() else get_class()
+	return node_id if not node_id.is_empty() else get_class()
