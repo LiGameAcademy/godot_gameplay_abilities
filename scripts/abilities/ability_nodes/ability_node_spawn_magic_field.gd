@@ -39,7 +39,7 @@ func _tick(instance: BTInstance, delta: float) -> int:
 		return Status.FAILURE
 	
 	# 生成魔法阵
-	_spawn_magic_field(instigator, spawn_position, magic_field_data, context)
+	_spawn_magic_field(instigator, spawn_position, magic_field_data, context, instance)
 	
 	return Status.SUCCESS
 
