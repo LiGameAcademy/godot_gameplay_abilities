@@ -9,6 +9,10 @@ class_name AbilityNodeSpawnMagicField
 @export var magic_field_data: MagicFieldData = null
 ## 生成位置 Key（从黑板获取，如 "projectile_impact.hit_position"）
 @export var position_key: String = "projectile_impact"
+## 是否挂载到目标身上（true：作为目标的子节点；false：添加到场景根节点）
+@export var attach_to_target: bool = false
+## 目标 Key（从黑板获取，如果 attach_to_target 为 true）
+@export var target_key: String = "targets"
 
 func _tick(instance: BTInstance, delta: float) -> int:
 	var context : AbilityContext = instance.blackboard.get_var("context")
@@ -44,7 +48,8 @@ func _spawn_magic_field(
 		instigator: Node,
 		spawn_position: Vector3,
 		data: MagicFieldData,
-		context: AbilityContext) -> void:
+		context: AbilityContext,
+		instance: BTInstance) -> void:
 	var magic_field = data.magic_field_scene.instantiate()
 	
 	# 类型检查
@@ -55,17 +60,36 @@ func _spawn_magic_field(
 	
 	var magic_field_base = magic_field as MagicFieldBase
 	
-	# 添加到场景
-	var level_root = instigator.get_tree().current_scene
-	if not is_instance_valid(level_root):
-		push_error("AbilityNodeSpawnMagicField: Cannot find current scene root")
-		magic_field_base.queue_free()
-		return
+	# 确定挂载目标
+	var attach_target: Node = null
+	if attach_to_target:
+		# 从黑板获取目标
+		var raw_targets = instance.blackboard.get_var(target_key)
+		if raw_targets is Node:
+			attach_target = raw_targets as Node
+		elif raw_targets is Array and not raw_targets.is_empty():
+			attach_target = raw_targets[0] as Node
+		
+		if not is_instance_valid(attach_target):
+			push_warning("AbilityNodeSpawnMagicField: attach_to_target is true but target is not valid, falling back to scene root")
+			attach_target = null
 	
-	level_root.add_child(magic_field_base)
-	
-	# 设置位置
-	magic_field_base.global_position = spawn_position
+	# 添加到场景或目标
+	if is_instance_valid(attach_target):
+		# 挂载到目标身上（作为子节点）
+		attach_target.add_child(magic_field_base)
+		# 设置本地位置（相对于目标）
+		magic_field_base.position = Vector3.ZERO  # 魔法阵在目标位置
+	else:
+		# 添加到场景根节点
+		var level_root = instigator.get_tree().current_scene
+		if not is_instance_valid(level_root):
+			push_error("AbilityNodeSpawnMagicField: Cannot find current scene root")
+			magic_field_base.queue_free()
+			return
+		level_root.add_child(magic_field_base)
+		# 设置世界位置
+		magic_field_base.global_position = spawn_position
 	
 	# 注入运行时依赖
 	magic_field_base.instigator = instigator
