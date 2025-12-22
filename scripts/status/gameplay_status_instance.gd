@@ -242,27 +242,13 @@ func _create_duration_timer() -> void:
 	owner_component.add_child(_duration_timer)
 	_duration_timer.start()
 
-## 获取效果应用的目标列表（支持目标选择策略）
+## 获取效果应用的目标列表
+## 注意：状态不再支持目标选择策略，效果直接应用到状态持有者
 ## [param] status_holder: Node 状态持有者（状态被应用到的实体）
 ## [param] context: Dictionary 上下文信息
-## [return] Array[Node] 目标列表
+## [return] Array[Node] 目标列表（始终只包含状态持有者）
 func _get_effect_targets(status_holder: Node, context: Dictionary) -> Array[Node]:
-	# 如果配置了 targeting_strategy，使用策略选择目标
-	if is_instance_valid(status_data.targeting_strategy):
-		# 准备策略上下文
-		var strategy_context = context.duplicate()
-		strategy_context["status_holder"] = status_holder
-		strategy_context["status_id"] = status_data.status_id
-		
-		# 使用策略解析目标
-		# 注意：instigator 作为施法者，status_holder 作为 input_target
-		var targets = status_data.targeting_strategy.resolve_targets(instigator, status_holder, strategy_context)
-		
-		# 如果策略返回了目标，使用它们
-		if not targets.is_empty():
-			return targets
-	
-	# 默认：直接应用到状态持有者
+	# 状态效果直接应用到状态持有者（不再支持目标选择策略）
 	return [status_holder]
 
 ## 对单个目标应用所有效果（状态应用时触发）
