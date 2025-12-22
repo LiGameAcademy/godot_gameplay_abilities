@@ -21,6 +21,7 @@ class_name GameplayAbilityComponent
 var _learned_abilities: Dictionary[StringName, GameplayAbilityInstance] = {}
 
 ## 当前正在执行的技能ID（用于后摇可取消机制）
+## 注意：这通常是最新激活的技能，用于处理技能间的互斥逻辑
 var _current_casting_ability: GameplayAbilityInstance = null
 
 #endregion
@@ -47,7 +48,7 @@ func _process(delta: float) -> void:
 		var ability_instance : GameplayAbilityInstance = _learned_abilities[ability_id]
 		if not is_instance_valid(ability_instance):
 			continue
-	
+		
 		# 更新技能（包括冷却时间）
 		ability_instance.update(delta)
 	
@@ -208,7 +209,7 @@ func try_activate_ability(ability_id: StringName, context: Variant = {}) -> bool
 	if is_instance_valid(modifier_comp):
 		modifier_comp.notify_after_ability_commit(self, ability_instance, ctx)
 	
-	# 设置当前正在执行的技能
+	# 设置当前正在执行的技能（用于后摇可取消机制）
 	_current_casting_ability = ability_instance
 	
 	# 触发表现层（播放动画）

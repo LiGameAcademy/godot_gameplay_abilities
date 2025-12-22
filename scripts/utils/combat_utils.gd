@@ -80,7 +80,6 @@ func _has_combat_component(node: Node) -> bool:
 	
 	# 检查是否有任何战斗组件
 	var components = [
-		"HealthComponent",
 		"GameplayAttributeComponent",
 		"GameplayStatusComponent",
 		"GameplayAbilityComponent",

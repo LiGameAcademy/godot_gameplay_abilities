@@ -116,42 +116,67 @@ func handle_forgotten(ability_comp: Node, status_comp: Node) -> void:
 
 ## 尝试激活技能 (由 Player/Component 调用)
 func try_activate(context: Variant = {}) -> bool:
-	if is_active:
-		# 如果已经在跑了，通常拒绝（除非是连击技能，连击有特殊逻辑）
-		# 注意：即使值已经是 true，也要确保触发信号（通过先设置为 false 再设置为 true）
-		# 这样可以确保 BTWaitSignal 能够收到通知，即使它刚刚消费了信号
-		var current_value = _blackboard.get_var("event_input_received", false)
-		if not current_value:
-			_blackboard.set_var("event_input_received", true)
-		else:
-			# 如果已经是 true，先设置为 false 再设置为 true，确保触发信号
-			_blackboard.set_var("event_input_received", false)
-			_blackboard.set_var("event_input_received", true)
-		return true
-
 	var ctx = ContextUtils.to_context(context)
+	
+	if is_active:
+		# 如果技能已激活，检查所有特性的 can_activate
+		# can_activate 内部会先让特性设置 skip 标志，然后再进行检查
+		# 某些特性（如 ToggleFeature）可能允许在已激活时重新激活
+		if not can_activate(ctx):
+			# 如果没有特性允许重新激活，执行默认的拒绝逻辑
+			# 注意：即使值已经是 true，也要确保触发信号（通过先设置为 false 再设置为 true）
+			# 这样可以确保 BTWaitSignal 能够收到通知，即使它刚刚消费了信号
+			var current_value = _blackboard.get_var("event_input_received", false)
+			if not current_value:
+				_blackboard.set_var("event_input_received", true)
+			else:
+				# 如果已经是 true，先设置为 false 再设置为 true，确保触发信号
+				_blackboard.set_var("event_input_received", false)
+				_blackboard.set_var("event_input_received", true)
+			return true
+		
+		# 有特性允许重新激活，注入上下文数据并调用 on_activate
+		# 切换特性会在 on_activate 中处理关闭逻辑
+		if is_instance_valid(_blackboard):
+			_blackboard.set_var("context", ctx)
+			#if ctx.has("target_position"):
+				#_blackboard.set_var("target_position", ctx.get("target_position"))
+		
+		# 调用所有特性的 on_activate 钩子
+		# 切换特性会在 on_activate 中处理关闭逻辑
+		for feature in _features.values():
+			if not is_instance_valid(feature):
+				continue
+			feature.on_activate(self, ctx)
+		
+		return true
 	
 	# 1. 检查能不能放 (Cost, CD, Tags, Features)
 	if not can_activate(ctx):
 		return false
 
-	# 2. 【关键】启动行为树
-	# 注意：这里我们只"启动"状态，不扣蓝，也不产生效果。
-	# 扣蓝和效果由树里面的节点决定何时发生。
-	is_active = true
-	
-	# 3. 注入初始黑板数据
+	# 2. 注入初始黑板数据（在设置 is_active 之前）
+	# 注意：需要在设置 is_active 之前注入数据，以便 ToggleFeature 能正确判断是开启还是关闭
 	if is_instance_valid(_blackboard):
 		_blackboard.clear() # 清理上一轮的残留
 		# 将 context 注入黑板，供树节点读取
 		_blackboard.set_var("ability_instance", self)
 		_blackboard.set_var("context", ctx)
 		_blackboard.set_var("target", ctx.input_target)
+		# 设置标志，表示这是首次激活（开启操作）
+		_blackboard.set_var("is_first_activation", true)
 
+	# 3. 调用所有特性的 on_activate 钩子（在设置 is_active 之前）
+	# 切换特性会在 on_activate 中根据 is_first_activation 设置 "turn_on" 或 "turn_off" 标记
 	for feature in _features.values():
 		if not is_instance_valid(feature):
 			continue
 		feature.on_activate(self, ctx)
+	
+	# 4. 【关键】启动行为树（在调用 on_activate 之后）
+	# 注意：这里我们只"启动"状态，不扣蓝，也不产生效果。
+	# 扣蓝和效果由树里面的节点决定何时发生。
+	is_active = true
 	
 	return true
 
@@ -232,6 +257,16 @@ func get_definition() -> GameplayAbilityDefinition:
 ## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
 func can_activate(context: Variant = {}) -> bool:
 	var ctx = ContextUtils.to_context(context)
+	
+	# 如果技能已激活，先让所有特性有机会设置 skip 标志（如 ToggleFeature 设置 skip_cost/skip_cooldown）
+	# 然后再进行实际的检查
+	if is_active:
+		for feature : GameplayAbilityFeature in _features.values():
+			if not is_instance_valid(feature):
+				continue
+			# 先调用一次，让特性有机会设置 skip 标志（不检查返回值）
+			feature.can_activate(self, ctx)
+	
 	# 调用所有特性的 can_activate（主动技能钩子）
 	# 所有特性的 can_activate 都必须返回 true
 	for feature : GameplayAbilityFeature in _features.values():
@@ -256,11 +291,14 @@ func play_animation(animation_name: StringName, speed: float = 1.0) -> float:
 	return 0.0
 
 func get_current_icon() -> Texture:
-	# 优先从黑板读取连击图标（如果存在）
-	if is_instance_valid(_blackboard):
-		var combo_icon = _blackboard.get_var("combo_next_icon")
-		if combo_icon is Texture:
-			return combo_icon as Texture
+	# 从 DynamicIconFeature 获取图标（如果存在）
+	# Feature 会从黑板中读取由行为树节点设置的图标
+	for feature in _features.values():
+		if not feature.has_method("get_current_icon"):
+			continue
+		var icon : Texture = feature.get_current_icon(self)
+		if is_instance_valid(icon):
+			return icon
 	
 	# 回退到 Definition 的默认图标
 	return _definition.icon

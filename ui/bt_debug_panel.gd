@@ -17,6 +17,7 @@ const ENTITY_GROUP_NAME := "Entities"
 @onready var active_nodes_view: RichTextLabel = %ActiveNodesView
 @onready var execution_history_view: RichTextLabel = %ExecutionHistoryView
 @onready var refresh_button: Button = %RefreshButton
+@onready var clear_history_button: Button = %ClearHistoryButton
 
 # 实体数据 {entity_name: {node: Node, instance: GameplayAbilityInstance}}
 var _entities: Dictionary = {}
@@ -30,6 +31,7 @@ func _ready() -> void:
 	# 连接信号
 	entity_list.item_selected.connect(_on_entity_selected)
 	refresh_button.pressed.connect(_on_refresh_pressed)
+	clear_history_button.pressed.connect(_on_clear_history_pressed)
 	
 	# 初始隐藏窗口（调试面板默认隐藏）
 	# 注意：现在脚本直接继承 Window，所以 self 就是窗口
@@ -99,10 +101,12 @@ func _scan_entities() -> void:
 			continue
 		
 		# 获取能力组件
-		var ability_comp = GameplayAbilitySystem.get_component_by_interface(entity, "GameplayAbilityComponent")
+		var ability_comp : GameplayAbilityComponent = GameplayAbilitySystem.get_component_by_interface(entity, "GameplayAbilityComponent")
 		if not is_instance_valid(ability_comp) or not ability_comp is GameplayAbilityComponent:
 			continue
 		
+		if not ability_comp.ability_activated.is_connected(_on_ability_activated):
+			ability_comp.ability_activated.connect(_on_ability_activated)
 		# 查找正在运行的技能实例
 		var active_instance: GameplayAbilityInstance = null
 		# 尝试获取当前正在执行的技能
@@ -168,6 +172,21 @@ func _on_entity_selected(index: int) -> void:
 ## 刷新按钮回调
 func _on_refresh_pressed() -> void:
 	_scan_entities()
+
+## 清空执行记录按钮回调
+func _on_clear_history_pressed() -> void:
+	if not is_instance_valid(_selected_instance):
+		return
+	
+	var bt_instance = _selected_instance._bt_instance
+	if not is_instance_valid(bt_instance):
+		return
+	
+	# 清空执行历史
+	bt_instance.clear_execution_history()
+	
+	# 立即更新视图
+	_update_execution_history_view()
 
 ## 更新树视图
 func _update_tree_view() -> void:
@@ -401,3 +420,9 @@ func _format_value(value: Variant) -> String:
 		return "[Dictionary: %d keys]" % value.size()
 	
 	return str(value)
+
+func _on_ability_activated(ability_instance: GameplayAbilityInstance) -> void:
+	if not is_instance_valid(ability_instance):
+		return
+	
+	_scan_entities()

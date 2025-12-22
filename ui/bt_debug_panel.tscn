@@ -140,11 +140,22 @@ scroll_following = true
 layout_mode = 2
 size_flags_vertical = 0
 
-[node name="ExecutionHistoryLabel" type="Label" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer/RightPanel"]
+[node name="ExecutionHistoryHeader" type="HBoxContainer" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer/RightPanel"]
 layout_mode = 2
 size_flags_vertical = 0
+theme_override_constants/separation = 8
+
+[node name="ExecutionHistoryLabel" type="Label" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer/RightPanel/ExecutionHistoryHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 16
 text = "执行记录"
+
+[node name="ClearHistoryButton" type="Button" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer/RightPanel/ExecutionHistoryHeader"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+text = "清空"
 
 [node name="ExecutionHistoryView" type="RichTextLabel" parent="BTDebugPanel/MarginContainer/VBoxContainer/MainContainer/RightPanel"]
 unique_name_in_owner = true

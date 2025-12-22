@@ -32,6 +32,34 @@ func create_instance(owner: Node) -> GameplayAbilityInstance:
 	instance.set_blackboard_var("combo_expiry_time", 0)
 	instance.set_blackboard_var("combo_next_icon", null) # 初始为空，UI应显示默认图标
 	
+	# 注入 DynamicIconFeature（如果连击段有图标）
+	# 图标映射由 Feature 配置，行为树节点通过设置黑板变量来切换图标
+	var has_icon_feature = false
+	var icon_map: Dictionary = {}
+	
+	# 收集所有连击段的图标
+	for i in range(combo_steps.size()):
+		var step_def = combo_steps[i]
+		if is_instance_valid(step_def) and is_instance_valid(step_def.icon):
+			icon_map["combo_%d" % (i + 1)] = step_def.icon
+	
+	# 如果至少有一个图标，则创建或更新 Feature
+	if not icon_map.is_empty():
+		for f in features:
+			if f is DynamicIconFeature:
+				has_icon_feature = true
+				# 如果已存在，更新图标映射
+				var icon_feature = f as DynamicIconFeature
+				for key in icon_map:
+					icon_feature.icon_map[key] = icon_map[key]
+				break
+		
+		if not has_icon_feature:
+			var icon_feature = DynamicIconFeature.new()
+			icon_feature.icon_map = icon_map.duplicate()
+			icon_feature.icon_id_key = "current_icon_id"  # 默认的图标ID key
+			features.append(icon_feature)
+	
 	return instance
 
 func _build_combo_tree() -> BTNode:
@@ -99,17 +127,19 @@ func _build_combo_tree() -> BTNode:
 		advance_node.node_id = "advance_combo"
 		wrapper.children.append(advance_node)
 		
-		# D. 设置下一段的图标
-		var icon_node = AbilityNodeSetComboIcon.new()
+		# D. 设置下一段的图标ID
+		var icon_node = BTSetVar.new()
+		icon_node.variable_key = "current_icon_id"
 		if is_last_step:
-			# 如果是终结技，下一段图标重置为第一段的图标 (或 Ability 自身的默认图标)
-			# 这里我们设置为第一段的图标，形成闭环
-			icon_node.icon_texture = combo_steps[0].icon if combo_steps.size() > 0 else null
+			# 如果是终结技，下一段图标重置为第一段的图标，形成闭环
+			icon_node.value = "combo_1" if combo_steps.size() > 0 else null
 		else:
-			# 如果是中间段，设置为下一段的图标
+			# 如果是中间段，设置为下一段的图标ID
 			# 比如当前是 i，打完后 UI 应该显示 i+1 的样子
 			if i + 1 < combo_steps.size():
-				icon_node.icon_texture = combo_steps[i+1].icon
+				icon_node.value = "combo_%d" % (i + 2)  # i+1 对应 combo_i+2（因为从1开始）
+			else:
+				icon_node.value = null
 		icon_node.node_id = "set_combo_icon"
 		wrapper.children.append(icon_node)
 		

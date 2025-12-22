@@ -150,7 +150,7 @@ func _get_targets(caster: Node3D, context: Dictionary = {}) -> Array[Node]:
 		print("AreaHitDetector: Found collider: %s (type: %s)" % [collider.name, collider.get_class()])
 		
 		# 通过工具函数转换为实体根节点
-		var entity = CombatUtils.get_entity_from_collider(collider)
+		var entity = collider.get_parent()
 		if not is_instance_valid(entity):
 			print("AreaHitDetector: Failed to get entity from collider: %s" % collider.name)
 			continue
