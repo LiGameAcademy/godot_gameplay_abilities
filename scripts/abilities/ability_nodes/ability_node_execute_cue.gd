@@ -55,8 +55,15 @@ func _tick(instance: BTInstance, delta: float) -> int:
 			push_warning("AbilityNodeExecuteCue: Failed to duplicate cue instance")
 			continue
 		
+		# 构建上下文信息（包含 instigator，供 Cue 组件使用）
+		var cue_context = {
+			"instigator": instigator,
+			"target": target,
+			"ability_context": context
+		}
+		
 		# 执行 Cue（Manager 会处理挂点计算）
-		GameplayCueManager.execute_cue(cue_instance, target, {})
+		GameplayCueManager.execute_cue(cue_instance, target, cue_context)
 		
 		# 如果设置了 save_instance_key，保存 Cue 实例到黑板（用于后续停止）
 		if not save_instance_key.is_empty():

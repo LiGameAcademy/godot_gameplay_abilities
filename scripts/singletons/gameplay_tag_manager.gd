@@ -396,14 +396,14 @@ func has_tag(target: Node, tag_id: StringName, include_inherited: bool = true) -
 			_query_cache[target_id][cache_key] = true
 		return true
 	
-	# 如果包含继承查询，检查父标签
+	# 如果包含继承查询，检查子标签（目标拥有的标签是否继承自查询的标签）
+	# 例如：查询 status.debuff，如果目标有 status.burn（继承自 status.debuff），应该返回 true
 	if include_inherited:
-		var inheritance_chain = get_tag_inheritance_chain(tag_id)
-		for parent_id in inheritance_chain:
-			if parent_id == tag_id:
-				continue  # 跳过自身
-			var parent_group_name = _get_tag_group_name(parent_id)
-			if target.is_in_group(parent_group_name):
+		# 获取目标的所有标签
+		var target_tags = get_all_tags(target)
+		# 对于每个目标标签，检查它是否继承自查询的标签
+		for target_tag_id in target_tags:
+			if tag_inherits_from(target_tag_id, tag_id):
 				if _cache_enabled:
 					var target_id = target.get_instance_id()
 					if not _query_cache.has(target_id):

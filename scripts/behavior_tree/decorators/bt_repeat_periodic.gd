@@ -17,7 +17,11 @@ class_name BTRepeatPeriodic
 
 @export_group("Periodic Settings")
 ## 周期时间（秒）
+## 如果设置了 period_key，优先从黑板读取；否则使用此值
 @export var period: float = 1.0
+## 从黑板读取周期时间的 Key（可选，如果设置则优先使用）
+## 用途：允许 Modifier 在运行时修改周期时间（如天赋系统）
+@export var period_key: String = ""
 ## 是否在首次进入时立即执行一次（true）还是等待第一个周期（false）
 @export var execute_immediately: bool = true
 ## 当子节点返回 FAILURE 时，此节点返回什么状态
@@ -29,13 +33,16 @@ func _tick_decorator(instance: BTInstance, delta: float) -> int:
 	if not is_instance_valid(child):
 		return Status.FAILURE
 	
+	# 获取实际的周期时间（优先从黑板读取）
+	var actual_period = _get_actual_period(instance)
+	
 	# 获取运行时状态（亨元模式）
 	var state = _get_state(instance)
 	
 	# 如果正在等待周期时间，更新计时器
 	if state.is_waiting_for_period:
 		state.elapsed += delta
-		if state.elapsed >= period:
+		if state.elapsed >= actual_period:
 			# 周期时间到达，重置计时器，准备执行子节点
 			state.elapsed = 0.0
 			state.is_waiting_for_period = false
@@ -105,3 +112,15 @@ func _get_state(instance: BTInstance) -> Dictionary:
 ## 设置运行时状态
 func _set_state(instance: BTInstance, state: Dictionary) -> void:
 	_set_storage(instance, state)
+
+## 获取实际的周期时间（优先从黑板读取）
+## [param] instance: BTInstance 行为树实例
+## [return] float 周期时间（秒）
+func _get_actual_period(instance: BTInstance) -> float:
+	# 如果设置了 period_key，优先从黑板读取
+	if not period_key.is_empty():
+		var blackboard_period = instance.blackboard.get_var(period_key)
+		if blackboard_period != null and blackboard_period is float:
+			return blackboard_period as float
+	# 否则使用配置的 period
+	return period

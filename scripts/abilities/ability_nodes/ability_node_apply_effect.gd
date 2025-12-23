@@ -7,6 +7,8 @@ class_name AbilityNodeApplyEffect
 ## 效果 Key（如果设置了，优先从黑板读取效果，否则使用配置的 effects）
 ## 用于动态注入效果（如献祭技能的周期性伤害效果）
 @export var effect_key: String = ""
+## 如果没有目标，是否使用 instigator 作为回退（用于自身效果）
+@export var use_instigator_as_fallback: bool = false
 
 func _tick(instance: BTInstance, delta: float) -> int:
 	# 1. 获取上下文和施法者
@@ -17,7 +19,7 @@ func _tick(instance: BTInstance, delta: float) -> int:
 	var instigator = context.instigator
 
 	# 2. 获取目标列表（如果没目标，视为成功（空挥））
-	var target_list = _get_target_list(instance, false)
+	var target_list = _get_target_list(instance, use_instigator_as_fallback)
 
 	# 3. 获取效果列表（优先从黑板读取，否则使用配置的）
 	var effects_to_apply = effects
