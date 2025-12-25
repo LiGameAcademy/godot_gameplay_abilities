@@ -13,6 +13,10 @@ class_name AbilityNodeSpawnProjectile
 @export var spread_angle: float = 0.0
 ## 枪口挂点名（用于定位发射点）
 @export var muzzle_attachment_point: StringName = &"body"
+## 撞击时产生的魔法阵（可选，会覆盖 ProjectileData 中的配置）
+## 【关键】如果设置了，投射物会在撞击时自动生成魔法阵，不依赖技能行为树
+## 这样即使施法者死亡，魔法阵也能正常生成
+@export var impact_magic_field_data: MagicFieldData = null
 
 func _tick(instance: BTInstance, delta: float) -> int:
 	var context : AbilityContext = instance.blackboard.get_var("context")
@@ -129,6 +133,13 @@ func _spawn_projectile(
 	projectile_base.instigator = instigator
 	projectile_base.target_reference = target_node
 	data.apply_to_projectile(projectile_base)
+	
+	# 【关键】如果节点配置了 impact_magic_field_data，覆盖投射物的配置
+	# 这样投射物会在撞击时自动生成魔法阵，不依赖技能行为树
+	# 即使施法者死亡，魔法阵也能正常生成
+	if is_instance_valid(impact_magic_field_data):
+		projectile_base.on_destory_magic_field_data = impact_magic_field_data
+		projectile_base.spawn_on_hit = true  # 只在撞击时生成
 	
 	return projectile_base
 

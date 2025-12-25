@@ -112,12 +112,14 @@ func _build_default_behavior_tree() -> BTNode:
 
 	# 6. 发射投射物（核心逻辑）
 	if is_instance_valid(projectile_data):
+		# 【改进】如果配置了魔法阵，直接传递给投射物节点
+		# 投射物会在撞击时自动生成魔法阵，不依赖技能行为树
+		# 这样即使施法者死亡，魔法阵也能正常生成
+		var spawn_node = _build_spawn_projectile_node()
 		if is_instance_valid(impact_magic_field_data):
-			# 配置了魔法阵：使用并行节点同时执行发射和监听
-			nodes.append(_build_projectile_with_magic_field())
-		else:
-			# 没有魔法阵：直接发射投射物
-			nodes.append(_build_spawn_projectile_node())
+			# 将魔法阵数据传递给投射物节点
+			spawn_node.impact_magic_field_data = impact_magic_field_data
+		nodes.append(spawn_node)
 		
 	# 7. 后摇等待
 	if post_cast_delay > 0.0:
@@ -140,44 +142,3 @@ func _build_spawn_projectile_node() -> BTNode:
 	spawn_node.muzzle_attachment_point = muzzle_attachment_point
 	spawn_node.node_id = "spawn_projectile"
 	return spawn_node
-
-## 构建投射物发射 + 魔法阵生成的并行节点
-## 
-## 设计说明：
-## - 投射物发射节点会立即返回 SUCCESS（发射完成）
-## - 等待撞击节点会返回 RUNNING（等待信号）
-## - 使用 SUCCEED_ON_ALL 策略，但让投射物发射节点在发射后返回 RUNNING 直到超时
-## - 这样两个分支都会保持 RUNNING 状态，直到撞击发生或超时
-## 
-## 更好的方案：使用序列结构，先发射投射物，然后等待撞击
-func _build_projectile_with_magic_field() -> BTNode:
-	# 方案：使用序列结构，先发射投射物，然后等待撞击并生成魔法阵
-	# 这样逻辑更清晰，不会因为并行策略导致问题
-	var sequence = BTSequence.new()
-	sequence.node_id = "projectile_with_magic_field_sequence"
-	
-	# 1. 发射投射物（立即完成）
-	sequence.children.append(_build_spawn_projectile_node())
-	
-	# 2. 等待撞击并生成魔法阵
-	var impact_sequence = BTSequence.new()
-	impact_sequence.node_id = "impact_magic_field_sequence"
-	
-	# 等待投射物撞击（可能超时）
-	var wait_impact_node = BTWaitSignal.new()
-	wait_impact_node.timeout = impact_wait_timeout
-	wait_impact_node.signal_key = "projectile_impact_triggered"
-	wait_impact_node.consume_signal = true
-	wait_impact_node.node_id = "wait_projectile_impact"
-	impact_sequence.children.append(wait_impact_node)
-	
-	# 生成魔法阵
-	var spawn_field_node = AbilityNodeSpawnMagicField.new()
-	spawn_field_node.magic_field_data = impact_magic_field_data
-	spawn_field_node.position_key = "projectile_impact"
-	spawn_field_node.node_id = "spawn_impact_magic_field"
-	impact_sequence.children.append(spawn_field_node)
-	
-	sequence.children.append(impact_sequence)
-	
-	return sequence

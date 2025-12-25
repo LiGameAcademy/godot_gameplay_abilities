@@ -132,11 +132,19 @@ func initialize_velocity() -> void:
 ## [param] on_hit: bool 是否因撞击而销毁（用于判断是否生成撞击魔法场）
 func destroy(on_hit: bool = false) -> void:
 	# 生成销毁时的魔法场（如果配置了）
-	if is_instance_valid(on_destory_magic_field_data) and is_instance_valid(instigator):
+	# 【改进】即使 instigator 为 null（施法者已死亡），也能生成魔法阵
+	# 这样投射物完全独立，不依赖施法者的生命周期
+	if is_instance_valid(on_destory_magic_field_data):
 		if not spawn_on_hit or on_hit:
 			# 检查是否满足生成魔法场的反应条件（如：命中带燃烧状态的目标才触发爆炸）
 			if _can_spawn_impact_field():
-				_spawn_impact_field(instigator, global_position, on_destory_magic_field_data, {})
+				# 即使 instigator 为 null，也尝试生成魔法阵
+				# 使用场景树来获取场景根节点
+				var scene_root = get_tree().current_scene if is_inside_tree() else null
+				if is_instance_valid(scene_root):
+					_spawn_impact_field(instigator, global_position, on_destory_magic_field_data, {})
+				else:
+					push_warning("ProjectileBase: Cannot spawn impact field, scene root is invalid.")
 
 	# 清理引用
 	instigator = null
@@ -269,6 +277,7 @@ func _should_impact(target: Node) -> bool:
 ## 生成撞击魔法场（爆炸）
 ## 这个方法的逻辑实际上是复用了 MagicFieldAbility 的核心生成逻辑
 ## 但我们不需要依赖 MagicFieldAbility 类，只需要依赖 MagicFieldData 和 MagicFieldBase 即可
+## 【改进】即使 instigator 为 null（施法者已死亡），也能生成魔法阵
 func _spawn_impact_field(
 		instigator: Node, 
 		spawn_position: Vector3, 
@@ -277,10 +286,6 @@ func _spawn_impact_field(
 			
 	if not is_instance_valid(data) or not is_instance_valid(data.magic_field_scene):
 		push_warning("ProjectileBase: Cannot spawn impact field, data or scene is invalid.")
-		return
-	
-	if not is_instance_valid(instigator):
-		push_warning("ProjectileBase: Cannot spawn impact field, instigator is invalid.")
 		return
 
 	# 1. 实例化载具
@@ -291,22 +296,34 @@ func _spawn_impact_field(
 	var magic_field_base = magic_field as MagicFieldBase
 	
 	# 2. 添加到场景
-	var level_root = instigator.get_tree().current_scene
+	# 【改进】优先使用投射物自己的场景树，而不是 instigator 的场景树
+	# 这样即使 instigator 为 null，也能生成魔法阵
+	var level_root: Node = null
+	if is_inside_tree():
+		level_root = get_tree().current_scene
+	elif is_instance_valid(instigator) and instigator.is_inside_tree():
+		level_root = instigator.get_tree().current_scene
+	
 	if not is_instance_valid(level_root):
 		push_warning("ProjectileBase: Cannot find current scene root, cannot spawn impact field.")
 		magic_field_base.queue_free()
 		return
-	
+		
 	level_root.add_child(magic_field_base)
 		
 	# 3. 配置载具
 	magic_field_base.global_position = spawn_position
+	# 【改进】即使 instigator 为 null，也设置魔法阵（可能为 null）
+	# 魔法阵内部应该处理 instigator 为 null 的情况
 	magic_field_base.instigator = instigator
 	
 	# 4. 装载弹头（应用数据配置）
 	data.apply_to_magic_field(magic_field_base)
 	
-	# print("ProjectileAbility: Spawned impact field at %s" % spawn_position)
+	# print("ProjectileBase: Spawned impact field at %s (instigator: %s)" % [
+	# 	spawn_position,
+	# 	instigator.name if is_instance_valid(instigator) else "null"
+	# ])
 
 ## 处理碰撞（Area）
 func _on_area_entered(area: Area3D) -> void:
