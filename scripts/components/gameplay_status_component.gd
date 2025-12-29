@@ -10,6 +10,7 @@ const GROUP_NAME := "StatusEntities"
 @export var modifier_component: GameplayModifierComponent = null
 
 var _active_statuses: Dictionary[StringName, GameplayStatusInstance] = {}
+var _has_event_listening_statuses: bool = false  # 是否有需要监听事件的状态
 
 signal status_applied(status_id: StringName, instance: GameplayStatusInstance)
 signal status_removed(status_id: StringName)
@@ -21,9 +22,28 @@ func _ready() -> void:
 	if is_instance_valid(entity) and not entity.is_in_group(GROUP_NAME):
 		entity.add_to_group(GROUP_NAME)
 	
-	# 订阅事件总线的统一游戏事件（用于监听伤害事件等）
+	# 订阅事件总线的统一游戏事件（统一管理，只连接一次）
 	if not AbilityEventBus.game_event_occurred.is_connected(_on_game_event_occurred):
 		AbilityEventBus.game_event_occurred.connect(_on_game_event_occurred)
+	
+func _process(delta: float) -> void:
+	# 统一更新所有状态的计时器
+	var statuses_to_remove: Array[StringName] = []
+	
+	for status_id in _active_statuses.keys():
+		var instance = _active_statuses.get(status_id)
+		if not is_instance_valid(instance):
+			statuses_to_remove.append(status_id)
+			continue
+		
+		# 调用状态的 update 方法
+		var should_remove = instance.update(delta)
+		if should_remove:
+			statuses_to_remove.append(status_id)
+	
+	# 移除已过期的状态
+	for status_id in statuses_to_remove:
+		remove_status(status_id)
 
 ## 添加状态
 ## [param] gsd: GameplayStatusData 状态数据
@@ -64,6 +84,9 @@ func remove_status(status_id: StringName) -> void:
 	_active_statuses.erase(status_id)
 	instance.remove()
 	status_removed.emit(status_id)
+	
+	# 检查是否还有需要监听事件的状态
+	_update_event_listening_status()
 	
 	# 触发统一游戏事件：status_removed
 	AbilityEventBus.trigger_game_event(&"status_removed", {
@@ -125,6 +148,10 @@ func get_random_status(is_debuff: bool = false) -> GameplayStatusInstance:
 ## [param] event_id: StringName 事件ID
 ## [param] context: Dictionary 上下文信息
 func handle_event(event_id: StringName, context: Dictionary) -> void:
+	# 只处理有事件监听需求的状态
+	if not _has_event_listening_statuses:
+		return
+	
 	for instance in _active_statuses.values():
 		if is_instance_valid(instance):
 			instance.handle_event(event_id, context)
@@ -200,6 +227,10 @@ func _create_and_apply_new_status_instance(
 	var instance := GameplayStatusInstance.new(gsd, self, instigator, stacks)
 	var status_id: StringName = gsd.status_id
 	
+	# 检查是否需要监听事件
+	if not gsd.trigger_on_events.is_empty():
+		_has_event_listening_statuses = true
+	
 	# 仅当状态 ID 非空且有持续时间时才记录到激活状态表
 	if not status_id.is_empty() and gsd.duration != 0.0:
 		_active_statuses[status_id] = instance
@@ -221,20 +252,21 @@ func _create_and_apply_new_status_instance(
 	
 	return instance
 
+## 更新事件监听状态（检查是否还有需要监听事件的状态）
+func _update_event_listening_status() -> void:
+	_has_event_listening_statuses = false
+	for instance in _active_statuses.values():
+		if is_instance_valid(instance) and is_instance_valid(instance.status_data):
+			if not instance.status_data.trigger_on_events.is_empty():
+				_has_event_listening_statuses = true
+				break
+
 ## 处理事件总线的统一游戏事件
-## 监听伤害事件等，并转发给状态系统
+## 监听所有游戏事件，并转发给状态系统（由状态自己判断是否响应）
 func _on_game_event_occurred(event_type: StringName, context: Dictionary) -> void:
-	# 只处理与当前实体相关的事件
-	var entity = get_parent()
-	if not is_instance_valid(entity):
+	# 如果没有需要监听事件的状态，直接返回
+	if not _has_event_listening_statuses:
 		return
 	
-	# 检查事件是否与当前实体相关
-	# 对于伤害事件，检查 target 是否是当前实体
-	if event_type == &"damage_received":
-		var target = context.get("target", null)
-		if target == entity:
-			var damage_info = context.get("damage_info", null)
-			if damage_info:
-				var event_context = {"damage_info": damage_info}
-				handle_event(&"damage_received", event_context)
+	# 直接转发给状态系统（由状态自己判断是否响应）
+	handle_event(event_type, context)

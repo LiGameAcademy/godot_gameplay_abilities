@@ -12,6 +12,8 @@ var _modifiers: Dictionary[ModifierType, Array] = {}  	## 修改器列表
 # 性能优化
 var _cached_final_value: float = 0.0						## 缓存
 var _dirty : bool = true									## 脏标记
+## 索引：source_id -> Array[GameplayAttributeModifier]（性能优化，用于批量移除）
+var _modifiers_by_source_id: Dictionary[StringName, Array] = {}
 
 signal value_changed(old_val: float, new_value: float)	## 当最终值实际改变时发出
 
@@ -36,6 +38,13 @@ func add_modifier(mod: GameplayAttributeModifier) -> void:
 	if not _modifiers.has(mod.modifier_type):
 		_modifiers[mod.modifier_type] = []
 	_modifiers[mod.modifier_type].append(mod)
+	
+	# 更新 source_id 索引（性能优化）
+	if not mod.source_id.is_empty():
+		if not _modifiers_by_source_id.has(mod.source_id):
+			_modifiers_by_source_id[mod.source_id] = []
+		_modifiers_by_source_id[mod.source_id].append(mod)
+	
 	_on_data_changed()
 
 ## 移除修改器
@@ -46,6 +55,43 @@ func remove_modifier(mod: GameplayAttributeModifier) -> void:
 		push_warning("AttributeInstance: _modifiers not has mod: %s" %mod)
 		return
 	_modifiers[mod.modifier_type].erase(mod)
+	
+	# 更新 source_id 索引（性能优化）
+	if not mod.source_id.is_empty() and _modifiers_by_source_id.has(mod.source_id):
+		_modifiers_by_source_id[mod.source_id].erase(mod)
+		# 如果该 source_id 没有更多修改器，清理索引
+		if _modifiers_by_source_id[mod.source_id].is_empty():
+			_modifiers_by_source_id.erase(mod.source_id)
+	
+	_on_data_changed()
+
+## 根据 source_id 批量移除修改器
+## [param] source_id: StringName 来源ID
+## 性能优化：使用索引直接查找，避免遍历所有修改器
+func remove_modifiers_by_source(source_id: StringName) -> void:
+	if source_id.is_empty():
+		return
+	
+	# 使用索引直接查找（O(1) 查找）
+	if not _modifiers_by_source_id.has(source_id):
+		return
+	
+	var mods_to_remove: Array = _modifiers_by_source_id[source_id].duplicate()
+	if mods_to_remove.is_empty():
+		return
+	
+	# 移除所有匹配的修改器
+	for mod in mods_to_remove:
+		if not is_instance_valid(mod):
+			continue
+		
+		# 从主列表移除
+		var _mods: Array = _modifiers.get(mod.modifier_type, [])
+		_mods.erase(mod)
+	
+	# 清理索引
+	_modifiers_by_source_id.erase(source_id)
+	
 	_on_data_changed()
 
 ## 重新计算最终值（当前版本：只处理基础值和范围限制）

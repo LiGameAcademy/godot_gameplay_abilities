@@ -13,15 +13,15 @@ enum ModifierType {
 @export var attribute_id: StringName  ## 要修改的属性ID
 @export var value: float  ## 修改值
 @export var modifier_type: ModifierType  ## 修改类型
-var source: Node = null  ## 来源（可选，用于追溯是谁施加的）
+@export var source_id: StringName = &""  ## 来源ID（可选，用于批量移除）
 
 func _init(
 		p_attribute_id: StringName = &"", 
 		p_value: float = 1.0, 
 		p_modifier_type: ModifierType = ModifierType.MULTIPLY,
-		p_source: Node = null
+		p_source_id: StringName = &""
 		) -> void:
 	attribute_id = p_attribute_id
 	value = p_value
 	modifier_type = p_modifier_type
-	source = p_source
+	source_id = p_source_id

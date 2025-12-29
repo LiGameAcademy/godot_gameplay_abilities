@@ -3,7 +3,8 @@ extends Resource
 class_name GameplayEffect
 
 ## 游戏效果基类（抽象类）
-## 所有具体效果都继承此类，实现_apply和_remove方法
+## 所有具体效果都继承此类，实现_apply方法
+## 如果需要移除逻辑，可以重写_remove方法
 
 @export var filters: Array[GameplayFilterData] = [] 	## 过滤器，如果为空，则不过滤
 
@@ -55,6 +56,22 @@ func apply(target: Node, instigator: Node, context: Variant = {}) -> void:
 	if auto_apply_sub_effects:
 		_apply_sub_effects(target, instigator, ctx)
 
+## 移除效果（核心入口）
+## [param] target: Node 目标节点
+## [param] instigator: Node 施法者节点
+## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
+## 注意：Effect 保持无状态特性，移除逻辑通过 context 中的信息（如 source_id）来识别要移除的内容
+## 子类可以重写 _remove 方法来实现具体的移除逻辑
+func remove(target: Node, instigator: Node, context: Variant = {}) -> void:
+	var ctx = ContextUtils.to_context(context)
+	
+	# 1. 执行具体移除逻辑（子类实现，默认空实现）
+	_remove(target, instigator, ctx)
+	
+	# 2. 递归移除子效果
+	if auto_apply_sub_effects:
+		_remove_sub_effects(target, instigator, ctx)
+
 ## 获取效果描述
 func get_description() -> String:
 	var description = _get_description()
@@ -67,6 +84,16 @@ func get_description() -> String:
 ## [param] instigator: Node 施法者节点
 ## [param] context: AbilityContext 上下文信息
 @abstract func _apply(target: Node, instigator: Node, context: AbilityContext) -> void
+
+## [子类重写] 移除效果的具体实现
+## [param] target: Node 目标节点
+## [param] instigator: Node 施法者节点
+## [param] context: AbilityContext 上下文信息
+## 注意：Effect 保持无状态特性，移除逻辑应该通过 context 中的信息（如 source_id）来识别要移除的内容
+## 默认空实现，子类根据需要重写
+func _remove(target: Node, instigator: Node, context: AbilityContext) -> void:
+	# 默认空实现，大多数效果不需要移除逻辑
+	pass
 
 ## 应用子效果（内部方法，供基类和子类使用）
 ## [param] target: Node 目标节点
@@ -84,6 +111,23 @@ func _apply_sub_effects(target: Node, instigator: Node, context: AbilityContext)
 			continue
 		
 		sub_effect_inst.apply(target, instigator, context)
+
+## 移除子效果（内部方法，供基类和子类使用）
+## [param] target: Node 目标节点
+## [param] instigator: Node 施法者节点
+## [param] context: AbilityContext 上下文信息
+func _remove_sub_effects(target: Node, instigator: Node, context: AbilityContext) -> void:
+	# 注意：子效果也需要克隆，避免运行时状态共享
+	for effect in sub_effects:
+		if not is_instance_valid(effect):
+			continue
+		
+		# 克隆子效果实例
+		var sub_effect_inst = effect.duplicate(true) as GameplayEffect
+		if not is_instance_valid(sub_effect_inst):
+			continue
+		
+		sub_effect_inst.remove(target, instigator, context)
 
 ## 检查过滤器
 ## [param] target: Node 目标
