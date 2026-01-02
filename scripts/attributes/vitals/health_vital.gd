@@ -16,7 +16,7 @@ func _init(p_comp: GameplayAttributeComponent = null) -> void:
 	vital_id = &"health"
 	display_name = "生命值"
 	max_value_attribute = &"max_health"  # 依赖 "health" 属性作为上限
-	regen_rate_attribute = &"health_regen"  # 可选：自动回复
+	#regen_rate_attribute = &"health_regen"  # 可选：自动回复
 
 ## 生命值恢复信号
 signal health_restored()
@@ -27,6 +27,12 @@ signal damage_received(damage_info: DamageInfo)
 ## 受到伤害时发出（在计算减免之后）
 signal damage_applied(damage_info: DamageInfo, final_damage: float)
 
+func modify_value(amount: float, is_regen: bool = false) -> void:
+	if amount >= 0:
+		heal(amount)
+	else:
+		_modify_value(amount, is_regen)
+
 ## 核心伤害应用接口
 ## [param] damage_info: DamageInfo 伤害信息
 ## [param] owner_entity: Node 拥有者实体
@@ -35,19 +41,23 @@ func apply_damage(damage_info: DamageInfo, owner_entity: Node) -> float:
 	if not is_alive: return 0.0
 	# 发出伤害接收信号（在计算减免之前）
 	damage_received.emit(damage_info)
+	AbilityEventBus.trigger_game_event(&"damage_received", {
+		"damage_info": damage_info
+	})
 	
 	# 在应用伤害前被BUFF修改为0或更少
-	if damage_info.base_damage <= 0: return 0.0
-
-	# 计算最终伤害（通过 DamageCalculator）
-	var final_damage = DamageCalculator.calculate_final_damage(damage_info, _owner_comp)
+	var final_damage = damage_info.final_damage
+	if final_damage <= 0: return 0.0
 
 	# 应用伤害
 	if final_damage > 0:
-		modify_value(-final_damage)
+		_modify_value(-final_damage)
 	
 	# UI系统可以监听这个信号来显示伤害飘字
 	damage_applied.emit(damage_info, final_damage)
+	AbilityEventBus.trigger_game_event(&"damage_applied", {
+		"damage_info": damage_info
+	})
 
 	# 处理死亡
 	if not is_alive:
@@ -58,11 +68,10 @@ func apply_damage(damage_info: DamageInfo, owner_entity: Node) -> float:
 
 ## 受到治疗
 ## [param] amount: float 要增加的生命值数量
-## [param] owner_entity: Node 拥有者实体
-func heal(amount: float, owner_entity: Node) -> void:
+func heal(amount: float) -> void:
 	if not is_alive: return
 
-	modify_value(amount)
+	_modify_value(amount)
 
 	# 发出治疗信号
 	health_restored.emit()
