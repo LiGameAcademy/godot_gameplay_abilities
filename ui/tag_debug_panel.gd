@@ -1,30 +1,21 @@
-extends Control
-class_name TagDebugPanel
+extends MarginContainer
 
-## 标签调试面板
-## 用于调试和管理实体的标签系统
-
-# 配置项
-@export_group("Debug Controls")
-## 切换面板显示的快捷键（使用 Input Map 中的 action 名称）
-@export var toggle_action: String = "toggle_tag_debug"
-
-# UI 节点引用
-@onready var entity_list: ItemList = %EntityList
-@onready var tag_container: VBoxContainer = %TagContainer
-@onready var tag_id_input: LineEdit = %TagIdInput
-@onready var add_tag_button: Button = %AddTagButton
-@onready var remove_tag_button: Button = %RemoveTagButton
-@onready var force_remove_tag_button: Button = %ForceRemoveTagButton
-@onready var clear_all_tags_button: Button = %ClearAllTagsButton
 @onready var refresh_button: Button = %RefreshButton
+@onready var entity_list: ItemList = %EntityList
 @onready var tag_count_label: Label = %TagCountLabel
+@onready var tag_container: GridContainer = %TagContainer
+@onready var tag_id_input: LineEdit = %TagIdInput
+@onready var clear_all_tags_button: Button = %ClearAllTagsButton
+@onready var remove_tag_button: Button = %RemoveTagButton
+@onready var add_tag_button: Button = %AddTagButton
+@onready var force_remove_tag_button: Button = %ForceRemoveTagButton
 
-# 实体数据 {entity_name: Node}
+@export var toggle_action: String = "toggle_tag_debug"
+@export var TAG_DISPLAY_ITEM_SCENE : PackedScene = preload("res://addons/gameplay_abiltiy_system/ui/tag_display_item.tscn")
+
 var _entities: Dictionary = {}
 var _selected_entity: Node = null
 
-# 标签显示项缓存 {tag_id: Control}
 var _tag_display_items: Dictionary = {}
 
 func _ready() -> void:
@@ -35,19 +26,19 @@ func _ready() -> void:
 	force_remove_tag_button.pressed.connect(_on_force_remove_tag_pressed)
 	clear_all_tags_button.pressed.connect(_on_clear_all_tags_pressed)
 	refresh_button.pressed.connect(_on_refresh_pressed)
-	
-	# 监听标签变化信号
+
+	# 监听标签变化信号（避免重复连接）
 	if TagManager.tag_added.is_connected(_on_tag_added):
 		TagManager.tag_added.disconnect(_on_tag_added)
 	TagManager.tag_added.connect(_on_tag_added)
-	
+
 	if TagManager.tag_removed.is_connected(_on_tag_removed):
 		TagManager.tag_removed.disconnect(_on_tag_removed)
 	TagManager.tag_removed.connect(_on_tag_removed)
-	
+
 	# 初始隐藏面板（调试面板默认隐藏）
 	visible = false
-	
+
 	# 初始扫描
 	_scan_entities()
 
@@ -63,51 +54,24 @@ func toggle_visibility() -> void:
 	if visible:
 		# 显示时刷新实体列表
 		_scan_entities()
-
+	
 ## 扫描场景中所有实体
-## 扫描场景树中的所有节点，查找可能拥有标签的实体
 func _scan_entities() -> void:
 	_entities.clear()
 	entity_list.clear()
-	
-	var scene_root = get_tree().current_scene
-	if not is_instance_valid(scene_root):
-		return
-	
-	# 递归扫描所有节点
+
+	# 扫描所有属于 "Entities" 组的节点
 	for node in get_tree().get_nodes_in_group("Entities"):
 		var entity_name = node.name if node.name != "" else str(node.get_path())
-		# 如果名称重复，添加路径信息
 		if _entities.has(entity_name):
 			entity_name = str(node.get_path())
 		_entities[entity_name] = node
-	
+
 	# 更新列表显示
 	for entity_name in _entities.keys():
 		var entity = _entities[entity_name]
 		var display_name = "%s (%s)" % [entity_name, entity.get_class()]
 		entity_list.add_item(display_name)
-
-## 实体选择回调
-func _on_entity_selected(index: int) -> void:
-	if index < 0 or index >= _entities.size():
-		return
-	
-	var entity_name = _entities.keys()[index]
-	_selected_entity = _entities[entity_name]
-	
-	# 更新标签显示
-	_update_tag_display()
-
-## 标签添加回调（由 TagManager 信号触发）
-func _on_tag_added(target: Node, tag_id: StringName) -> void:
-	if target == _selected_entity:
-		_update_tag_display()
-
-## 标签移除回调（由 TagManager 信号触发）
-func _on_tag_removed(target: Node, tag_id: StringName) -> void:
-	if target == _selected_entity:
-		_update_tag_display()
 
 ## 更新标签显示
 func _update_tag_display() -> void:
@@ -116,93 +80,59 @@ func _update_tag_display() -> void:
 		if is_instance_valid(item):
 			item.queue_free()
 	_tag_display_items.clear()
-	
+
 	if not is_instance_valid(_selected_entity):
 		tag_count_label.text = "标签数量: 0"
 		return
-	
+
 	# 获取所有标签
 	var all_tags = TagManager.get_all_tags(_selected_entity)
-	
+
 	# 更新标签数量显示
 	tag_count_label.text = "标签数量: %d" % all_tags.size()
-	
+
 	# 为每个标签创建显示项
 	for tag_id in all_tags:
 		var tag_resource = TagManager.get_tag_resource(tag_id)
 		var tag_count = TagManager.get_tag_count(_selected_entity, tag_id)
-		var display_item = _create_tag_display_item(tag_id, tag_resource, tag_count)
+		var display_item = TAG_DISPLAY_ITEM_SCENE.instantiate()
 		if is_instance_valid(display_item):
 			tag_container.add_child(display_item)
 			_tag_display_items[tag_id] = display_item
+			display_item.setup(tag_id, tag_resource, tag_count)
 
-## 创建标签显示项
-func _create_tag_display_item(tag_id: StringName, tag_resource: GameplayTag, tag_count: int) -> Control:
-	var container = HBoxContainer.new()
-	container.custom_minimum_size.y = 24
-	
-	# 标签ID显示
-	var id_label = Label.new()
-	id_label.text = str(tag_id)
-	id_label.custom_minimum_size.x = 200
-	id_label.clip_contents = true
-	container.add_child(id_label)
-	
-	# 标签名称显示（如果有资源）
-	var name_label = Label.new()
-	if is_instance_valid(tag_resource):
-		name_label.text = tag_resource.display_name if tag_resource.display_name != "" else "(无名称)"
-	else:
-		name_label.text = "(未注册)"
-		name_label.modulate = Color(0.8, 0.8, 0.8)
-	name_label.custom_minimum_size.x = 150
-	name_label.clip_contents = true
-	container.add_child(name_label)
-	
-	# 引用计数显示
-	var count_label = Label.new()
-	count_label.text = "引用: %d" % tag_count
-	count_label.custom_minimum_size.x = 80
-	if tag_count > 1:
-		count_label.modulate = Color(0.8, 0.9, 1.0)
-	container.add_child(count_label)
-	
-	# 继承信息显示（如果有资源）
-	if is_instance_valid(tag_resource) and tag_resource.parent_tag_id != &"":
-		var inherit_label = Label.new()
-		inherit_label.text = "继承: %s" % str(tag_resource.parent_tag_id)
-		inherit_label.modulate = Color(0.7, 0.7, 0.7)
-		inherit_label.clip_contents = true
-		container.add_child(inherit_label)
-	
-	# 互斥信息显示（如果有资源）
-	if is_instance_valid(tag_resource) and not tag_resource.mutually_exclusive_tags.is_empty():
-		var excl_label = Label.new()
-		var excl_tags_str = ""
-		for excl_tag in tag_resource.mutually_exclusive_tags:
-			if excl_tags_str != "":
-				excl_tags_str += ", "
-			excl_tags_str += str(excl_tag)
-		excl_label.text = "互斥: %s" % excl_tags_str
-		excl_label.modulate = Color(0.9, 0.5, 0.5)
-		excl_label.clip_contents = true
-		container.add_child(excl_label)
-	
-	return container
+## 实体选择回调
+func _on_entity_selected(index: int) -> void:
+	if index < 0 or index >= _entities.size():
+		return
+	var entity_name = _entities.keys()[index]
+	_selected_entity = _entities[entity_name]
+
+	# 更新标签显示
+	_update_tag_display()
+
+## 标签添加回调（由 TagManager 信号触发）
+func _on_tag_added(target: Node, _tag_id: StringName) -> void:
+	if target == _selected_entity:
+		_update_tag_display()
+
+## 标签移除回调（由 TagManager 信号触发）
+func _on_tag_removed(target: Node, tag_id: StringName) -> void:
+	if target == _selected_entity:
+		_update_tag_display()
 
 ## 添加标签
 func _on_add_tag_pressed() -> void:
 	if not is_instance_valid(_selected_entity):
 		push_warning("TagDebugPanel: No entity selected")
 		return
-	
+
 	var tag_id_str = tag_id_input.text.strip_edges()
 	if tag_id_str.is_empty():
 		push_warning("TagDebugPanel: Tag ID is empty")
 		return
-	
+
 	var tag_id = StringName(tag_id_str)
-	
 	# 验证标签是否已注册
 	if not TagManager.is_tag_registered(tag_id):
 		push_warning("TagDebugPanel: Tag [%s] is not registered" % tag_id_str)
@@ -210,10 +140,9 @@ func _on_add_tag_pressed() -> void:
 	
 	# 添加标签
 	TagManager.add_tag(_selected_entity, tag_id)
-	
 	# 更新显示
 	_update_tag_display()
-	
+
 	# 清空输入框
 	tag_id_input.text = ""
 
@@ -222,42 +151,48 @@ func _on_remove_tag_pressed() -> void:
 	if not is_instance_valid(_selected_entity):
 		push_warning("TagDebugPanel: No entity selected")
 		return
-	
+
 	var tag_id_str = tag_id_input.text.strip_edges()
 	if tag_id_str.is_empty():
 		push_warning("TagDebugPanel: Tag ID is empty")
 		return
-	
+
 	var tag_id = StringName(tag_id_str)
+	# 验证标签是否已注册
+	if not TagManager.is_tag_registered(tag_id):
+		push_warning("TagDebugPanel: Tag [%s] is not registered" % tag_id_str)
+		return
 	
 	# 移除标签
 	TagManager.remove_tag(_selected_entity, tag_id)
-	
+
 	# 更新显示
 	_update_tag_display()
-	
 	# 清空输入框
 	tag_id_input.text = ""
-
+	
 ## 强制移除标签
 func _on_force_remove_tag_pressed() -> void:
 	if not is_instance_valid(_selected_entity):
 		push_warning("TagDebugPanel: No entity selected")
 		return
-	
+
 	var tag_id_str = tag_id_input.text.strip_edges()
 	if tag_id_str.is_empty():
 		push_warning("TagDebugPanel: Tag ID is empty")
 		return
-	
+
 	var tag_id = StringName(tag_id_str)
+	# 验证标签是否已注册
+	if not TagManager.is_tag_registered(tag_id):
+		push_warning("TagDebugPanel: Tag [%s] is not registered" % tag_id_str)
+		return
 	
 	# 强制移除标签
 	TagManager.force_remove_tag(_selected_entity, tag_id)
 	
 	# 更新显示
 	_update_tag_display()
-	
 	# 清空输入框
 	tag_id_input.text = ""
 

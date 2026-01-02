@@ -16,8 +16,6 @@ class_name GameplayCueBase
 @export var attachment_point: StringName = &"root"
 
 ## 挂点偏移量（相对于挂点位置的偏移）
-## 用于微调特效/飘字的精确位置
-## 例如：飘字可以设置在头顶上方一点，使用 offset = Vector3(0, 0.2, 0)
 @export var offset: Vector3 = Vector3.ZERO
 
 ## 执行 Cue
@@ -27,16 +25,13 @@ class_name GameplayCueBase
 func execute(target: Node, location: Vector3, context: Dictionary = {}) -> void:
 	_execute(target, location, context)
 
-## [子类重写] 执行 Cue 的具体实现
-func _execute(_target: Node, _location: Vector3, _context: Dictionary) -> void:
-	pass
-
 ## 停止 Cue（用于持续效果，如拖尾、持续特效等）
-## [param] target: Node 目标节点
-## 默认实现为空，子类可重写以实现停止逻辑
 func stop(target: Node) -> void:
 	_stop(target)
 
+func update(_delta: float) -> void: pass
+
+## [子类重写] 执行 Cue 的具体实现
+@abstract func _execute(_target: Node, _location: Vector3, _context: Dictionary) -> void
 ## [子类重写] 停止 Cue 的具体实现
-func _stop(_target: Node) -> void:
-	pass
+func _stop(_target: Node) -> void: pass

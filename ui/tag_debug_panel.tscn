@@ -1,148 +1,149 @@
-[gd_scene load_steps=2 format=3 uid="uid://dak7x2m5oap5r"]
+[gd_scene load_steps=3 format=3 uid="uid://b4qtmgalki1a8"]
 
-[ext_resource type="Script" uid="uid://cw72sg17x0s6m" path="res://addons/godot_gameplay_abilities/ui/tag_debug_panel.gd" id="1_06b37"]
+[ext_resource type="Theme" uid="uid://carbioq75qbhu" path="res://assets/theme/theme_main.tres" id="1_dlicw"]
+[ext_resource type="Script" uid="uid://7rivag04r71d" path="res://addons/gameplay_abiltiy_system/ui/tag_debug_panel.gd" id="1_sx7sf"]
 
 [node name="TagDebugPanel" type="MarginContainer"]
-offset_right = 396.0
-offset_bottom = 542.0
-script = ExtResource("1_06b37")
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -102.0
+offset_top = -17.5
+offset_right = 102.0
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_sx7sf")
 
 [node name="Panel" type="Panel" parent="."]
 layout_mode = 2
 
 [node name="MarginContainer" type="MarginContainer" parent="."]
 layout_mode = 2
-theme_override_constants/margin_left = 16
-theme_override_constants/margin_top = 16
-theme_override_constants/margin_right = 16
-theme_override_constants/margin_bottom = 16
+theme_override_constants/margin_left = 5
+theme_override_constants/margin_top = 5
+theme_override_constants/margin_right = 5
+theme_override_constants/margin_bottom = 5
 
 [node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
 layout_mode = 2
-theme_override_constants/separation = 12
 
-[node name="HeaderContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
-size_flags_vertical = 0
-theme_override_constants/separation = 8
 
-[node name="TitleLabel" type="Label" parent="MarginContainer/VBoxContainer/HeaderContainer"]
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer/MarginContainer"]
 layout_mode = 2
-size_flags_horizontal = 3
-theme_override_font_sizes/font_size = 20
+
+[node name="TitleLabel" type="Label" parent="MarginContainer/VBoxContainer/MarginContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 6
 text = "标签调试面板"
-horizontal_alignment = 1
 
-[node name="RefreshButton" type="Button" parent="MarginContainer/VBoxContainer/HeaderContainer"]
+[node name="RefreshButton" type="Button" parent="MarginContainer/VBoxContainer/MarginContainer/HBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 4
 text = "刷新实体列表"
 
 [node name="HSeparator" type="HSeparator" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
-size_flags_vertical = 0
 
-[node name="HBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer"]
+[node name="MarginContainer2" type="MarginContainer" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
-size_flags_vertical = 3
-theme_override_constants/separation = 16
 
-[node name="LeftPanel" type="VBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer"]
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer/MarginContainer2"]
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-theme_override_constants/separation = 8
 
-[node name="EntityListLabel" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/LeftPanel"]
+[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer"]
 layout_mode = 2
-size_flags_vertical = 0
-theme_override_font_sizes/font_size = 16
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/MarginContainer"]
+layout_mode = 2
+
+[node name="EntityListLabel" type="Label" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/MarginContainer/VBoxContainer"]
+layout_mode = 2
 text = "实体列表"
 
-[node name="EntityList" type="ItemList" parent="MarginContainer/VBoxContainer/HBoxContainer/LeftPanel"]
+[node name="EntityList" type="ItemList" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 128)
+custom_minimum_size = Vector2(128, 400)
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer"]
+layout_mode = 2
+
+[node name="MarginContainer2" type="MarginContainer" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="MiddlePanel" type="VBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/VBoxContainer/MarginContainer2"]
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-theme_override_constants/separation = 8
 
-[node name="TagContainerLabel" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/MiddlePanel"]
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/VBoxContainer/MarginContainer2/VBoxContainer"]
 layout_mode = 2
-size_flags_vertical = 0
-theme_override_font_sizes/font_size = 16
+
+[node name="TagContainerLabel" type="Label" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/VBoxContainer/MarginContainer2/VBoxContainer/HBoxContainer"]
+layout_mode = 2
 text = "当前标签"
 
-[node name="TagCountLabel" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/MiddlePanel"]
+[node name="TagCountLabel" type="Label" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/VBoxContainer/MarginContainer2/VBoxContainer/HBoxContainer"]
 unique_name_in_owner = true
-modulate = Color(0.8, 0.8, 0.8, 1)
 layout_mode = 2
-size_flags_vertical = 0
-theme_override_font_sizes/font_size = 12
+size_flags_horizontal = 10
 text = "标签数量: 0"
 
-[node name="ScrollContainer" type="ScrollContainer" parent="MarginContainer/VBoxContainer/HBoxContainer/MiddlePanel"]
+[node name="HSeparator" type="HSeparator" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/VBoxContainer/MarginContainer2/VBoxContainer"]
+layout_mode = 2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/VBoxContainer/MarginContainer2/VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
+horizontal_scroll_mode = 0
 
-[node name="TagContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer/MiddlePanel/ScrollContainer"]
+[node name="TagContainer" type="GridContainer" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/VBoxContainer/MarginContainer2/VBoxContainer/ScrollContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/separation = 4
+size_flags_horizontal = 3
+size_flags_vertical = 3
+columns = 5
 
-[node name="ControlPanel" type="VBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer"]
+[node name="MarginContainer3" type="MarginContainer" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 8
-theme_override_constants/separation = 8
 
-[node name="ControlLabel" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/ControlPanel"]
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/VBoxContainer/MarginContainer3"]
 layout_mode = 2
-size_flags_vertical = 0
-theme_override_font_sizes/font_size = 16
+
+[node name="ControlLabel" type="Label" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/VBoxContainer/MarginContainer3/VBoxContainer"]
+layout_mode = 2
+theme = ExtResource("1_dlicw")
 text = "标签控制"
 
-[node name="TagIdInput" type="LineEdit" parent="MarginContainer/VBoxContainer/HBoxContainer/ControlPanel"]
+[node name="TagIdInput" type="LineEdit" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/VBoxContainer/MarginContainer3/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_vertical = 0
-placeholder_text = "输入标签ID (如: State.Stunned, Status.Buff)"
+placeholder_text = "输入标签ID"
 
-[node name="ButtonContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer/ControlPanel"]
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/VBoxContainer/MarginContainer3/VBoxContainer"]
 layout_mode = 2
-size_flags_vertical = 0
-theme_override_constants/separation = 4
-alignment = 2
 
-[node name="ClearAllTagsButton" type="Button" parent="MarginContainer/VBoxContainer/HBoxContainer/ControlPanel/ButtonContainer"]
+[node name="ClearAllTagsButton" type="Button" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/VBoxContainer/MarginContainer3/VBoxContainer/HBoxContainer"]
 unique_name_in_owner = true
-modulate = Color(1, 0.6, 0.6, 1)
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 0
 text = "清除所有标签"
 
-[node name="ForceRemoveTagButton" type="Button" parent="MarginContainer/VBoxContainer/HBoxContainer/ControlPanel/ButtonContainer"]
+[node name="ForceRemoveTagButton" type="Button" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/VBoxContainer/MarginContainer3/VBoxContainer/HBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 0
 text = "强制移除标签"
 
-[node name="RemoveTagButton" type="Button" parent="MarginContainer/VBoxContainer/HBoxContainer/ControlPanel/ButtonContainer"]
+[node name="RemoveTagButton" type="Button" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/VBoxContainer/MarginContainer3/VBoxContainer/HBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 0
 text = "移除标签"
 
-[node name="AddTagButton" type="Button" parent="MarginContainer/VBoxContainer/HBoxContainer/ControlPanel/ButtonContainer"]
+[node name="AddTagButton" type="Button" parent="MarginContainer/VBoxContainer/MarginContainer2/HBoxContainer/VBoxContainer/MarginContainer3/VBoxContainer/HBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 0
 text = "添加标签"

@@ -14,8 +14,10 @@ func set_strategy(strategy: DamageLogicStrategy) -> void:
 ## [param] damage_info: DamageInfo 伤害信息
 ## [param] target_comp: GameplayAttributeComponent 目标的属性组件
 ## [return] float 最终伤害值
-func calculate_final_damage(damage_info: DamageInfo, target_comp: GameplayAttributeComponent) -> float:
-	if not is_instance_valid(_strategy): return 0.0
+func calculate_final_damage(target: Node, instigator: Node, context: Dictionary, strategy: DamageLogicStrategy = null) -> float:
+	var strategy_to_use = strategy if is_instance_valid(strategy) else _strategy
+	if not is_instance_valid(strategy_to_use):
+		return 0.0
 	
-	var final_damage = _strategy.calculate(damage_info, target_comp)
-	return max(0.0, final_damage)
+	# 只计算，不应用
+	return max(0.0, strategy_to_use.calculate(target, instigator, context))

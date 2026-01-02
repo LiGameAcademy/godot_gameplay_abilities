@@ -9,4 +9,3 @@ class_name GameplayCue
 ## Cue 组件数组（组合模式）
 ## 可以包含多个不同类型的 Cue，例如同时播放特效、音效和飘字
 @export var cues: Array[GameplayCueBase] = []
-

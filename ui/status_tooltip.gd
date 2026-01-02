@@ -56,8 +56,5 @@ func _build_tooltip_text(status_instance: GameplayStatusInstance, status_data: G
 	if not status_data.tags.is_empty():
 		text += "标签: %s\n" % ", ".join(status_data.tags.map(func(t): return str(t)))
 	
-	# 类型
-	text += "类型: %s\n" % ("Debuff" if status_data.is_debuff else "Buff")
-	
 	return text
 

@@ -1,30 +1,37 @@
-[gd_scene load_steps=2 format=3 uid="uid://b5k7x2m5oap4r"]
+[gd_scene load_steps=4 format=3 uid="uid://puirrf70bmsw"]
 
-[ext_resource type="Script" uid="uid://cbc07fwsu8h4w" path="res://addons/godot_gameplay_abilities/ui/status_icon.gd" id="1_status_icon"]
+[ext_resource type="Texture2D" uid="uid://dxsvj51ctgg3g" path="res://icon.svg" id="1_32sbw"]
+[ext_resource type="Script" uid="uid://dw130lxt8xr5v" path="res://addons/gameplay_abiltiy_system/ui/status_icon.gd" id="1_rr66h"]
+[ext_resource type="Theme" uid="uid://carbioq75qbhu" path="res://assets/theme/theme_main.tres" id="2_wrggy"]
 
 [node name="StatusIcon" type="MarginContainer"]
-custom_minimum_size = Vector2(64, 64)
-offset_right = 40.0
-offset_bottom = 40.0
-script = ExtResource("1_status_icon")
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -0.5
+offset_top = -11.5
+offset_right = 0.5
+offset_bottom = 11.5
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_rr66h")
 
 [node name="Panel" type="Panel" parent="."]
-custom_minimum_size = Vector2(48, 48)
+custom_minimum_size = Vector2(32, 32)
 layout_mode = 2
-mouse_filter = 2
 
 [node name="TextureRect" type="TextureRect" parent="."]
 unique_name_in_owner = true
 layout_mode = 2
+texture = ExtResource("1_32sbw")
 expand_mode = 1
-stretch_mode = 4
 
 [node name="StackLabel" type="Label" parent="."]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
-theme_override_constants/outline_size = 2
-theme_override_font_sizes/font_size = 12
-horizontal_alignment = 2
-vertical_alignment = 2
+size_flags_horizontal = 8
+size_flags_vertical = 8
+theme = ExtResource("2_wrggy")
+text = "99"
