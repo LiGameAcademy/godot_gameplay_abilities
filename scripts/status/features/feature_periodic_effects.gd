@@ -24,10 +24,10 @@ func _update_feature(instance: GameplayStatusInstance, delta: float) -> void:
 
 ## 获取计时器（从实例中读取）
 func _get_timer(instance: GameplayStatusInstance) -> float:
-	var feature_storage = instance.get_feature_storge(self)
+	var feature_storage = instance.get_feature_storage(self)
 	return feature_storage.get("timer", 0.0)
 
 ## 设置计时器（存储到实例中）
 func _set_timer(instance: GameplayStatusInstance, value: float) -> void:
-	var feature_storage = instance.get_feature_storge(self)
+	var feature_storage = instance.get_feature_storage(self)
 	feature_storage["timer"] = value

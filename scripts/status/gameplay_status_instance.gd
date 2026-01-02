@@ -160,7 +160,7 @@ func apply_effects(effects: Array[GameplayEffect], context: Dictionary = {}) -> 
 	_apply_effects(effects, context)
 
 ## 获取特性数据
-func get_feature_storge(feature: StatusFeature) -> Dictionary:
+func get_feature_storage(feature: StatusFeature) -> Dictionary:
 	if not _feature_storage.has(feature):
 		_feature_storage[feature] = {}
 	return _feature_storage[feature]

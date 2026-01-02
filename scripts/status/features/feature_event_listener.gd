@@ -12,7 +12,7 @@ func can_trigger_on_event(event_type: StringName) -> bool:
 	return trigger_on_events.has(event_type)
 
 func has_event_listening() -> bool:
-	return true
+	return not trigger_on_events.is_empty()
 
 func _handle_event(instance: GameplayStatusInstance, event_id: StringName, context: Dictionary) -> void:
 	if not trigger_on_events.has(event_id):

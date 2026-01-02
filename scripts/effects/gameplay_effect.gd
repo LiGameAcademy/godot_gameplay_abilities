@@ -43,7 +43,7 @@ func apply(target: Node, instigator: Node, context: Dictionary = {}) -> void:
 	if is_instance_valid(cue):
 		_execute_cue(target, context)
 
-	# 4. 递归应用子效果（如果启用自动应用）
+	# 4. 递归应用子效果
 	_apply_sub_effects(target, instigator, context)
 
 ## 移除效果（核心入口）
@@ -87,8 +87,18 @@ func _execute_cue(target: Node, context: Dictionary) -> void:
 	GameplayCueManager.execute_cue(cue, target, context)
 
 func _apply_sub_effects(target: Node, instigator: Node, context: Dictionary) -> void:
+	# 注意：子效果也需要克隆，避免运行时状态共享
 	for effect in sub_effects:
-		effect.apply(target, instigator, context)
+		if not is_instance_valid(effect):
+			continue
+		
+		# 克隆子效果实例
+		var sub_effect_inst = effect.duplicate(true) as GameplayEffect
+		if not is_instance_valid(sub_effect_inst):
+			continue
+		
+		# 递归应用子效果（每个子效果会自己执行完整的 apply 流程）
+		sub_effect_inst.apply(target, instigator, context)
 
 ## 移除子效果（内部方法，供基类和子类使用）
 ## [param] target: Node 目标节点
