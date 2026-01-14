@@ -9,7 +9,8 @@ var instigator: Node = null                      ## 伤害的最终源头
 var source_component: Node = null                ## 伤害的直接来源组件（采用鸭子类型，不依赖具体类型）
 
 ## 伤害属性
-var base_damage : float = 0.0
+var base_damage : float = 0.0                     ## 基础伤害（未计算前的原始值）
+var final_damage : float = 0.0                   ## 最终伤害（计算后的值）
 var is_crit: bool = false                        ## 是否暴击
 
 func _init(

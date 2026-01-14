@@ -34,29 +34,34 @@ func modify_value(amount: float, is_regen: bool = false) -> void:
 		_modify_value(amount, is_regen)
 
 ## 核心伤害应用接口
-## [param] damage_info: DamageInfo 伤害信息
+## [param] damage_info: DamageInfo 伤害信息（必须包含已计算的 final_damage）
 ## [param] owner_entity: Node 拥有者实体
 ## [return] float 最终伤害值（用于 Cue 系统）
 func apply_damage(damage_info: DamageInfo, owner_entity: Node) -> float:
-	if not is_alive: return 0.0
-	# 发出伤害接收信号（在计算减免之前）
+	if not is_alive: 
+		return 0.0
+	
+	if not is_instance_valid(damage_info):
+		push_error("HealthVital.apply_damage: damage_info is invalid")
+		return 0.0
+	
+	# 发出伤害接收信号（允许其他系统修改伤害，如护盾、减伤等）
 	damage_received.emit(damage_info)
 	AbilityEventBus.trigger_game_event(&"damage_received", {
-		"damage_info": damage_info
+		"damage_info": damage_info,
+		"target": owner_entity
 	})
 	
-	# 在应用伤害前被BUFF修改为0或更少
-	var final_damage = damage_info.final_damage
-	if final_damage <= 0: return 0.0
-
+	# 获取最终伤害（可能已被 damage_received 监听者修改）
+	damage_info.final_damage = max(0.0, damage_info.final_damage)
 	# 应用伤害
-	if final_damage > 0:
-		_modify_value(-final_damage)
+	_modify_value(-damage_info.final_damage)
 	
-	# UI系统可以监听这个信号来显示伤害飘字
-	damage_applied.emit(damage_info, final_damage)
+	# 发出伤害应用信号（UI系统可以监听这个信号来显示伤害飘字）
+	damage_applied.emit(damage_info, damage_info.final_damage)
 	AbilityEventBus.trigger_game_event(&"damage_applied", {
-		"damage_info": damage_info
+		"damage_info": damage_info,
+		"target": owner_entity
 	})
 
 	# 处理死亡
@@ -64,7 +69,7 @@ func apply_damage(damage_info: DamageInfo, owner_entity: Node) -> float:
 		_die(damage_info.instigator, owner_entity)
 
 	# 返回最终伤害值（供 Cue 系统使用）
-	return final_damage
+	return damage_info.final_damage
 
 ## 受到治疗
 ## [param] amount: float 要增加的生命值数量
