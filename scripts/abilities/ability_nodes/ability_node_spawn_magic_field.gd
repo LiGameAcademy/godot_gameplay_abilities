@@ -15,8 +15,10 @@ class_name AbilityNodeSpawnMagicField
 @export var target_key: String = "targets"
 
 func _tick(instance: BTInstance, delta: float) -> int:
-	var context : AbilityContext = instance.blackboard.get_var("context")
-	var instigator = context.instigator
+	var context : Dictionary = instance.blackboard.get_var("context", {})
+	if not context is Dictionary:
+		context = {}
+	var instigator = context.get("instigator")
 	
 	if not is_instance_valid(instigator):
 		push_warning("AbilityNodeSpawnMagicField: Instigator is not valid!")
@@ -48,7 +50,7 @@ func _spawn_magic_field(
 		instigator: Node,
 		spawn_position: Vector3,
 		data: MagicFieldData,
-		context: AbilityContext,
+		context: Dictionary,
 		instance: BTInstance) -> void:
 	var magic_field = data.magic_field_scene.instantiate()
 	
@@ -100,7 +102,7 @@ func _spawn_magic_field(
 	print("AbilityNodeSpawnMagicField: Spawned magic field at position: %s" % spawn_position)
 
 ## 获取生成位置
-func _get_spawn_position(instance: BTInstance, context: AbilityContext) -> Vector3:
+func _get_spawn_position(instance: BTInstance, context: Dictionary) -> Vector3:
 	# 优先级1: 从黑板获取撞击位置（如果配置了 position_key）
 	if not position_key.is_empty():
 		var impact_data = instance.blackboard.get_var(position_key)
@@ -110,12 +112,14 @@ func _get_spawn_position(instance: BTInstance, context: AbilityContext) -> Vecto
 				return impact_dict["hit_position"] as Vector3
 	
 	# 优先级2: 从 context 获取 hit_position
-	if context.hit_position != Vector3.ZERO:
-		return context.hit_position
+	if context.has("hit_position") and context["hit_position"] is Vector3:
+		var hit_pos = context["hit_position"] as Vector3
+		if hit_pos != Vector3.ZERO:
+			return hit_pos
 	
-	# 优先级3: 从 context 的 custom_data 获取 target_position
-	if context.custom_data.has("target_position") and context.custom_data["target_position"] is Vector3:
-		return context.custom_data["target_position"] as Vector3
+	# 优先级3: 从 context 获取 target_position
+	if context.has("target_position") and context["target_position"] is Vector3:
+		return context["target_position"] as Vector3
 	
 	# 优先级4: 使用目标位置
 	var raw_targets = instance.blackboard.get_var("targets")
@@ -127,8 +131,8 @@ func _get_spawn_position(instance: BTInstance, context: AbilityContext) -> Vecto
 			return (first_target as Node3D).global_position
 	
 	# 优先级5: 使用施法者位置
-	var instigator = context.instigator
-	if instigator is Node3D:
+	var instigator = context.get("instigator")
+	if is_instance_valid(instigator) and instigator is Node3D:
 		return (instigator as Node3D).global_position
 	
 	# 默认位置

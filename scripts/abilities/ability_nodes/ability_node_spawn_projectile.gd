@@ -19,8 +19,10 @@ class_name AbilityNodeSpawnProjectile
 @export var impact_magic_field_data: MagicFieldData = null
 
 func _tick(instance: BTInstance, delta: float) -> int:
-	var context : AbilityContext = instance.blackboard.get_var("context")
-	var instigator = context.instigator
+	var context : Dictionary = instance.blackboard.get_var("context", {})
+	if not context is Dictionary:
+		context = {}
+	var instigator = context.get("instigator")
 	
 	if not is_instance_valid(instigator):
 		push_warning("AbilityNodeSpawnProjectile: Instigator is not valid!")
@@ -47,11 +49,11 @@ func _tick(instance: BTInstance, delta: float) -> int:
 			target_for_homing = first_target as Node3D
 	
 	# 确定发射基准信息
-	var spawn_transform = _get_muzzle_transform(instigator, context.to_dict())
+	var spawn_transform = _get_muzzle_transform(instigator, context)
 	
 	# 计算实际发射数量（支持 Modifier 修改）
 	var actual_projectile_count = projectile_count
-	actual_projectile_count += context.extra_projectiles
+	actual_projectile_count += context.get("extra_projectiles", 0)
 	actual_projectile_count = max(1, actual_projectile_count)
 	
 	# 计算散射角度分布
@@ -76,14 +78,14 @@ func _tick(instance: BTInstance, delta: float) -> int:
 			spawn_transform,
 			projectile_data.duplicate(),
 			target_for_homing,
-			context.to_dict(),
+			context,
 			angle_offset
 		)
 		
 		if is_instance_valid(projectile):
 			spawned_projectiles.append(projectile)
 			# 连接信号，将撞击信息写入黑板
-			_connect_projectile_signals(projectile, instance, context.to_dict())
+			_connect_projectile_signals(projectile, instance, context)
 	
 	# 将投射物列表存储到黑板（用于后续的事件监听节点）
 	instance.blackboard.set_var("spawned_projectiles", spawned_projectiles)

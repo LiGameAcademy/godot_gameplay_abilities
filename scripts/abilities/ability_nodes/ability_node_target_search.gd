@@ -37,14 +37,11 @@ func _tick(instance: BTInstance, delta: float) -> int:
 	var input_target = blackboard.get_var(input_target_key)
 	
 	# 获取上下文 (Context)
-	# 假设黑板里存的是 AbilityContext 对象，我们需要把它转为 Dictionary 传给策略
-	# 或者策略直接接受 AbilityContext (建议统一接口，这里按你的基类要求转字典)
+	# 从黑板获取 Dictionary 格式的上下文
 	var context_obj = blackboard.get_var("context")
 	var context_dict: Dictionary = {}
 	
-	if is_instance_valid(context_obj) and context_obj.has_method("to_dict"):
-		context_dict = context_obj.to_dict()
-	elif context_obj is Dictionary:
+	if context_obj is Dictionary:
 		context_dict = context_obj
 	
 	# 补充必要的上下文信息 (如果 Context 里没有)

@@ -21,10 +21,12 @@ class_name AbilityNodeExecuteCue
 func _tick(instance: BTInstance, delta: float) -> int:
 	# 1. 获取上下文和施法者
 	var context = _get_context(instance)
-	if not is_instance_valid(context) or not is_instance_valid(context.instigator):
+	if context.is_empty():
 		return Status.SUCCESS
 	
-	var instigator = context.instigator
+	var instigator = context.get("instigator")
+	if not is_instance_valid(instigator):
+		return Status.SUCCESS
 	
 	# 2. 获取目标列表（如果没目标，使用 instigator 作为目标）
 	var target_list = _get_target_list(instance, true)

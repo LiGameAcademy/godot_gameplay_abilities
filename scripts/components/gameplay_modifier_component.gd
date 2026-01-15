@@ -84,130 +84,86 @@ func get_all_modifiers() -> Array[GameplayAbilityModifier]:
 ## 通知：施法前
 ## [param] ability_comp: GameplayAbilityComponent 技能组件
 ## [param] ability: GameplayAbility 技能实例
-## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
+## [param] context: Dictionary 技能上下文
 func notify_before_ability_cast(
 	ability_comp: GameplayAbilityComponent,
 	ability_instance: GameplayAbilityInstance,
-	context: Variant
+	context: Dictionary
 ) -> void:
-	var ctx = ContextUtils.to_context(context)
+	# 确保 context 是 Dictionary
+	if not context is Dictionary:
+		context = {}
 	var relevant_modifiers = _get_relevant_modifiers(ability_instance, ability_comp)
 	for mod in relevant_modifiers:
 		if not is_instance_valid(mod):
 			continue
-		# Modifier 可能仍使用 Dictionary，转换后传递
-		var mod_dict = ctx.to_dict()
-		mod.on_before_ability_cast(ability_comp, ability_instance, mod_dict)
+		# 所有修改器共享同一个字典
+		mod.on_before_ability_cast(ability_comp, ability_instance, context)
 
 ## 通知：施法成功后
 ## [param] ability_comp: GameplayAbilityComponent 技能组件
 ## [param] ability: GameplayAbility 技能实例
-## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
+## [param] context: Dictionary 技能上下文
 func notify_after_ability_commit(
 	ability_comp: GameplayAbilityComponent,
 	ability_instance: GameplayAbilityInstance,
-	context: Variant
+	context: Dictionary
 ) -> void:
-	var ctx = ContextUtils.to_context(context)
+	# 确保 context 是 Dictionary
+	if not context is Dictionary:
+		context = {}
 	var relevant_modifiers = _get_relevant_modifiers(ability_instance, ability_comp)
 	
-	# 在循环外创建一次字典，让所有修改器修改同一个字典
-	var mod_dict = ctx.to_dict()
-	
+	# 所有修改器共享同一个字典
 	for mod in relevant_modifiers:
 		if not is_instance_valid(mod):
 			continue
-		# Modifier 可能仍使用 Dictionary，所有修改器共享同一个字典
-		mod.on_after_ability_commit(ability_comp, ability_instance, mod_dict)
-	
-	# 所有修改器调用完成后，将 Dictionary 的修改同步回 AbilityContext
-	_sync_dict_to_context(mod_dict, ctx)
+		mod.on_after_ability_commit(ability_comp, ability_instance, context)
 
 ## 通知：技能真正生效前
 ## [param] ability_comp: GameplayAbilityComponent 技能组件
 ## [param] ability: GameplayAbility 技能实例
 ## [param] target: Node 目标
-## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
+## [param] context: Dictionary 技能上下文
 func notify_before_apply_ability(
 	ability_comp: GameplayAbilityComponent,
 	ability_instance: GameplayAbilityInstance,
 	target: Node,
-	context: Variant
+	context: Dictionary
 ) -> void:
-	var ctx = ContextUtils.to_context(context)
+	# 确保 context 是 Dictionary
+	if not context is Dictionary:
+		context = {}
 	var relevant_modifiers = _get_relevant_modifiers(ability_instance, ability_comp)
 	
-	# 在循环外创建一次字典，让所有修改器修改同一个字典
-	var mod_dict = ctx.to_dict()
-	
+	# 所有修改器共享同一个字典
 	for mod in relevant_modifiers:
 		if not is_instance_valid(mod):
 			continue
-		# Modifier 可能仍使用 Dictionary，所有修改器共享同一个字典
-		mod.on_before_apply_ability(ability_comp, ability_instance, target, mod_dict)
-	
-	# 所有修改器调用完成后，将 Dictionary 的修改同步回 AbilityContext
-	_sync_dict_to_context(mod_dict, ctx)
+		mod.on_before_apply_ability(ability_comp, ability_instance, target, context)
 
 ## 通知：效果应用时
 ## [param] effect: GameplayEffect 效果实例
 ## [param] target: Node 目标
 ## [param] instigator: Node 施法者
-## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
+## [param] context: Dictionary 技能上下文
 func notify_effect_applied(
 	effect: GameplayEffect,
 	target: Node,
 	instigator: Node,
-	context: Variant
+	context: Dictionary
 ) -> void:
-	var ctx = ContextUtils.to_context(context)
-	
-	# 在循环外创建一次字典，让所有修改器修改同一个字典
-	var mod_dict = ctx.to_dict()
+	# 确保 context 是 Dictionary
+	if not context is Dictionary:
+		context = {}
 	
 	# 效果层暂时遍历所有修改器（因为效果没有 ability_id）
 	# 如果未来需要优化，可以给 Effect 也加 ID/Tag 过滤
 	for mod in active_modifiers:
 		if not is_instance_valid(mod):
 			continue
-		# Modifier 可能仍使用 Dictionary，所有修改器共享同一个字典
-		mod.on_effect_applied(effect, target, instigator, mod_dict)
-	
-	# 所有修改器调用完成后，将 Dictionary 的修改同步回 AbilityContext
-	_sync_dict_to_context(mod_dict, ctx)
-
-# ========== 内部方法 ==========
-
-## 将 Dictionary 的修改同步回 AbilityContext
-## 用于在修改器修改 Dictionary 后，将修改同步回 AbilityContext
-## [param] mod_dict: Dictionary 修改后的字典
-## [param] ctx: AbilityContext 要同步的上下文
-func _sync_dict_to_context(mod_dict: Dictionary, ctx: AbilityContext) -> void:
-	# 同步关键属性（修改器可能修改的属性）
-	if mod_dict.has("extra_projectiles"):
-		ctx.extra_projectiles = mod_dict.get("extra_projectiles", 0)
-	if mod_dict.has("damage_multiplier_modifier"):
-		ctx.damage_multiplier_modifier = mod_dict.get("damage_multiplier_modifier", 1.0)
-	if mod_dict.has("cooldown_reduction"):
-		ctx.cooldown_reduction = mod_dict.get("cooldown_reduction", 0.0)
-	if mod_dict.has("extra_effects"):
-		ctx.extra_effects = mod_dict.get("extra_effects", [])
-	if mod_dict.has("apply_extra_effects_to_all_targets"):
-		ctx.apply_extra_effects_to_all_targets = mod_dict.get("apply_extra_effects_to_all_targets", true)
-	# 同步 custom_data（其他自定义数据）
-	if mod_dict.has("custom_data") and mod_dict["custom_data"] is Dictionary:
-		ctx.custom_data = mod_dict["custom_data"].duplicate()
-	else:
-		# 将不在基础属性中的键存入 custom_data
-		var base_properties = ["instigator", "input_target", "ability", "ability_comp", "ability_id", "ability_level",
-			"final_damage", "damage_multiplier_modifier", "extra_effects",
-			"apply_extra_effects_to_all_targets", "extra_projectiles", "muzzle_transform",
-			"cooldown_reduction", "skip_cooldown", "skip_cost",
-			"hit_position", "hit_direction", "projectile", "damage_info",
-			"value", "text", "custom_data"]
-		for key in mod_dict:
-			if key not in base_properties:
-				ctx.custom_data[key] = mod_dict[key]
+		# 所有修改器共享同一个字典
+		mod.on_effect_applied(effect, target, instigator, context)
 
 ## 获取与指定技能相关的修改器（性能优化：使用索引）
 ## [param] ability_instance: GameplayAbilityInstance 技能实例

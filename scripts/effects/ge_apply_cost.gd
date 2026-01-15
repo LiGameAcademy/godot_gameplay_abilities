@@ -6,7 +6,7 @@ class_name GE_ApplyCost
 
 @export var costs: Array[AbilityCostBase] = []  ## 要应用的消耗列表
 
-func _apply(target: Node, instigator: Node, context: AbilityContext) -> void:
+func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 	if costs.is_empty():
 		return
 	
