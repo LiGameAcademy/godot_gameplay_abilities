@@ -9,32 +9,79 @@ class_name ComboAbilityDefinition
 @export var cost_feature_name: String = "CostFeature"
 @export var cooldown_feature_name: String = "CooldownFeature"
 
-# 重写创建实例
+# ========== 行为树缓存（享元模式） ==========
+## 缓存的默认行为树（所有实例共享，避免重复构建）
+## 只在第一次创建实例时构建，之后所有实例共享
+var _cached_combo_tree: BTNode = null
+
+## 重写基类的工厂方法
+## 在创建实例时自动注入 Feature 和构建行为树（不修改 Definition，避免资源污染）
 func create_instance(owner: Node) -> GameplayAbilityInstance:
-	if execution_tree == null:
-		execution_tree = _build_combo_tree()
-		
-	# 注入 Cost 和 Cooldown 特性的逻辑
-	var cost_feature = CostFeature.new()
-	cost_feature.costs = costs
-	cost_feature.feature_name = cost_feature_name
-	features.append(cost_feature)
+	# 1. 验证配置
+	_validate_configuration()
 	
-	var cooldown_feature = CooldownFeature.new()
-	cooldown_feature.cooldown_duration = cooldown_duration
-	cooldown_feature.feature_name = cooldown_feature_name
-	features.append(cooldown_feature)
+	# 2. 获取执行树（优先使用用户配置，否则使用缓存的默认树）
+	var tree_to_use = _get_execution_tree()
 	
-	var instance = super.create_instance(owner)
+	# 3. 临时设置 execution_tree（仅用于创建 Instance，不污染资源）
+	var original_tree = execution_tree
+	execution_tree = tree_to_use
 	
-	# 初始化黑板
-	instance.set_blackboard_var("combo_index", 0)
-	instance.set_blackboard_var("combo_expiry_time", 0)
-	instance.set_blackboard_var("combo_next_icon", null) # 初始为空，UI应显示默认图标
+	# 4. 调用父类创建实例（这会复制 features 到 instance）
+	var instance = super(owner)
+	
+	# 5. 立即恢复 execution_tree（避免资源污染）
+	execution_tree = original_tree
+	
+	# 6. 初始化黑板变量
+	_initialize_blackboard(instance)
+	
+	# 7. 在 Instance 中动态注入 Feature（不修改 Definition，避免资源污染）
+	_inject_features_to_instance(instance)
+	
+	return instance
+
+## 获取执行树（优先使用用户配置，否则使用缓存的默认树）
+## 符合享元模式：所有实例共享同一个行为树
+## [return] BTNode 执行树
+func _get_execution_tree() -> BTNode:
+	# 如果用户手动配置了，使用用户的
+	if is_instance_valid(execution_tree):
+		return execution_tree
+	
+	# 如果已缓存，使用缓存的（享元模式）
+	if is_instance_valid(_cached_combo_tree):
+		return _cached_combo_tree
+	
+	# 构建并缓存（只构建一次，之后所有实例共享）
+	_cached_combo_tree = _build_combo_tree()
+	return _cached_combo_tree
+
+## 在 Instance 中注入 Feature（不修改 Definition，避免资源污染）
+## [param] instance: GameplayAbilityInstance 技能实例
+func _inject_features_to_instance(instance: GameplayAbilityInstance) -> void:
+	# 注入 CostFeature（如果配置了消耗且不存在）
+	if not costs.is_empty():
+		if not _has_feature(instance, CostFeature):
+			var cost_feature = CostFeature.new()
+			cost_feature.costs = costs
+			cost_feature.feature_name = cost_feature_name
+			instance.add_feature(cost_feature.feature_name, cost_feature)
+	
+	# 注入 CooldownFeature（如果配置了冷却时间且不存在）
+	if cooldown_duration > 0.0:
+		if not _has_feature(instance, CooldownFeature):
+			var cooldown_feature = CooldownFeature.new()
+			cooldown_feature.cooldown_duration = cooldown_duration
+			cooldown_feature.feature_name = cooldown_feature_name
+			instance.add_feature(cooldown_feature.feature_name, cooldown_feature)
 	
 	# 注入 DynamicIconFeature（如果连击段有图标）
-	# 图标映射由 Feature 配置，行为树节点通过设置黑板变量来切换图标
-	var has_icon_feature = false
+	_inject_icon_feature(instance)
+
+## 注入图标 Feature
+## [param] instance: GameplayAbilityInstance 技能实例
+func _inject_icon_feature(instance: GameplayAbilityInstance) -> void:
 	var icon_map: Dictionary = {}
 	
 	# 收集所有连击段的图标
@@ -43,24 +90,71 @@ func create_instance(owner: Node) -> GameplayAbilityInstance:
 		if is_instance_valid(step_def) and is_instance_valid(step_def.icon):
 			icon_map["combo_%d" % (i + 1)] = step_def.icon
 	
-	# 如果至少有一个图标，则创建或更新 Feature
+	# 如果至少有一个图标，则注入 Feature
 	if not icon_map.is_empty():
-		for f in features:
-			if f is DynamicIconFeature:
-				has_icon_feature = true
-				# 如果已存在，更新图标映射
-				var icon_feature = f as DynamicIconFeature
-				for key in icon_map:
-					icon_feature.icon_map[key] = icon_map[key]
-				break
+		# 检查是否已存在 DynamicIconFeature
+		var existing_feature = _get_feature(instance, DynamicIconFeature)
+		if is_instance_valid(existing_feature):
+			# 如果已存在，移除旧的并创建新的（确保使用最新的图标映射）
+			instance.remove_feature(existing_feature.feature_name)
 		
-		if not has_icon_feature:
-			var icon_feature = DynamicIconFeature.new()
-			icon_feature.icon_map = icon_map.duplicate()
-			icon_feature.icon_id_key = "current_icon_id"  # 默认的图标ID key
-			features.append(icon_feature)
+		# 创建新的 Feature
+		var icon_feature = DynamicIconFeature.new()
+		icon_feature.icon_map = icon_map.duplicate()
+		icon_feature.icon_id_key = "current_icon_id"
+		instance.add_feature(icon_feature.feature_name, icon_feature)
+
+## 检查 Instance 是否已有指定类型的 Feature
+## [param] instance: GameplayAbilityInstance 技能实例
+## [param] feature_type: GDScript Feature 类型
+## [return] bool 是否存在
+func _has_feature(instance: GameplayAbilityInstance, feature_type: GDScript) -> bool:
+	var all_features = instance.get_features()
+	for feature in all_features:
+		if feature.get_script() == feature_type:
+			return true
+	return false
+
+## 获取指定类型的 Feature
+## [param] instance: GameplayAbilityInstance 技能实例
+## [param] feature_type: GDScript Feature 类型
+## [return] GameplayAbilityFeature Feature 实例，如果不存在则返回 null
+func _get_feature(instance: GameplayAbilityInstance, feature_type: GDScript) -> GameplayAbilityFeature:
+	var all_features = instance.get_features()
+	for feature in all_features:
+		if feature.get_script() == feature_type:
+			return feature
+	return null
+
+## 初始化黑板变量
+## [param] instance: GameplayAbilityInstance 技能实例
+func _initialize_blackboard(instance: GameplayAbilityInstance) -> void:
+	instance.set_blackboard_var("combo_index", 0)
+	instance.set_blackboard_var("combo_expiry_time", 0)
+	instance.set_blackboard_var("combo_next_icon", null) # 初始为空，UI应显示默认图标
+
+## 验证配置的合理性
+func _validate_configuration() -> void:
+	# 验证：连击段不能为空
+	if combo_steps.is_empty():
+		push_error("ComboAbilityDefinition [%s]: combo_steps 不能为空" % ability_id)
+		return
 	
-	return instance
+	# 验证：连击窗口期应该为正数
+	if window_duration <= 0.0:
+		push_error("ComboAbilityDefinition [%s]: window_duration 必须为正数 (%.2f)" % [ability_id, window_duration])
+		window_duration = 0.8  # 使用默认值
+	
+	# 验证：冷却时间应该非负
+	if cooldown_duration < 0.0:
+		push_error("ComboAbilityDefinition [%s]: cooldown_duration 不能为负数 (%.2f)" % [ability_id, cooldown_duration])
+		cooldown_duration = 0.0
+	
+	# 验证：连击段的有效性
+	for i in range(combo_steps.size()):
+		var step = combo_steps[i]
+		if not is_instance_valid(step):
+			push_warning("ComboAbilityDefinition [%s]: combo_steps[%d] 无效" % [ability_id, i])
 
 func _build_combo_tree() -> BTNode:
 	# --- 最外层 Sequence ---

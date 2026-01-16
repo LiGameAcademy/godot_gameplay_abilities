@@ -4,7 +4,6 @@
 [ext_resource type="Script" uid="uid://cbc07fwsu8h4w" path="res://addons/godot_gameplay_abilities/ui/status_icon.gd" id="1_rr66h"]
 [ext_resource type="Theme" uid="uid://buupjw3dumemi" path="res://addons/godot_gameplay_abilities/ui/default_theme.tres" id="2_wrggy"]
 
-
 [node name="StatusIcon" type="MarginContainer"]
 anchors_preset = 8
 anchor_left = 0.5
