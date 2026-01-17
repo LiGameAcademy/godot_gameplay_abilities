@@ -25,6 +25,21 @@ func _exit(instance: BTInstance):
 	if abort_type != AbortType.NONE:
 		instance.unregister_observer(self)
 
+## [核心] 重写装饰器的执行逻辑：先检查条件，再执行子节点
+func _tick_decorator(instance: BTInstance, delta: float) -> int:
+	if not is_instance_valid(child):
+		return Status.FAILURE
+	
+	# 【关键】在执行子节点之前，先检查条件是否满足
+	var condition_met = check_condition(instance)
+	
+	if not condition_met:
+		# 条件不满足，返回失败，不执行子节点
+		return Status.FAILURE
+	
+	# 条件满足，执行子节点
+	return child.tick(instance, delta)
+
 ## [虚函数] 检查条件是否满足
 func check_condition(instance: BTInstance) -> bool:
 	return true

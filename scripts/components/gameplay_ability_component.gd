@@ -96,23 +96,18 @@ func forget_ability(ability_id: StringName) -> void:
 	if not _learned_abilities.has(ability_id):
 		push_warning("GameplayAbilityComponent: Ability %s not found." % ability_id)
 		return
-	
 	var ability_instance : GameplayAbilityInstance = _learned_abilities[ability_id]
-	
 	# 取消订阅信号
-	if is_instance_valid(ability_instance):
-		if ability_instance.ability_completed.is_connected(_on_ability_completed):
-			ability_instance.ability_completed.disconnect(_on_ability_completed)
-		
-		# 移除被动技能效果
-		if is_instance_valid(_status_comp):
-			ability_instance.handle_forgotten(self, _status_comp)
-	else:
+	if not is_instance_valid(ability_instance):
 		push_warning("GameplayAbilityComponent: Ability %s not found." % ability_id)
 		return
 	
+	if ability_instance.ability_completed.is_connected(_on_ability_completed):
+		ability_instance.ability_completed.disconnect(_on_ability_completed)
+	# 移除被动技能效果
+	ability_instance.handle_forgotten(self)
 	_learned_abilities.erase(ability_id)
-	
+
 	ability_forgotten.emit(ability_id)
 	AbilityEventBus.trigger_game_event(&"ability_forgotten", {
 		"entity": get_parent(),

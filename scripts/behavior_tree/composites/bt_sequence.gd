@@ -1,4 +1,3 @@
-# bt_sequence.gd
 extends BTComposite
 class_name BTSequence
 
