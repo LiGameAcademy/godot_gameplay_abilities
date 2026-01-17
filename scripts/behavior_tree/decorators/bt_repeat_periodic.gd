@@ -44,7 +44,7 @@ func _tick_decorator(instance: BTInstance, delta: float) -> int:
 		state.elapsed += delta
 		if state.elapsed >= actual_period:
 			# 周期时间到达，重置计时器，准备执行子节点
-			state.elapsed = 0.0
+			state.elapsed -= actual_period
 			state.is_waiting_for_period = false
 			_set_state(instance, state)  # 保存状态
 			child.reset(instance)  # 重置子节点，准备下一轮执行
