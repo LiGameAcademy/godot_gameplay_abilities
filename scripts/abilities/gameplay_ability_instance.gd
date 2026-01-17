@@ -103,7 +103,7 @@ func handle_learned(ability_comp: Node, status_comp: Node) -> void:
 	for feature in _features.values():
 		if not is_instance_valid(feature):
 			continue
-		feature.on_learned(self, ability_comp, status_comp)
+		feature.on_learned(self, ability_comp)
 
 ## 处理技能遗忘事件
 ## 当技能被遗忘时，由 GameplayAbilityComponent 调用此方法
@@ -112,7 +112,7 @@ func handle_forgotten(ability_comp: Node, status_comp: Node) -> void:
 	for feature in _features.values():
 		if not is_instance_valid(feature):
 			continue
-		feature.on_forgotten(self, ability_comp, status_comp)
+		feature.on_forgotten(self, ability_comp)
 
 ## 尝试激活技能 (由 Player/Component 调用)
 ## [param] context: Dictionary 技能上下文

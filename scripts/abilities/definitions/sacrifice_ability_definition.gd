@@ -27,7 +27,116 @@ class_name SacrificeAbilityDefinition
 ## 切换时的 Cue（开启时执行，关闭时停止）
 @export var toggle_cue: GameplayCue = null
 
-## 重写行为树构建
+# ========== 行为树缓存（享元模式） ==========
+## 缓存的默认行为树（所有实例共享，避免重复构建）
+## 只在第一次创建实例时构建，之后所有实例共享
+var _cached_sacrifice_tree: BTNode = null
+
+## 重写基类的工厂方法
+## 在创建实例时自动注入 Feature 和构建行为树（不修改 Definition，避免资源污染）
+func create_instance(owner: Node) -> GameplayAbilityInstance:
+	# 1. 验证配置
+	_validate_configuration()
+	
+	# 2. 获取执行树（优先使用用户配置，否则使用缓存的默认树）
+	var tree_to_use = _get_execution_tree()
+	
+	# 3. 临时设置 execution_tree（仅用于创建 Instance，不污染资源）
+	var original_tree = execution_tree
+	execution_tree = tree_to_use
+	
+	# 4. 调用父类创建实例（这会复制 features 到 instance）
+	var instance = super(owner)
+	
+	# 5. 立即恢复 execution_tree（避免资源污染）
+	execution_tree = original_tree
+	
+	# 6. 在 Instance 中动态注入 Feature（不修改 Definition，避免资源污染）
+	_inject_features_to_instance(instance)
+	
+	return instance
+
+## 获取执行树（优先使用用户配置，否则使用缓存的默认树）
+## 符合享元模式：所有实例共享同一个行为树
+## [return] BTNode 执行树
+func _get_execution_tree() -> BTNode:
+	# 如果用户手动配置了，使用用户的
+	if is_instance_valid(execution_tree):
+		return execution_tree
+	
+	# 如果已缓存，使用缓存的（享元模式）
+	if is_instance_valid(_cached_sacrifice_tree):
+		return _cached_sacrifice_tree
+	
+	# 构建并缓存（只构建一次，之后所有实例共享）
+	_cached_sacrifice_tree = _build_default_behavior_tree()
+	return _cached_sacrifice_tree
+
+## 在 Instance 中注入 Feature（不修改 Definition，避免资源污染）
+## [param] instance: GameplayAbilityInstance 技能实例
+func _inject_features_to_instance(instance: GameplayAbilityInstance) -> void:
+	# 注入周期性消耗的 CostFeature（如果配置了）
+	if periodic_health_cost > 0.0:
+		if not _has_feature(instance, CostFeature, "PeriodicCostFeature"):
+			var periodic_cost_feature = CostFeature.new()
+			periodic_cost_feature.feature_name = "PeriodicCostFeature"
+			
+			# 创建周期性生命值消耗
+			var health_cost = VitalCost.new()
+			health_cost.vital_id = periodic_health_vital_id
+			health_cost.amount = periodic_health_cost
+			health_cost.allow_overdraft = false  # 不允许透支
+			
+			periodic_cost_feature.costs.append(health_cost)
+			instance.add_feature("PeriodicCostFeature", periodic_cost_feature)
+
+## 检查 Instance 是否已有指定名称的 Feature
+## [param] instance: GameplayAbilityInstance 技能实例
+## [param] feature_type: GDScript Feature 类型
+## [param] feature_name: String Feature 名称（可选，用于精确匹配）
+## [return] bool 是否存在
+func _has_feature(instance: GameplayAbilityInstance, feature_type: GDScript, feature_name: String = "") -> bool:
+	var all_features = instance.get_features()
+	for feature in all_features:
+		if feature.get_script() == feature_type:
+			# 如果指定了名称，需要精确匹配
+			if feature_name.is_empty() or feature.feature_name == feature_name:
+				return true
+	return false
+
+## 验证配置的合理性
+func _validate_configuration() -> void:
+	# 验证：周期性消耗应该非负
+	if periodic_health_cost < 0.0:
+		push_error("SacrificeAbilityDefinition [%s]: periodic_health_cost 不能为负数 (%.2f)" % [ability_id, periodic_health_cost])
+		periodic_health_cost = 0.0
+	
+	# 验证：周期性执行间隔应该为正
+	if periodic_interval <= 0.0:
+		push_error("SacrificeAbilityDefinition [%s]: periodic_interval 必须为正数 (%.2f)" % [ability_id, periodic_interval])
+		periodic_interval = 1.0
+	
+	# 验证：伤害半径应该非负
+	if damage_radius < 0.0:
+		push_error("SacrificeAbilityDefinition [%s]: damage_radius 不能为负数 (%.2f)" % [ability_id, damage_radius])
+		damage_radius = 0.0
+	
+	# 验证：如果配置了周期性消耗，应该配置了 Vital ID
+	if periodic_health_cost > 0.0 and periodic_health_vital_id.is_empty():
+		push_warning(
+			"SacrificeAbilityDefinition [%s]: 配置了 periodic_health_cost (%.2f) 但没有配置 periodic_health_vital_id。\n" % [ability_id, periodic_health_cost] +
+			"周期性消耗可能无法正常工作。"
+		)
+	
+	# 验证：如果配置了周期性伤害效果，应该配置了区域目标策略或伤害半径
+	if is_instance_valid(periodic_damage_effect):
+		if not is_instance_valid(area_targeting_strategy) and damage_radius <= 0.0:
+			push_warning(
+				"SacrificeAbilityDefinition [%s]: 配置了 periodic_damage_effect 但没有配置 area_targeting_strategy 或 damage_radius。\n" % ability_id +
+				"周期性伤害可能无法正常工作。"
+			)
+
+## 动态构建行为树结构 (构建的是 BTNode 资源图，而不是 Instance)
 func _build_default_behavior_tree() -> BTNode:
 	var sequence = BTSequence.new()
 	var nodes: Array[BTNode] = []
@@ -198,30 +307,7 @@ func _build_default_behavior_tree() -> BTNode:
 		wait.node_id = "post_cast_delay"
 		nodes.append(wait)
 	
-	# 组装序列
+	# 赋值子节点
 	sequence.children = nodes
 	sequence.node_id = "sacrifice_ability_sequence"
 	return sequence
-
-## 重写创建实例，注入周期性消耗的 CostFeature 和区域伤害效果
-func create_instance(owner: Node) -> GameplayAbilityInstance:
-	# 1. 调用父类创建实例
-	var instance = super.create_instance(owner)
-	
-	# 2. 注入周期性消耗的 CostFeature（如果配置了）
-	if periodic_health_cost > 0.0:
-		var periodic_cost_feature = CostFeature.new()
-		periodic_cost_feature.feature_name = "PeriodicCostFeature"
-		
-		# 创建周期性生命值消耗
-		var health_cost = VitalCost.new()
-		health_cost.vital_id = periodic_health_vital_id
-		health_cost.amount = periodic_health_cost
-		health_cost.allow_overdraft = false  # 不允许透支
-		
-		periodic_cost_feature.costs.append(health_cost)
-		
-		# 添加到实例
-		instance.add_feature("PeriodicCostFeature", periodic_cost_feature)
-	
-	return instance

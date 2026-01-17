@@ -1,0 +1,176 @@
+extends GameplayAbilityFeature
+class_name PassiveStatusFeature
+
+## 被动状态特性
+## 
+## 用途：
+## 用于被动技能，在学习时自动应用状态，遗忘时自动移除状态。
+## 
+## 使用示例：
+## ```gdscript
+## var passive_ability = PassiveAbility.new()
+## var status_feature = PassiveStatusFeature.new()
+## status_feature.statuses = [buff_status_data]
+## passive_ability.features.append(status_feature)
+## ```
+
+@export_group("Status Settings")
+## 学习时应用的状态列表
+@export var statuses: Array[GameplayStatusData] = []
+
+func _init() -> void:
+	super("PassiveStatusFeature")
+
+## 技能学习时应用状态
+## [param] ability: GameplayAbilityInstance 技能实例
+## [param] ability_comp: Node 技能组件（实际应为 GameplayAbilityComponent）
+func on_learned(ability: GameplayAbilityInstance, ability_comp: Node) -> void:
+	if statuses.is_empty():
+		return
+	
+	# 获取状态组件
+	var status_comp = _get_status_component(ability_comp)
+	if not is_instance_valid(status_comp):
+		push_error("PassiveStatusFeature [%s]: 无法获取状态组件，无法应用状态" % feature_name)
+		return
+	
+	# 获取施法者（实体）
+	var instigator = _get_instigator(ability, ability_comp)
+	if not is_instance_valid(instigator):
+		push_error("PassiveStatusFeature [%s]: 无法获取施法者，无法应用状态" % feature_name)
+		return
+	
+	# 应用所有状态
+	for status_data in statuses:
+		if not is_instance_valid(status_data):
+			push_warning("PassiveStatusFeature [%s]: 状态数据无效，跳过" % feature_name)
+			continue
+		
+		# 应用状态（使用技能实例作为 instigator）
+		var context = {
+			"source_id": ability.get_definition().ability_id,
+			"ability_instance": ability
+		}
+		status_comp.apply_status(status_data, instigator, 1, context)
+		
+		# 将状态ID存储到黑板，以便遗忘时移除
+		var status_id = status_data.status_id
+		if not status_id.is_empty():
+			var applied_statuses = _get_applied_statuses(ability)
+			if not applied_statuses.has(status_id):
+				applied_statuses.append(status_id)
+			_set_applied_statuses(ability, applied_statuses)
+
+## 技能遗忘时移除状态
+## [param] ability: GameplayAbilityInstance 技能实例
+## [param] ability_comp: Node 技能组件（实际应为 GameplayAbilityComponent）
+func on_forgotten(ability: GameplayAbilityInstance, ability_comp: Node) -> void:
+	# 获取状态组件
+	var status_comp = _get_status_component(ability_comp)
+	if not is_instance_valid(status_comp):
+		push_error("PassiveStatusFeature [%s]: 无法获取状态组件，无法移除状态" % feature_name)
+		return
+	
+	# 获取已应用的状态ID列表
+	var applied_statuses = _get_applied_statuses(ability)
+	
+	# 移除所有已应用的状态
+	for status_id in applied_statuses:
+		if not status_id.is_empty():
+			status_comp.remove_status(status_id)
+	
+	# 清空已应用状态列表
+	_set_applied_statuses(ability, [])
+
+## 获取特性描述（用于UI显示）
+## [return] String 特性描述
+func get_description() -> String:
+	if statuses.is_empty():
+		return "无状态效果"
+	
+	var desc = "被动状态: "
+	var status_names: Array[String] = []
+	for status_data in statuses:
+		if is_instance_valid(status_data):
+			var status_name = status_data.status_id if not status_data.status_id.is_empty() else "未命名状态"
+			status_names.append(status_name)
+	
+	if status_names.is_empty():
+		return "无有效状态"
+	
+	return desc + ", ".join(status_names)
+
+## 获取状态组件
+## [param] ability_comp: Node 技能组件
+## [return] GameplayStatusComponent 状态组件，如果不存在则返回 null
+func _get_status_component(ability_comp: Node) -> GameplayStatusComponent:
+	if not is_instance_valid(ability_comp):
+		return null
+	
+	# 方法1：尝试从 GameplayAbilityComponent 获取 _status_comp（私有属性，但 GDScript 允许访问）
+	if ability_comp.has("_status_comp"):
+		var status_comp = ability_comp.get("_status_comp")
+		if is_instance_valid(status_comp) and status_comp is GameplayStatusComponent:
+			return status_comp as GameplayStatusComponent
+	
+	# 方法2：从实体查找状态组件
+	var entity = ability_comp.get_parent()
+	if is_instance_valid(entity):
+		# 尝试通过接口查询（使用 AutoLoad 单例）
+		if is_instance_valid(GameplayAbilitySystem):
+			var status_comp = GameplayAbilitySystem.get_component_by_interface(entity, "GameplayStatusComponent")
+			if is_instance_valid(status_comp) and status_comp is GameplayStatusComponent:
+				return status_comp as GameplayStatusComponent
+		
+		# 尝试直接查找节点
+		for child in entity.get_children():
+			if child is GameplayStatusComponent:
+				return child as GameplayStatusComponent
+	
+	return null
+
+## 获取施法者（实体）
+## [param] ability: GameplayAbilityInstance 技能实例
+## [param] ability_comp: Node 技能组件
+## [return] Node 实体节点，如果不存在则返回 null
+func _get_instigator(ability: GameplayAbilityInstance, ability_comp: Node) -> Node:
+	# 方法1：从 ability_comp 的父节点获取（实体）
+	if is_instance_valid(ability_comp):
+		var entity = ability_comp.get_parent()
+		if is_instance_valid(entity):
+			return entity
+	
+	# 方法2：从 ability 的 owner 获取
+	if is_instance_valid(ability):
+		# ability 有 _owner 属性（私有，但 GDScript 允许访问）
+		if ability.has("_owner"):
+			var owner = ability.get("_owner")
+			if is_instance_valid(owner):
+				return owner
+	
+	return null
+
+## 获取已应用的状态ID列表（从黑板读取）
+## [param] ability: GameplayAbilityInstance 技能实例
+## [return] Array[StringName] 已应用的状态ID列表
+func _get_applied_statuses(ability: GameplayAbilityInstance) -> Array[StringName]:
+	var key = feature_name + "_applied_statuses"
+	var statuses = ability.get_blackboard_var(key, [])
+	if statuses is Array:
+		# 转换为 StringName 数组
+		var result: Array[StringName] = []
+		for item in statuses:
+			if item is StringName:
+				result.append(item)
+			elif item is String:
+				result.append(StringName(item))
+		return result
+	return []
+
+## 设置已应用的状态ID列表（存储到黑板）
+## [param] ability: GameplayAbilityInstance 技能实例
+## [param] statuses: Array[StringName] 已应用的状态ID列表
+func _set_applied_statuses(ability: GameplayAbilityInstance, statuses: Array[StringName]) -> void:
+	var key = feature_name + "_applied_statuses"
+	ability.set_blackboard_var(key, statuses)
+

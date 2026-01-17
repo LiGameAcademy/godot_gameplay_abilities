@@ -66,15 +66,13 @@ func update(ability: GameplayAbilityInstance, delta: float) -> void:
 ## [子类可重写] 技能学习时的处理（仅对 PassiveAbility 有效）
 ## [param] ability: GameplayAbility 技能实例（实际应为 PassiveAbility）
 ## [param] ability_comp: Node 技能组件
-## [param] status_comp: Node 状态组件
-func on_learned(ability: GameplayAbilityInstance, ability_comp: Node, status_comp: Node) -> void:
+func on_learned(ability: GameplayAbilityInstance, ability_comp: Node) -> void:
 	pass
 
 ## [子类可重写] 技能遗忘时的处理（仅对 PassiveAbility 有效）
 ## [param] ability: GameplayAbility 技能实例（实际应为 PassiveAbility）
 ## [param] ability_comp: Node 技能组件
-## [param] status_comp: Node 状态组件
-func on_forgotten(ability: GameplayAbilityInstance, ability_comp: Node, status_comp: Node) -> void:
+func on_forgotten(ability: GameplayAbilityInstance, ability_comp: Node) -> void:
 	pass
 
 ## [子类可重写] 获取特性描述（用于UI显示）
