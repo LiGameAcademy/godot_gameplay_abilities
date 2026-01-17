@@ -11,7 +11,7 @@ class_name GE_AbilityModifier
 ## 如果 context 中也没有，则使用 "effect." + 效果资源路径
 @export var source_id: String = ""
 
-func _apply(target: Node, instigator: Node, context: AbilityContext) -> void:
+func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 	var modifier_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayModifierComponent")
 	if not modifier_comp:
 		# 如果没有 ModifierComponent，静默失败（不是所有实体都需要修改器）
@@ -20,8 +20,8 @@ func _apply(target: Node, instigator: Node, context: AbilityContext) -> void:
 	# 确定 source_id
 	var final_source_id = source_id
 	if final_source_id.is_empty():
-		if context.custom_data.has("source_id") and context.custom_data["source_id"] is String:
-			final_source_id = context.custom_data["source_id"]
+		if context.has("source_id") and context["source_id"] is String:
+			final_source_id = context["source_id"]
 		else:
 			# 使用效果资源路径作为默认 source_id
 			final_source_id = "effect." + str(get_path())
@@ -33,11 +33,11 @@ func _apply(target: Node, instigator: Node, context: AbilityContext) -> void:
 
 ## 移除效果的具体实现
 ## 注意：Effect 保持无状态特性，通过 context 中的 source_id 来识别要移除的修改器
-func _remove(target: Node, instigator: Node, context: AbilityContext) -> void:
+func _remove(target: Node, instigator: Node, context: Dictionary) -> void:
 	_remove_modifiers(target, context)
 
 ## 移除修改器的核心逻辑（供 _apply 和 _remove 共用）
-func _remove_modifiers(target: Node, context: AbilityContext) -> void:
+func _remove_modifiers(target: Node, context: Dictionary) -> void:
 	var modifier_comp = GameplayAbilitySystem.get_component_by_interface(target, "GameplayModifierComponent")
 	if not modifier_comp:
 		# 如果没有 ModifierComponent，静默失败
@@ -46,8 +46,8 @@ func _remove_modifiers(target: Node, context: AbilityContext) -> void:
 	# 确定 source_id
 	var final_source_id = source_id
 	if final_source_id.is_empty():
-		if context.custom_data.has("source_id"):
-			var ctx_source_id = context.custom_data["source_id"]
+		if context.has("source_id"):
+			var ctx_source_id = context["source_id"]
 			if ctx_source_id is String:
 				final_source_id = ctx_source_id
 			elif ctx_source_id is StringName:

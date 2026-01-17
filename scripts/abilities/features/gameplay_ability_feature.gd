@@ -34,18 +34,18 @@ func initialize(_instance: GameplayAbilityInstance) -> void:
 
 ## [子类可重写] 检查是否可以施法（仅对 ActiveAbility 有效）
 ## [param] ability: GameplayAbility 技能实例（实际应为 ActiveAbility）
-## [param] context: AbilityContext 上下文信息
+## [param] context: Dictionary 上下文信息
 ## [return] bool 是否可以施法
-func can_activate(ability: GameplayAbilityInstance, context: AbilityContext) -> bool:
+func can_activate(ability: GameplayAbilityInstance, context: Dictionary) -> bool:
 	return true
 
-func on_activate(ability: GameplayAbilityInstance, context: AbilityContext) -> void:
+func on_activate(ability: GameplayAbilityInstance, context: Dictionary) -> void:
 	pass
 
 ## [子类可重写] 技能被取消时的处理（仅对 ActiveAbility 有效）
 ## [param] ability: GameplayAbility 技能实例（实际应为 ActiveAbility）
-## [param] context: AbilityContext 上下文信息
-func on_cancel(ability: GameplayAbilityInstance, context: AbilityContext) -> void:
+## [param] context: Dictionary 上下文信息
+func on_cancel(ability: GameplayAbilityInstance, context: Dictionary) -> void:
 	pass
 
 ## [子类可重写] 技能完成时的处理（仅对 ActiveAbility 有效）

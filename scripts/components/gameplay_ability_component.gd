@@ -150,10 +150,9 @@ func get_all_ability_instances() -> Dictionary[StringName, GameplayAbilityInstan
 #region ========== 公共API - 技能执行 ==========
 ## 检查是否可以施法
 ## [param] ability_id: StringName 技能ID
-## [param] target: Node 目标
-## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
+## [param] context: Dictionary 技能上下文
 ## [return] bool 是否可以施法
-func can_activate_ability(ability_id: StringName, context: Variant = {}) -> bool:
+func can_activate_ability(ability_id: StringName, context: Dictionary = {}) -> bool:
 	var ability_instance = get_ability_instance(ability_id)
 	if not is_instance_valid(ability_instance):
 		push_error("GameplayAbilityComponent: Ability instance is not valid.")
@@ -162,29 +161,36 @@ func can_activate_ability(ability_id: StringName, context: Variant = {}) -> bool
 	if ability_instance.disabled:
 		return false
 	
-	context.ability_comp = self
+	# 确保 context 是 Dictionary
+	if not context is Dictionary:
+		context = {}
+	
+	context["ability_comp"] = self
 	return ability_instance.can_activate(context)
 
 ## 提交施法（消耗资源等）
 ## 注意：冷却相关逻辑由 ActiveAbility 自己处理，Component 不涉及冷却
 ## [param] ability_id: StringName 技能ID
-## [param] target: Node 目标节点
-## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
+## [param] context: Dictionary 技能上下文
 ## [return] bool 是否成功提交
-func try_activate_ability(ability_id: StringName, context: Variant = {}) -> bool:
+func try_activate_ability(ability_id: StringName, context: Dictionary = {}) -> bool:
 	var ability_instance = get_ability_instance(ability_id)
 	if not is_instance_valid(ability_instance):
 		push_error("GameplayAbilityComponent: Ability instance is not valid.")
 		return false
 	
-	var ctx = ContextUtils.to_context(context)
+	# 确保 context 是 Dictionary
+	if not context is Dictionary:
+		context = {}
 	
 	# 设置上下文的基础信息
-	ctx.ability = ability_instance
-	ctx.ability_comp = self
-	ctx.ability_id = ability_instance.get_definition().ability_id
-	ctx.instigator = get_parent()
-	ctx.input_target = ctx.input_target
+	context["ability"] = ability_instance
+	context["ability_comp"] = self
+	context["ability_id"] = ability_instance.get_definition().ability_id
+	context["instigator"] = get_parent()
+	# 如果 input_target 未设置，保持原值
+	if not context.has("input_target"):
+		context["input_target"] = null
 
 	# 【Modifier 钩子】施法前通知
 	var modifier_comp: GameplayModifierComponent = GameplayAbilitySystem.get_component_by_interface(
@@ -192,17 +198,17 @@ func try_activate_ability(ability_id: StringName, context: Variant = {}) -> bool
 		"GameplayModifierComponent"
 	)
 	if is_instance_valid(modifier_comp):
-		modifier_comp.notify_before_ability_cast(self, ability_instance, ctx)
+		modifier_comp.notify_before_ability_cast(self, ability_instance, context)
 	
 	# 正常执行技能：检查消耗和冷却（由 Ability 自己处理）
 	# 注意：冷却检查、冷却时间计算、冷却缩减应用都由 ActiveAbility._commit_cast() 处理
-	if not ability_instance.try_activate(ctx):
+	if not ability_instance.try_activate(context):
 		push_error("GameplayAbilityComponent: Ability %s try activate failed." % ability_instance.get_definition().ability_id)
 		return false
 	
 	# 【Modifier 钩子】施法成功后通知
 	if is_instance_valid(modifier_comp):
-		modifier_comp.notify_after_ability_commit(self, ability_instance, ctx)
+		modifier_comp.notify_after_ability_commit(self, ability_instance, context)
 	
 	# 设置当前正在执行的技能（用于后摇可取消机制）
 	_current_casting_ability = ability_instance
@@ -224,9 +230,11 @@ func try_activate_ability(ability_id: StringName, context: Variant = {}) -> bool
 ## 注意：这与后摇取消（can_interrupt）不同，强制中断可以在前摇阶段执行
 ## 但需要技能允许强制中断（can_be_force_cancelled = true）
 ## [param] ability_id: StringName 技能ID（可选，如果不提供则取消当前执行的技能）
-## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
-func cancel_ability(ability_id: StringName = &"", context: Variant = {}) -> void:
-	var ctx = ContextUtils.to_context(context)
+## [param] context: Dictionary 技能上下文
+func cancel_ability(ability_id: StringName = &"", context: Dictionary = {}) -> void:
+	# 确保 context 是 Dictionary
+	if not context is Dictionary:
+		context = {}
 	var target_id = ability_id
 	if target_id.is_empty():
 		target_id = _current_casting_ability

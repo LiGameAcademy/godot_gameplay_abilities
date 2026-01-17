@@ -27,37 +27,113 @@ class_name ActiveAbilityDefinition
 ## 目标获取策略
 @export var targeting_strategy: TargetingStrategy = null
 
-# 重写基类的工厂方法
+# ========== 行为树缓存（享元模式） ==========
+## 缓存的默认行为树（所有实例共享，避免重复构建）
+## 只在第一次创建实例时构建，之后所有实例共享
+var _cached_default_tree: BTNode = null
+
+## 重写基类的工厂方法
+## 在创建实例时自动注入 Feature 和构建行为树（不修改 Definition，避免资源污染）
 func create_instance(owner: Node) -> GameplayAbilityInstance:
-	# 1. 动态注入 Cooldown 特性 (如果配置了且不存在)
-	# 注意：我们操作的是 Definition 的副本或动态列表，避免修改到硬盘上的资源
-	if cooldown_duration > 0.0:
-		var has_cd = false
-		for f in features:
-			if f is CooldownFeature:
-				has_cd = true
-				break
-		
-		if not has_cd:
-			var cd_feature = CooldownFeature.new()
-			cd_feature.cooldown_duration = cooldown_duration
-			# 注意：features 是 Array，这里 append 可能会影响资源文件
-			# 安全的做法是 duplicate 一份 features 数组给 instance，或者在 instance 里动态加
-			# 这里为了简单，我们假设 create_instance 会处理
-			# 但更稳妥的是直接加到下面的 instance 里
-			features.append(cd_feature)
-
-	# 2. 动态构建行为树 (如果用户没在编辑器里手动拖树)
-	if execution_tree == null:
-		execution_tree = _build_default_behavior_tree()
-
-	# 3. 调用父类创建实例
-	var instance = super.create_instance(owner)
+	# 1. 验证配置
+	_validate_configuration()
 	
-	# 4. 如果刚才为了方便修改了 features，为了不弄脏资源，可以在这里做一些清理
-	# 或者更优雅的方式是修改 GameplayAbilityInstance，允许在 create_instance 时注入额外 Feature
+	# 2. 获取执行树（优先使用用户配置，否则使用缓存的默认树）
+	var tree_to_use = _get_execution_tree()
+	
+	# 3. 临时设置 execution_tree（仅用于创建 Instance，不污染资源）
+	var original_tree = execution_tree
+	execution_tree = tree_to_use
+	
+	# 4. 调用父类创建实例（这会复制 features 到 instance）
+	var instance = super(owner)
+	
+	# 5. 立即恢复 execution_tree（避免资源污染）
+	execution_tree = original_tree
+	
+	# 6. 在 Instance 中动态注入 Feature（不修改 Definition，避免资源污染）
+	_inject_features_to_instance(instance)
 	
 	return instance
+
+## 获取执行树（优先使用用户配置，否则使用缓存的默认树）
+## 符合享元模式：所有实例共享同一个行为树
+## [return] BTNode 执行树
+func _get_execution_tree() -> BTNode:
+	# 如果用户手动配置了，使用用户的
+	if is_instance_valid(execution_tree):
+		return execution_tree
+	
+	# 如果已缓存，使用缓存的（享元模式）
+	if is_instance_valid(_cached_default_tree):
+		return _cached_default_tree
+	
+	# 构建并缓存（只构建一次，之后所有实例共享）
+	_cached_default_tree = _build_default_behavior_tree()
+	return _cached_default_tree
+
+## 在 Instance 中注入 Feature（不修改 Definition，避免资源污染）
+## [param] instance: GameplayAbilityInstance 技能实例
+func _inject_features_to_instance(instance: GameplayAbilityInstance) -> void:
+	# 注入 CooldownFeature（如果配置了冷却时间且不存在）
+	if cooldown_duration > 0.0:
+		if not _has_cooldown_feature(instance):
+			var cd_feature = CooldownFeature.new()
+			cd_feature.cooldown_duration = cooldown_duration
+			instance.add_feature(cd_feature.feature_name, cd_feature)
+
+## 检查 Instance 是否已有 CooldownFeature
+## [param] instance: GameplayAbilityInstance 技能实例
+## [return] bool 是否存在
+func _has_cooldown_feature(instance: GameplayAbilityInstance) -> bool:
+	var all_features = instance.get_features()
+	for feature in all_features:
+		if feature is CooldownFeature:
+			return true
+	return false
+
+## 验证配置的合理性
+func _validate_configuration() -> void:
+	# 验证：如果配置了 status_execution_time，应该有 statuses
+	if status_execution_time > 0.0 and statuses.is_empty():
+		push_warning(
+			"ActiveAbilityDefinition [%s]: 配置了 status_execution_time (%.2f) 但没有配置 statuses。\n" % [ability_id, status_execution_time] +
+			"status_execution_time 将被忽略。"
+		)
+	
+	# 验证：如果配置了 targeting_strategy，应该配置了 effects 或 statuses
+	if is_instance_valid(targeting_strategy):
+		if effects.is_empty() and statuses.is_empty():
+			push_warning(
+				"ActiveAbilityDefinition [%s]: 配置了 targeting_strategy 但没有配置 effects 或 statuses。\n" % ability_id +
+				"targeting_strategy 可能不会被使用。"
+			)
+	
+	# 验证：前摇和后摇时间应该非负
+	if pre_cast_delay < 0.0:
+		push_error("ActiveAbilityDefinition [%s]: pre_cast_delay 不能为负数 (%.2f)" % [ability_id, pre_cast_delay])
+		pre_cast_delay = 0.0
+	
+	if post_cast_delay < 0.0:
+		push_error("ActiveAbilityDefinition [%s]: post_cast_delay 不能为负数 (%.2f)" % [ability_id, post_cast_delay])
+		post_cast_delay = 0.0
+	
+	# 验证：冷却时间应该非负
+	if cooldown_duration < 0.0:
+		push_error("ActiveAbilityDefinition [%s]: cooldown_duration 不能为负数 (%.2f)" % [ability_id, cooldown_duration])
+		cooldown_duration = 0.0
+	
+	# 验证：动画速度应该为正
+	if animation_speed <= 0.0:
+		push_error("ActiveAbilityDefinition [%s]: animation_speed 必须为正数 (%.2f)" % [ability_id, animation_speed])
+		animation_speed = 1.0
+	
+	# 验证：至少应该配置效果或状态
+	if effects.is_empty() and statuses.is_empty():
+		push_warning(
+			"ActiveAbilityDefinition [%s]: 没有配置 effects 或 statuses，技能可能不会产生任何效果。\n" % ability_id +
+			"请确保这是预期的行为。"
+		)
 
 ## 动态构建行为树结构 (构建的是 BTNode 资源图，而不是 Instance)
 ## [param] include_cooldown: bool 是否在行为树中包含冷却节点（连击段通常不需要）

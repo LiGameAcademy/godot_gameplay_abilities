@@ -1,8 +1,8 @@
 [gd_scene load_steps=4 format=3 uid="uid://puirrf70bmsw"]
 
 [ext_resource type="Texture2D" uid="uid://dxsvj51ctgg3g" path="res://icon.svg" id="1_32sbw"]
-[ext_resource type="Script" uid="uid://dw130lxt8xr5v" path="res://addons/gameplay_abiltiy_system/ui/status_icon.gd" id="1_rr66h"]
-[ext_resource type="Theme" uid="uid://carbioq75qbhu" path="res://assets/theme/theme_main.tres" id="2_wrggy"]
+[ext_resource type="Script" uid="uid://cbc07fwsu8h4w" path="res://addons/godot_gameplay_abilities/ui/status_icon.gd" id="1_rr66h"]
+[ext_resource type="Theme" uid="uid://buupjw3dumemi" path="res://addons/godot_gameplay_abilities/ui/default_theme.tres" id="2_wrggy"]
 
 [node name="StatusIcon" type="MarginContainer"]
 anchors_preset = 8

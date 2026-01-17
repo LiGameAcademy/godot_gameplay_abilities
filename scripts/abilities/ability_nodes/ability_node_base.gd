@@ -7,14 +7,14 @@ class_name AbilityNodeBase
 ## [配置] 目标在黑板中的 Key
 @export var target_key: String = "targets"
 
-## 获取上下文（从黑板中获取 AbilityContext）
+## 获取上下文（从黑板中获取 Dictionary）
 ## [param] instance: BTInstance 行为树实例
-## [return] AbilityContext 上下文，如果无效则返回 null
-func _get_context(instance: BTInstance) -> AbilityContext:
+## [return] Dictionary 上下文，如果无效则返回空字典
+func _get_context(instance: BTInstance) -> Dictionary:
 	var context = instance.blackboard.get_var("context")
-	if not is_instance_valid(context):
-		return null
-	return context as AbilityContext
+	if context is Dictionary:
+		return context
+	return {}
 
 ## 获取目标列表（统一化处理）
 ## 支持从黑板中获取单个 Node、Array[Node] 或空值
@@ -31,8 +31,10 @@ func _get_target_list(instance: BTInstance, use_instigator_as_fallback: bool = f
 	
 	# 处理空值或空数组
 	if raw_targets == null or (raw_targets is Array and raw_targets.is_empty()):
-		if use_instigator_as_fallback and is_instance_valid(context) and is_instance_valid(context.instigator):
-			target_list.append(context.instigator)
+		if use_instigator_as_fallback and context.has("instigator"):
+			var instigator = context.get("instigator")
+			if is_instance_valid(instigator):
+				target_list.append(instigator)
 		return target_list
 	
 	# 处理数组
@@ -48,8 +50,10 @@ func _get_target_list(instance: BTInstance, use_instigator_as_fallback: bool = f
 		return target_list
 	
 	# 如果都不匹配，尝试使用 instigator 作为回退
-	if use_instigator_as_fallback and is_instance_valid(context) and is_instance_valid(context.instigator):
-		target_list.append(context.instigator)
+	if use_instigator_as_fallback and context.has("instigator"):
+		var instigator = context.get("instigator")
+		if is_instance_valid(instigator):
+			target_list.append(instigator)
 	
 	return target_list
 
@@ -69,9 +73,9 @@ func _get_first_target(instance: BTInstance, use_instigator_as_fallback: bool = 
 ## [return] bool 上下文是否有效
 func _validate_context(instance: BTInstance, node_name: String = "") -> bool:
 	var context = _get_context(instance)
-	if not is_instance_valid(context):
+	if context.is_empty():
 		var name_str = node_name if not node_name.is_empty() else get_script().get_path().get_file()
-		push_warning("%s: Context is not valid!" % name_str)
+		push_warning("%s: Context is empty!" % name_str)
 		return false
 	return true
 

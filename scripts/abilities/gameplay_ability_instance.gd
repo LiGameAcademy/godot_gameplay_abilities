@@ -115,14 +115,17 @@ func handle_forgotten(ability_comp: Node, status_comp: Node) -> void:
 		feature.on_forgotten(self, ability_comp, status_comp)
 
 ## 尝试激活技能 (由 Player/Component 调用)
-func try_activate(context: Variant = {}) -> bool:
-	var ctx = ContextUtils.to_context(context)
+## [param] context: Dictionary 技能上下文
+func try_activate(context: Dictionary = {}) -> bool:
+	# 确保 context 是 Dictionary
+	if not context is Dictionary:
+		context = {}
 	
 	if is_active:
 		# 如果技能已激活，检查所有特性的 can_activate
 		# can_activate 内部会先让特性设置 skip 标志，然后再进行检查
 		# 某些特性（如 ToggleFeature）可能允许在已激活时重新激活
-		if not can_activate(ctx):
+		if not can_activate(context):
 			# 如果没有特性允许重新激活，执行默认的拒绝逻辑
 			# 注意：即使值已经是 true，也要确保触发信号（通过先设置为 false 再设置为 true）
 			# 这样可以确保 BTWaitSignal 能够收到通知，即使它刚刚消费了信号
@@ -138,21 +141,19 @@ func try_activate(context: Variant = {}) -> bool:
 		# 有特性允许重新激活，注入上下文数据并调用 on_activate
 		# 切换特性会在 on_activate 中处理关闭逻辑
 		if is_instance_valid(_blackboard):
-			_blackboard.set_var("context", ctx)
-			#if ctx.has("target_position"):
-				#_blackboard.set_var("target_position", ctx.get("target_position"))
+			_blackboard.set_var("context", context)
 		
 		# 调用所有特性的 on_activate 钩子
 		# 切换特性会在 on_activate 中处理关闭逻辑
 		for feature in _features.values():
 			if not is_instance_valid(feature):
 				continue
-			feature.on_activate(self, ctx)
+			feature.on_activate(self, context)
 		
 		return true
 	
 	# 1. 检查能不能放 (Cost, CD, Tags, Features)
-	if not can_activate(ctx):
+	if not can_activate(context):
 		return false
 
 	# 2. 注入初始黑板数据（在设置 is_active 之前）
@@ -161,8 +162,8 @@ func try_activate(context: Variant = {}) -> bool:
 		_blackboard.clear() # 清理上一轮的残留
 		# 将 context 注入黑板，供树节点读取
 		_blackboard.set_var("ability_instance", self)
-		_blackboard.set_var("context", ctx)
-		_blackboard.set_var("target", ctx.input_target)
+		_blackboard.set_var("context", context)
+		_blackboard.set_var("target", context.get("input_target"))
 		# 设置标志，表示这是首次激活（开启操作）
 		_blackboard.set_var("is_first_activation", true)
 
@@ -171,7 +172,7 @@ func try_activate(context: Variant = {}) -> bool:
 	for feature in _features.values():
 		if not is_instance_valid(feature):
 			continue
-		feature.on_activate(self, ctx)
+		feature.on_activate(self, context)
 	
 	# 4. 【关键】启动行为树（在调用 on_activate 之后）
 	# 注意：这里我们只"启动"状态，不扣蓝，也不产生效果。
@@ -216,9 +217,11 @@ func end_ability(final_status: int = BTNode.Status.SUCCESS) -> void:
 ## [子类可重写] 技能被取消时的处理
 ## 当技能被主动取消时（如被打断、资源不足等），由 GameplayAbilityComponent 调用此方法
 ## [param] ability_comp: Node 技能组件
-## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
-func handle_cancel(ability_comp: Node, context: Variant = {}) -> void:
-	var ctx = ContextUtils.to_context(context)
+## [param] context: Dictionary 技能上下文
+func handle_cancel(ability_comp: Node, context: Dictionary = {}) -> void:
+	# 确保 context 是 Dictionary
+	if not context is Dictionary:
+		context = {}
 	# 调用所有特性的 on_cancel（主动技能钩子）
 	for feature in _features.values():
 		if not is_instance_valid(feature):
@@ -254,9 +257,11 @@ func get_definition() -> GameplayAbilityDefinition:
 	return _definition
 
 ## 检查是否可以施法
-## [param] context: Variant 可以是 Dictionary 或 AbilityContext（向后兼容）
-func can_activate(context: Variant = {}) -> bool:
-	var ctx = ContextUtils.to_context(context)
+## [param] context: Dictionary 技能上下文
+func can_activate(context: Dictionary = {}) -> bool:
+	# 确保 context 是 Dictionary
+	if not context is Dictionary:
+		context = {}
 	
 	# 如果技能已激活，先让所有特性有机会设置 skip 标志（如 ToggleFeature 设置 skip_cost/skip_cooldown）
 	# 然后再进行实际的检查
@@ -265,14 +270,14 @@ func can_activate(context: Variant = {}) -> bool:
 			if not is_instance_valid(feature):
 				continue
 			# 先调用一次，让特性有机会设置 skip 标志（不检查返回值）
-			feature.can_activate(self, ctx)
+			feature.can_activate(self, context)
 	
 	# 调用所有特性的 can_activate（主动技能钩子）
 	# 所有特性的 can_activate 都必须返回 true
 	for feature : GameplayAbilityFeature in _features.values():
 		if not is_instance_valid(feature):
 			continue
-		if not feature.can_activate(self, ctx):
+		if not feature.can_activate(self, context):
 			return false
 	return true
 

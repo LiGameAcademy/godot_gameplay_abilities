@@ -19,14 +19,14 @@ class_name CostFeature
 func _init() -> void:
 	super("CostFeature")
 
-func can_activate(ability_instance: GameplayAbilityInstance, context: AbilityContext) -> bool:
+func can_activate(ability_instance: GameplayAbilityInstance, context: Dictionary) -> bool:
 	# 如果 context 跳过消耗，直接返回 true
-	if context.skip_cost:
+	if context.get("skip_cost", false):
 		return true
 	
 	# 检查是否可以支付所有消耗
-	var ability_comp = context.ability_comp
-	var instigator = context.instigator
+	var ability_comp = context.get("ability_comp")
+	var instigator = context.get("instigator")
 	
 	if not is_instance_valid(ability_comp):
 		push_error("CostFeature: Cannot get ability_comp for ability %s" % ability_instance.get_definition().ability_id)
@@ -43,14 +43,14 @@ func can_activate(ability_instance: GameplayAbilityInstance, context: AbilityCon
 	
 	return true
 
-func try_pay(ability_instance: GameplayAbilityInstance, context: AbilityContext) -> bool:
+func try_pay(ability_instance: GameplayAbilityInstance, context: Dictionary) -> bool:
 	# 如果 context 跳过消耗，直接返回 true
-	if context.skip_cost:
+	if context.get("skip_cost", false):
 		return true
 	
 	# 检查并支付所有消耗
-	var ability_comp = context.ability_comp
-	var instigator = context.instigator
+	var ability_comp = context.get("ability_comp")
+	var instigator = context.get("instigator")
 	
 	if not is_instance_valid(ability_comp) or not is_instance_valid(instigator):
 		push_warning("CostFeature: Cannot get ability_comp or instigator for ability %s" % ability_instance.get_definition().ability_id)

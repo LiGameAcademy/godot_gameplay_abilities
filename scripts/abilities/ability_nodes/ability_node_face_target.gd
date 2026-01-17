@@ -79,18 +79,15 @@ func _get_target_position(instance: BTInstance) -> Vector3:
 	
 	# 优先级1: 从 Context 获取 target_position（player.gd 设置的鼠标位置）
 	var context = blackboard.get_var("context")
-	if is_instance_valid(context):
-		if context is AbilityContext:
-			# 优先从 custom_data 获取（player.gd 设置的 target_position 会在这里）
-			if context.custom_data.has(target_position_key) and context.custom_data[target_position_key] is Vector3:
-				return context.custom_data[target_position_key] as Vector3
-			# 其次从 hit_position 获取（投射物命中位置）
-			if context.hit_position != Vector3.ZERO:
-				return context.hit_position
-		elif context is Dictionary:
-			# Dictionary 格式的 context（向后兼容）
-			if context.has(target_position_key) and context[target_position_key] is Vector3:
-				return context[target_position_key] as Vector3
+	if context is Dictionary:
+		# 优先从 context 获取 target_position
+		if context.has(target_position_key) and context[target_position_key] is Vector3:
+			return context[target_position_key] as Vector3
+		# 其次从 hit_position 获取（投射物命中位置）
+		if context.has("hit_position") and context["hit_position"] is Vector3:
+			var hit_pos = context["hit_position"] as Vector3
+			if hit_pos != Vector3.ZERO:
+				return hit_pos
 	
 	# 优先级2: 从黑板直接获取 target_position
 	var target_pos = blackboard.get_var(target_position_key)
@@ -98,15 +95,11 @@ func _get_target_position(instance: BTInstance) -> Vector3:
 		return target_pos as Vector3
 	
 	# 优先级3: 从 Context 获取 input_target（用户指定的目标节点）
-	if is_instance_valid(context):
-		if context is AbilityContext:
-			if is_instance_valid(context.input_target) and context.input_target is Node3D:
-				return (context.input_target as Node3D).global_position
-		elif context is Dictionary:
-			if context.has("input_target"):
-				var input_target = context["input_target"]
-				if is_instance_valid(input_target) and input_target is Node3D:
-					return (input_target as Node3D).global_position
+	if context is Dictionary:
+		if context.has("input_target"):
+			var input_target = context["input_target"]
+			if is_instance_valid(input_target) and input_target is Node3D:
+				return (input_target as Node3D).global_position
 	
 	# 没有有效目标位置
 	return Vector3.INF

@@ -19,12 +19,12 @@ func _init() -> void:
 	super("ToggleFeature")
 
 ## 检查是否可以激活（允许在技能已激活时重新激活）
-func can_activate(ability: GameplayAbilityInstance, context: AbilityContext) -> bool:
+func can_activate(ability: GameplayAbilityInstance, context: Dictionary) -> bool:
 	# 如果技能已激活，说明这是关闭操作
 	# 关闭操作应该跳过 cost 和 cooldown 检查（因为关闭不应该消耗资源或受冷却限制）
 	if ability.is_active:
-		context.skip_cost = true
-		context.skip_cooldown = true
+		context["skip_cost"] = true
+		context["skip_cooldown"] = true
 		return true
 	
 	# 如果技能未激活，这是正常的开启操作，不设置 skip 标志
@@ -33,7 +33,7 @@ func can_activate(ability: GameplayAbilityInstance, context: AbilityContext) -> 
 
 ## 在技能激活时处理切换逻辑
 ## 通过检查 is_first_activation 标志来判断是首次激活还是关闭操作
-func on_activate(ability: GameplayAbilityInstance, context: AbilityContext) -> void:
+func on_activate(ability: GameplayAbilityInstance, context: Dictionary) -> void:
 	var blackboard = ability.get_blackboard()
 	if not is_instance_valid(blackboard):
 		return

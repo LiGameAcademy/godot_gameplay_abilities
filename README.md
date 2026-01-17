@@ -119,8 +119,8 @@ add_child(ability_comp)
 var ability_data = preload("res://data/abilities/fireball.tres")  # 示例技能数据
 ability_comp.learn_ability(ability_data)
 if ability_comp.can_cast(ability_data.ability_id, target):
-    ability_comp.commit_cast(ability_data.ability_id)
-    ability_comp.apply_ability_effect(ability_data.ability_id, target)
+	ability_comp.commit_cast(ability_data.ability_id)
+	ability_comp.apply_ability_effect(ability_data.ability_id, target)
 
 # 监听事件
 CombatEventBus.entity_died.connect(_on_entity_died)
@@ -135,7 +135,7 @@ CombatEventBus.status_applied.connect(_on_status_applied)
 # 通过接口查询组件（不依赖类型检查）
 var health_comp = CombatSystem.get_component_by_interface(entity, "HealthComponent")
 if health_comp:
-    health_comp.apply_damage(damage_info)
+	health_comp.apply_damage(damage_info)
 ```
 
 ### 事件通讯
@@ -233,4 +233,3 @@ MIT License
 ## 作者
 
 老李（玩物不丧志的老李）
-

@@ -10,7 +10,7 @@ class_name GE_ApplyHealing
 @export var vital_comp_name : StringName = &"GameplayAttributeComponent"
 @export var instigator_attribute_comp_name : StringName = &"GameplayAttributeComponent"
 
-func _apply(target: Node, instigator: Node, context: AbilityContext) -> void:
+func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 	var vital_comp = GameplayAbilitySystem.get_component_by_interface(target, vital_comp_name)
 	if not vital_comp:
 		push_error("GE_ApplyHealing: Target %s has no %s component" % [target.name, vital_comp_name])
@@ -30,10 +30,10 @@ func _apply(target: Node, instigator: Node, context: AbilityContext) -> void:
 	var final_healing = base_healing * healing_multiplier
 	
 	# 应用治疗
-	health_vital.heal(final_healing, target)
+	health_vital.heal(final_healing)
 	
 	# 将最终治疗值添加到上下文，供 Cue 使用
-	context.final_healing = final_healing
+	context["final_healing"] = final_healing
 	
 	AbilityEventBus.trigger_game_event(&"healing_applied", {
 		"target": target,
