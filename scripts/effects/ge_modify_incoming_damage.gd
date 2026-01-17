@@ -11,15 +11,21 @@ class_name GE_ModifyIncomingDamage
 @export_range(0.0, 10.0, 0.01) var damage_multiplier: float = 0.5
 
 func _apply(target: Node, _instigator: Node, context: Dictionary) -> void:
-	if not is_instance_valid(context.damage_info):
-		return
-	
-	var damage_info: DamageInfo = context.damage_info
+	var damage_info: DamageInfo = context.get("damage_info")
 	if not is_instance_valid(damage_info):
-		push_error("GE_ModifyIncomingDamage: damage_info is invalid")
 		return
 	
-	damage_info.final_damage *= damage_multiplier
+	# 【关键】读取层数并调整伤害倍率
+	var stacks = context.get("stacks", 1)
+	var final_multiplier = damage_multiplier
+	if stacks > 1:
+		# 指数放大：每层减少更多伤害
+		# 例如：1 层 0.5，2 层 0.25，3 层 0.125
+		final_multiplier = pow(damage_multiplier, stacks)
+		# 或使用线性公式：final_multiplier = damage_multiplier * (1.0 - 0.1 * (stacks - 1))
+	
+	# DamageInfo 是引用类型，直接修改其 final_damage 即可影响后续计算
+	damage_info.final_damage *= final_multiplier
 
 func _get_description() -> String:
 	return "Modify incoming damage by multiplier %.2f\n" % damage_multiplier
