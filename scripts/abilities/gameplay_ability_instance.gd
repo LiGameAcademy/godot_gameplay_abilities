@@ -1,8 +1,7 @@
 extends RefCounted
 class_name GameplayAbilityInstance
 
-## 技能数据基类
-## 定义技能的所有属性和行为
+## 技能的运行时实例，管理执行状态
 
 var _owner: Node
 var _definition: GameplayAbilityDefinition
@@ -16,8 +15,10 @@ var disabled : bool = false:
 	get:
 		return _definition.disabled
 
+var _indicator_instance: Node3D = null
+var _is_targeting: bool = false
+
 ## 技能完成信号
-## Component 会订阅此信号来判断技能是否完成
 signal ability_completed(ability: GameplayAbilityInstance)
 ## 技能数据改变
 signal ability_data_changed(ability: GameplayAbilityInstance)
@@ -31,9 +32,10 @@ func _init(owner: Node, definition: GameplayAbilityDefinition) -> void:
 	_blackboard.set_var("ability_instance", self)
 	if is_instance_valid(_definition.execution_tree):
 		_bt_instance = BTInstance.new(_owner, _definition.execution_tree, _blackboard)
+	else:
+		push_warning("AbilityInstance: execution_tree is not valid!")
 
 #region ========== 特性管理 ==========
-
 ## 添加特性
 func add_feature(feature_name: String, feature: GameplayAbilityFeature) -> void:
 	if _features.has(feature_name):
@@ -51,9 +53,7 @@ func remove_feature(feature_name: String) -> void:
 
 ## 获取特性
 func get_feature(feature_name: String) -> GameplayAbilityFeature:
-	if not _features.has(feature_name):
-		return null
-	return _features[feature_name]
+	return _features.get(feature_name, null)
 
 ## 是否存在特性
 func has_feature(feature_name: String) -> bool:
@@ -74,11 +74,9 @@ func get_feature_names() -> Array[String]:
 ## 获取特性列表
 func get_features() -> Array[GameplayAbilityFeature]:
 	return _features.values()
-
 #endregion
 
 #region ========== 行为树管理 ==========
-## 获取行为树实例
 func get_bt_instance() -> BTInstance:
 	return _bt_instance
 
@@ -93,42 +91,80 @@ func get_blackboard_var(key: String, default: Variant = null) -> Variant:
 
 func clear_blackboard() -> void:
 	_blackboard.clear()
+
 #endregion
 
-#region ========== 技能生命周期管理 ==========
-## 处理技能学习事件
-## 当技能被学习时，由 GameplayAbilityComponent 调用此方法
-func handle_learned(ability_comp: Node, status_comp: Node) -> void:
-	# 调用所有特性的 on_learned（被动技能钩子）
-	for feature in _features.values():
-		if not is_instance_valid(feature):
-			continue
-		feature.on_learned(self, ability_comp)
+#region ========== 瞄准/预览逻辑 (Targeting) ==========
+## 检查是否配置了预览策略
+func has_targeting() -> bool:
+	return is_instance_valid(_definition.preview_strategy)
 
-## 处理技能遗忘事件
-## 当技能被遗忘时，由 GameplayAbilityComponent 调用此方法
-func handle_forgotten(ability_comp: Node, status_comp: Node) -> void:
-	# 调用所有特性的 on_forgotten（被动技能钩子）
-	for feature in _features.values():
-		if not is_instance_valid(feature):
-			continue
-		feature.on_forgotten(self, ability_comp)
+## 检查是否应该智能施法
+func should_smart_cast() -> bool:
+	if GameplayAbilitySystem.smart_cast:
+		return true
+	return _definition.smart_cast
+
+## [API] 开始预览模式
+func start_targeting() -> void:
+	if not has_targeting(): 
+		return
+	_is_targeting = true
+	# 使用策略创建视觉指示器
+	_indicator_instance = _definition.preview_strategy.create_indicator(_owner)
+
+## [API] 更新预览 (每帧调用)
+## [param] mouse_pos: 鼠标在世界空间的坐标
+func update_targeting(mouse_pos: Vector3) -> void:
+	if not _is_targeting or not is_instance_valid(_indicator_instance):
+		return
+
+	_definition.preview_strategy.update_indicator(
+		_indicator_instance, 
+		_owner, 
+		mouse_pos
+	)
+	
+## [API] 确认预览 -> 返回 Context 数据
+## [param] mouse_pos: 最终确定的位置
+func confirm_targeting(mouse_pos: Vector3) -> Dictionary:
+	var context = {}
+	if has_targeting():
+		# 使用策略计算最终数据
+		context = _definition.preview_strategy.get_targeting_context(_owner, mouse_pos)
+	_stop_targeting_visuals()
+	return context
+
+## [API] 取消预览
+func cancel_targeting() -> void:
+	# 如果是光标策略，需要恢复默认光标
+	if is_instance_valid(_definition.preview_strategy):
+		_definition.preview_strategy.cancel_targeting()
+		
+	_stop_targeting_visuals()
+
+## 内部清理
+func _stop_targeting_visuals() -> void:
+	_is_targeting = false
+
+	# 清理 3D 指示器（如果有）
+	if is_instance_valid(_indicator_instance):
+		_indicator_instance.queue_free()
+		_indicator_instance = null
+
+#endregion
+
+func get_definition() -> GameplayAbilityDefinition:
+	return _definition
 
 ## 尝试激活技能 (由 Player/Component 调用)
-## [param] context: Dictionary 技能上下文
 func try_activate(context: Dictionary = {}) -> bool:
-	# 确保 context 是 Dictionary
-	if not context is Dictionary:
-		context = {}
-	
 	if is_active:
 		# 如果技能已激活，检查所有特性的 can_activate
-		# can_activate 内部会先让特性设置 skip 标志，然后再进行检查
 		# 某些特性（如 ToggleFeature）可能允许在已激活时重新激活
 		if not can_activate(context):
 			# 如果没有特性允许重新激活，执行默认的拒绝逻辑
-			# 注意：即使值已经是 true，也要确保触发信号（通过先设置为 false 再设置为 true）
-			# 这样可以确保 BTWaitSignal 能够收到通知，即使它刚刚消费了信号
+			# 触发信号，确保 BTWaitSignal 能够收到通知
 			var current_value = _blackboard.get_var("event_input_received", false)
 			if not current_value:
 				_blackboard.set_var("event_input_received", true)
@@ -139,25 +175,23 @@ func try_activate(context: Dictionary = {}) -> bool:
 			return true
 		
 		# 有特性允许重新激活，注入上下文数据并调用 on_activate
-		# 切换特性会在 on_activate 中处理关闭逻辑
 		if is_instance_valid(_blackboard):
 			_blackboard.set_var("context", context)
-		
+
 		# 调用所有特性的 on_activate 钩子
-		# 切换特性会在 on_activate 中处理关闭逻辑
 		for feature in _features.values():
 			if not is_instance_valid(feature):
 				continue
+
 			feature.on_activate(self, context)
-		
+
 		return true
-	
+
 	# 1. 检查能不能放 (Cost, CD, Tags, Features)
 	if not can_activate(context):
 		return false
 
 	# 2. 注入初始黑板数据（在设置 is_active 之前）
-	# 注意：需要在设置 is_active 之前注入数据，以便 ToggleFeature 能正确判断是开启还是关闭
 	if is_instance_valid(_blackboard):
 		_blackboard.clear() # 清理上一轮的残留
 		# 将 context 注入黑板，供树节点读取
@@ -168,28 +202,24 @@ func try_activate(context: Dictionary = {}) -> bool:
 		_blackboard.set_var("is_first_activation", true)
 
 	# 3. 调用所有特性的 on_activate 钩子（在设置 is_active 之前）
-	# 切换特性会在 on_activate 中根据 is_first_activation 设置 "turn_on" 或 "turn_off" 标记
 	for feature in _features.values():
 		if not is_instance_valid(feature):
 			continue
 		feature.on_activate(self, context)
-	
+
 	# 4. 【关键】启动行为树（在调用 on_activate 之后）
 	# 注意：这里我们只"启动"状态，不扣蓝，也不产生效果。
 	# 扣蓝和效果由树里面的节点决定何时发生。
 	is_active = true
-	
 	return true
 
-## [子类可重写] 每帧更新（用于需要持续更新的技能，如连击计时器、引导技能）
-## [param] delta: float 帧时间
+# 每帧更新（用于需要持续更新的技能，如连击计时器、引导技能）
 func update(delta: float) -> void:
 	# 调用所有特性的 update（通用钩子，对所有技能类型有效）
 	for feature in _features.values():
 		if not is_instance_valid(feature):
 			continue
 		feature.update(self, delta)
-
 	# 更新行为树
 	if is_active and is_instance_valid(_bt_instance):
 		var result = _bt_instance.tick(delta)
@@ -199,7 +229,7 @@ func update(delta: float) -> void:
 ## 结束技能
 func end_ability(final_status: int = BTNode.Status.SUCCESS) -> void:
 	if not is_active: return
-	
+
 	is_active = false
 	
 	# 通知特性技能结束了
@@ -209,60 +239,13 @@ func end_ability(final_status: int = BTNode.Status.SUCCESS) -> void:
 			
 	# 发出信号
 	ability_completed.emit(self)
-	
+
 	# (可选) 如果树还在跑但被强制结束，重置树
 	if is_instance_valid(_bt_instance):
 		_bt_instance.reset_tree()
 
-## [子类可重写] 技能被取消时的处理
-## 当技能被主动取消时（如被打断、资源不足等），由 GameplayAbilityComponent 调用此方法
-## [param] ability_comp: Node 技能组件
-## [param] context: Dictionary 技能上下文
-func handle_cancel(ability_comp: Node, context: Dictionary = {}) -> void:
-	# 确保 context 是 Dictionary
-	if not context is Dictionary:
-		context = {}
-	# 调用所有特性的 on_cancel（主动技能钩子）
-	for feature in _features.values():
-		if not is_instance_valid(feature):
-			continue
-		feature.on_cancel(self, context)
-
-#endregion
-
-#region ========== 技能查询API ==========
-
-## 获取效果描述
-func get_effects_description() -> String:
-	var desc: Array[String] = []
-	for feature in _features.values():
-		if not is_instance_valid(feature):
-			continue
-		desc.append(feature.get_effects_description())
-	return "\n".join(desc)
-
-## 获取动画名称（优先从特性中获取）
-## [return] StringName 动画名称，如果未配置则返回空字符串
-func get_animation_name() -> StringName:
-	# 遍历特性，查找提供动画名称的特性（如 ActiveFeature）
-	for feature in _features.values():
-		if not is_instance_valid(feature):
-			continue
-		var anim_name = feature.get_animation_name()
-		if not anim_name.is_empty():
-			return anim_name
-	return &""
-
-func get_definition() -> GameplayAbilityDefinition:
-	return _definition
-
 ## 检查是否可以施法
-## [param] context: Dictionary 技能上下文
 func can_activate(context: Dictionary = {}) -> bool:
-	# 确保 context 是 Dictionary
-	if not context is Dictionary:
-		context = {}
-	
 	# 如果技能已激活，先让所有特性有机会设置 skip 标志（如 ToggleFeature 设置 skip_cost/skip_cooldown）
 	# 然后再进行实际的检查
 	if is_active:
@@ -271,7 +254,7 @@ func can_activate(context: Dictionary = {}) -> bool:
 				continue
 			# 先调用一次，让特性有机会设置 skip 标志（不检查返回值）
 			feature.can_activate(self, context)
-	
+
 	# 调用所有特性的 can_activate（主动技能钩子）
 	# 所有特性的 can_activate 都必须返回 true
 	for feature : GameplayAbilityFeature in _features.values():
@@ -281,30 +264,28 @@ func can_activate(context: Dictionary = {}) -> bool:
 			return false
 	return true
 
-#endregion
+## 处理技能学习事件（被动技能）
+func handle_learned(ability_comp: Node) -> void:
+	for feature : GameplayAbilityFeature in _features.values():
+		if not is_instance_valid(feature):
+			continue
+		feature.on_learned(self, ability_comp)
 
-func play_animation(animation_name: StringName, speed: float = 1.0) -> float:
-	if not is_instance_valid(_owner):
-		push_warning("GameplayAbilityInstance: Owner is not valid")
-		return 0.0
-	if not _owner.has_method("play_animation"):
-		push_warning("GameplayAbilityInstance: Owner does not have play_animation method")
-		return 0.0
-	var result = _owner.call("play_animation", animation_name, speed)
-	if result is float:
-		return result
-	return 0.0
+## 处理技能遗忘事件（被动技能）
+func handle_forgotten(ability_comp: Node,) -> void:
+	for feature in _features.values():
+		if not is_instance_valid(feature):
+			continue
+		feature.on_forgotten(self, ability_comp)
 
 func get_current_icon() -> Texture:
-	# 从 DynamicIconFeature 获取图标（如果存在）
-	# Feature 会从黑板中读取由行为树节点设置的图标
 	for feature in _features.values():
 		if not feature.has_method("get_current_icon"):
 			continue
 		var icon : Texture = feature.get_current_icon(self)
 		if is_instance_valid(icon):
 			return icon
-	
+
 	# 回退到 Definition 的默认图标
 	return _definition.icon
 

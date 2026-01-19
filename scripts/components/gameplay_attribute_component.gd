@@ -77,7 +77,7 @@ func remove_modifier(mod: GameplayAttributeModifier) -> void:
 func remove_modifiers_by_source(source_id: StringName) -> void:
 	if source_id.is_empty():
 		return
-	
+
 	# 遍历所有属性实例，移除匹配的修改器
 	for attribute_id in _attributes.keys():
 		var instance = _attributes[attribute_id]
