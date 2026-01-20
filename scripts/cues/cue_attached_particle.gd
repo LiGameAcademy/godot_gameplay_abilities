@@ -20,7 +20,13 @@ func _execute(target: Node, location: Vector3, context: Dictionary) -> void:
 
 	# 检查是否允许重复创建
 	if not allow_duplicate and _attached_particles.has(target):
-		return
+		var existing_particle = _attached_particles[target]
+		# 如果粒子节点仍然有效，则不允许重复创建
+		if is_instance_valid(existing_particle):
+			return
+		# 如果粒子节点已无效（已被销毁），清理字典条目，允许创建新的粒子
+		# 注意：这里清理后继续执行，会创建新的粒子实例
+		_attached_particles.erase(target)
 
 	var particle = particle_scene.instantiate()
 	if not is_instance_valid(particle):

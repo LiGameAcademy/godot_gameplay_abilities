@@ -1,4 +1,4 @@
-extends BTAction
+extends AbilityNodeBase
 class_name AbilityNodeCommitCost
 
 ## 提交消耗节点
@@ -13,24 +13,17 @@ class_name AbilityNodeCommitCost
 func _tick(instance: BTInstance, delta: float) -> int:
 	var ability = instance.blackboard.get_var("ability_instance")
 	if not is_instance_valid(ability):
-		push_warning("AbilityNodeCommitCost: AbilityInstance 不存在，无法提交消耗")
+		push_error("AbilityNodeCommitCooldown: ability is not valid!")
 		return Status.FAILURE
-	
-	var context = instance.blackboard.get_var("context")
-
-	# 获取 CostFeature
 	var cost_feature : CostFeature = ability.get_feature(cost_feature_name)
 	if not is_instance_valid(cost_feature):
-		# 如果没有配置 CostFeature，视为成功（允许无消耗技能）
-		return Status.SUCCESS
-	
-	# 尝试支付消耗
-	if cost_feature.has_method("try_pay"):
-		var success = cost_feature.try_pay(ability, context)
-		if not success:
-			# 消耗失败（如魔法值不足），返回失败
-			return Status.FAILURE
-	else:
-		push_error("AbilityNodeCommitCost: CostFeature 没有 try_pay 方法")
-	
+		push_error("AbilityNodeCommitCooldown: cost_feature is not valid!")
+		return Status.FAILURE
+
+	var context : Dictionary = instance.blackboard.get_var("context", {})
+	if context.is_empty():
+		push_warning("AbilityNodeCommitCooldown: context is empty!")
+
+	# 进 CD 通常不会失败
+	cost_feature.try_pay(ability, context)
 	return Status.SUCCESS

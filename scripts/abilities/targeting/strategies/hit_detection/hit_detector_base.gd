@@ -26,13 +26,13 @@ func get_targets(caster: Node3D, context: Dictionary = {}) -> Array[Node]:
 func is_valid() -> bool:
 	return _is_valid()
 
-## [子类重写] 验证配置
-func _is_valid() -> bool:
-	return true
-
 ## 获取检测器描述（用于调试和UI显示）
 func get_description() -> String:
 	return _get_description()
+
+## [子类重写] 验证配置
+func _is_valid() -> bool:
+	return true
 
 ## [子类重写] 获取描述
 func _get_description() -> String:
