@@ -160,18 +160,20 @@ func get_definition() -> GameplayAbilityDefinition:
 ## 尝试激活技能 (由 Player/Component 调用)
 func try_activate(context: Dictionary = {}) -> bool:
 	if is_active:
-		# 如果技能已激活，检查所有特性的 can_activate
+		# 如果技能已激活，无论是否允许重新激活，都应该处理连击输入
+		# 触发信号，确保 BTWaitSignal 能够收到通知（用于连击系统）
+		var current_value = _blackboard.get_var("event_input_received", false)
+		if not current_value:
+			_blackboard.set_var("event_input_received", true)
+		else:
+			# 如果已经是 true，先设置为 false 再设置为 true，确保触发信号
+			_blackboard.set_var("event_input_received", false)
+			_blackboard.set_var("event_input_received", true)
+		
+		# 检查所有特性的 can_activate
 		# 某些特性（如 ToggleFeature）可能允许在已激活时重新激活
 		if not can_activate(context):
-			# 如果没有特性允许重新激活，执行默认的拒绝逻辑
-			# 触发信号，确保 BTWaitSignal 能够收到通知
-			var current_value = _blackboard.get_var("event_input_received", false)
-			if not current_value:
-				_blackboard.set_var("event_input_received", true)
-			else:
-				# 如果已经是 true，先设置为 false 再设置为 true，确保触发信号
-				_blackboard.set_var("event_input_received", false)
-				_blackboard.set_var("event_input_received", true)
+			# 如果没有特性允许重新激活，只处理连击输入，不执行其他逻辑
 			return true
 		
 		# 有特性允许重新激活，注入上下文数据并调用 on_activate

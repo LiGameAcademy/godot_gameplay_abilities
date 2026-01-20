@@ -16,9 +16,9 @@ func get_current_icon(ability: GameplayAbilityInstance) -> Texture:
 		return null
 	
 	# 从黑板读取图标ID
-	var icon_id : StringName = _get_data(ability, icon_id_key, &"")
+	var icon_id : StringName = ability.get_blackboard_var(icon_id_key, &"")
 	if icon_id.is_empty():
-		return
+		return null
 
 	# 从映射中获取图标
 	if icon_map.has(icon_id):
