@@ -9,12 +9,6 @@ class_name TargetingStrategy
 ## - 框架层只定义接口，不限制具体实现
 ## - 业务层可以实现任意复杂的目标获取策略
 ## - 支持组合和扩展，符合"开闭原则"
-##
-## 与现有组件的关系：
-## - HitDetectorBase: 负责物理/数学检测（"如何检测"）
-## - TargetingStrategy: 负责目标获取逻辑（"获取哪些目标"）
-## - TargetingScorer: 负责目标选择（"选择哪个目标"）
-## - GameplayFilterData: 负责目标筛选（"过滤哪些目标"）
 
 ## 目标筛选器列表
 ## 如果配置了筛选器，只有通过所有筛选器的目标才会被返回
@@ -34,16 +28,16 @@ class_name TargetingStrategy
 func resolve_targets(instigator: Node, input_target: Node, context: Dictionary = {}) -> Array[Node]:
 	# 1. 获取原始目标列表
 	var raw_targets = _resolve_targets(instigator, input_target, context)
-	
+
 	# 2. 应用筛选器
 	if filters.is_empty():
 		return raw_targets
-	
+
 	var filtered_targets: Array[Node] = []
 	for target in raw_targets:
 		if not is_instance_valid(target):
 			continue
-		
+
 		# 检查是否通过所有筛选器
 		var passed = true
 		for filter in filters:
@@ -52,19 +46,11 @@ func resolve_targets(instigator: Node, input_target: Node, context: Dictionary =
 			if not filter.check(target, instigator, context):
 				passed = false
 				break
-		
+
 		if passed:
 			filtered_targets.append(target)
-	
+
 	return filtered_targets
-
-## 获取策略描述（用于调试和UI显示）
-func get_description() -> String:
-	return _get_description()
-
+	
 ## [子类必须重写] 解析目标的具体实现
 @abstract func _resolve_targets(instigator: Node, input_target: Node, context: Dictionary) -> Array[Node]
-
-## [子类可重写] 获取描述
-func _get_description() -> String:
-	return "Targeting Strategy"
