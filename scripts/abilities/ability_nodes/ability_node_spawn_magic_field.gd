@@ -137,4 +137,3 @@ func _get_spawn_position(instance: BTInstance, context: Dictionary) -> Vector3:
 	
 	# 默认位置
 	return Vector3.INF
-
