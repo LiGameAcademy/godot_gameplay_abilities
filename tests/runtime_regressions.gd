@@ -4,6 +4,10 @@ var _failed: int = 0
 func _ready() -> void:
 	call_deferred("_run")
 func _run() -> void:
+	var debug_scene: PackedScene = load("res://addons/godot_gameplay_abilities/ui/bt_debug_panel.tscn") as PackedScene
+	var debug_window: Window = debug_scene.instantiate() as Window
+	_check(not debug_window.visible, "debug window is hidden before runtime ready and editor preview")
+	debug_window.free()
 	var step: ActiveAbilityDefinition = ActiveAbilityDefinition.new()
 	step.ability_id = &"regression_step"
 	step.cooldown_duration = 1.0
