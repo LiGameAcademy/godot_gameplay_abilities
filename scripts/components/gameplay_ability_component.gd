@@ -11,6 +11,8 @@ class_name GameplayAbilityComponent
 @export_group("Initialization")
 ## 初始技能列表（在 _ready 时自动学习）
 @export var _initial_abilities: Array[GameplayAbilityDefinition] = []
+## Optional sibling dependency, assigned by the entity composition root.
+@export var modifier_component: GameplayModifierComponent
 
 ## 已学会的技能字典（运行时数据）
 var _learned_abilities: Dictionary[StringName, GameplayAbilityInstance] = {}
@@ -117,10 +119,15 @@ func forget_ability(ability_id: StringName) -> void:
 		push_warning("GameplayAbilityComponent: Ability %s not found." % ability_id)
 		return
 	
+	if ability_instance.is_active:
+		ability_instance.end_ability(BTNode.Status.FAILURE)
+	if _current_targeting_ability == ability_instance:
+		_current_targeting_ability = null
 	if ability_instance.ability_completed.is_connected(_on_ability_completed):
 		ability_instance.ability_completed.disconnect(_on_ability_completed)
 	# 移除被动技能效果
 	ability_instance.handle_forgotten(self)
+	ability_instance.dispose()
 	_learned_abilities.erase(ability_id)
 
 	ability_forgotten.emit(ability_id)
@@ -198,12 +205,18 @@ func try_activate_ability(ability_id: StringName, context: Dictionary = {}) -> b
 	context.ability_id = ability_id
 	context.instigator = get_parent()
 	
+	var modifiers: GameplayModifierComponent = modifier_component
+	if modifiers != null:
+		modifiers.notify_before_ability_cast(self, ability_instance, context)
 	# 正常执行技能：检查消耗和冷却（由 Ability 自己处理）
 	# 注意：冷却检查、冷却时间计算、冷却缩减应用都由 Ability._commit_cast() 处理
 	if not ability_instance.try_activate(context):
 		push_error("GameplayAbilityComponent: Ability %s try activate failed." % ability_instance.get_definition().ability_id)
 		return false
 
+	if modifiers != null:
+		modifiers.notify_after_ability_commit(self, ability_instance, context)
+		modifiers.notify_before_apply_ability(self, ability_instance, context.get("target_unit"), context)
 	# 设置当前正在执行的技能（用于后摇可取消机制）
 	_current_casting_ability = ability_instance
 
@@ -227,6 +240,8 @@ func try_activate_ability(ability_id: StringName, context: Dictionary = {}) -> b
 func cancel_ability(ability_id: StringName = &"", context: Dictionary = {}) -> void:
 	var target_id = ability_id
 	if ability_id.is_empty():
+		if not is_instance_valid(_current_casting_ability):
+			return
 		target_id = _current_casting_ability.get_definition().ability_id
 		
 	if target_id.is_empty():
@@ -336,3 +351,16 @@ func _on_ability_completed(ability: GameplayAbilityInstance) -> void:
 		})
 		_current_casting_ability = null
 #endregion
+
+## Dispose only on deletion: reparenting can temporarily exit the tree.
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_PREDELETE:
+		return
+	for ability: GameplayAbilityInstance in _learned_abilities.values():
+		if ability.ability_completed.is_connected(_on_ability_completed):
+			ability.ability_completed.disconnect(_on_ability_completed)
+		ability.handle_forgotten(self)
+		ability.dispose()
+	_learned_abilities.clear()
+	_current_casting_ability = null
+	_current_targeting_ability = null

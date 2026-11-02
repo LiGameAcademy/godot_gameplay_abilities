@@ -45,6 +45,7 @@ func erase_node_data(node: BTNode) -> void:
 
 func clear() -> void:
 	_data.clear()
+	_node_memory.clear()
 	value_cleared.emit()
 
 ## [调试] 获取所有变量（用于调试面板）

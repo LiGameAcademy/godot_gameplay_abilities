@@ -16,7 +16,7 @@ func _tick(instance: BTInstance, delta: float) -> int:
 	
 	# 1. 获取上下文和目标
 	var context = _get_context(instance)
-	if not is_instance_valid(context):
+	if context.is_empty():
 		return Status.SUCCESS
 	
 	# 2. 从黑板中获取 Cue 实例
@@ -62,13 +62,4 @@ func _stop_cue_instance(cue_instance: GameplayCue, target: Node) -> void:
 	if not is_instance_valid(cue_instance) or not is_instance_valid(target):
 		return
 	
-	# 【关键】使用克隆的 Cue 实例停止持续效果
-	# 遍历所有 Cue 组件并停止持续效果
-	for cue_component in cue_instance.cues:
-		if not is_instance_valid(cue_component):
-			continue
-		
-		# 如果 Cue 组件实现了 stop 方法，调用它
-		if cue_component.has_method("stop"):
-			cue_component.stop(target)
-
+	GameplayCueManager.stop_cue(cue_instance, target)

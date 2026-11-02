@@ -107,8 +107,9 @@ func _get_targets(caster: Node3D, context: Dictionary = {}) -> Array[Node]:
 	# 设置形状
 	var shape: Shape3D
 	if detection_shape:
-		shape = detection_shape
-		shape.radius = radius
+		shape = detection_shape.duplicate() as Shape3D
+		if shape is SphereShape3D:
+			(shape as SphereShape3D).radius = radius
 	else:
 		shape = SphereShape3D.new()
 		shape.radius = radius
@@ -150,7 +151,12 @@ func _get_targets(caster: Node3D, context: Dictionary = {}) -> Array[Node]:
 		print("AreaHitDetector: Found collider: %s (type: %s)" % [collider.name, collider.get_class()])
 		
 		# 通过工具函数转换为实体根节点
-		var entity = collider.get_parent()
+		var entity: Node = collider as Node
+		var resolver: Variant = context.get("resolve_combat_entity")
+		if resolver is Callable:
+			entity = (resolver as Callable).call(collider) as Node
+		elif collider is Area3D:
+			continue
 		if not is_instance_valid(entity):
 			print("AreaHitDetector: Failed to get entity from collider: %s" % collider.name)
 			continue

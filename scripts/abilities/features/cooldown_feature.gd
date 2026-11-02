@@ -32,8 +32,10 @@ func update(ability: GameplayAbilityInstance, delta: float) -> void:
 
 ## 开始冷却
 func start_cooldown(ability: GameplayAbilityInstance, duration: float = cooldown_duration) -> void:
+	var context: Dictionary = ability.get_blackboard_var("context", {})
+	var reduction: float = clampf(float(context.get("cooldown_reduction", 0.0)), 0.0, 1.0)
 	if duration > 0.0:
-		_set_timer(ability, duration)
+		_set_timer(ability, duration * (1.0 - reduction))
 
 ## 获取冷却剩余时间
 func get_cooldown_remaining(ability: GameplayAbilityInstance) -> float:

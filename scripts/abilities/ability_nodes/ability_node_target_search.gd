@@ -72,4 +72,4 @@ func _tick(instance: BTInstance, delta: float) -> int:
 
 func _debug_draw_targets(origin: Node, targets: Array[Node]) -> void:
 	# 简单的调试打印，实际可以用 DebugDraw3D 画线
-	print("Strategy [%s] found %d targets" % [strategy.get_description(), targets.size()])
+	print("Strategy [%s] found %d targets" % [(strategy.get_script() as Script).get_global_name(), targets.size()])
