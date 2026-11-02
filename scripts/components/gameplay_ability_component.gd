@@ -203,12 +203,18 @@ func try_activate_ability(ability_id: StringName, context: Dictionary = {}) -> b
 	context.ability_id = ability_id
 	context.instigator = get_parent()
 	
+	var modifiers: GameplayModifierComponent = get_parent().get_node_or_null("GameplayModifierComponent") as GameplayModifierComponent
+	if modifiers != null:
+		modifiers.notify_before_ability_cast(self, ability_instance, context)
 	# 正常执行技能：检查消耗和冷却（由 Ability 自己处理）
 	# 注意：冷却检查、冷却时间计算、冷却缩减应用都由 Ability._commit_cast() 处理
 	if not ability_instance.try_activate(context):
 		push_error("GameplayAbilityComponent: Ability %s try activate failed." % ability_instance.get_definition().ability_id)
 		return false
 
+	if modifiers != null:
+		modifiers.notify_after_ability_commit(self, ability_instance, context)
+		modifiers.notify_before_apply_ability(self, ability_instance, context.get("target_unit"), context)
 	# 设置当前正在执行的技能（用于后摇可取消机制）
 	_current_casting_ability = ability_instance
 

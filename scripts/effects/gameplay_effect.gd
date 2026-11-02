@@ -36,6 +36,12 @@ func apply(target: Node, instigator: Node, context: Dictionary = {}) -> void:
 	if not _check_filters(target, instigator, context):
 		return
 	
+	# Each application owns modifier context, so multi-target effects do not compound it.
+	context = context.duplicate()
+	if is_instance_valid(instigator):
+		var modifiers: GameplayModifierComponent = instigator.get_node_or_null("GameplayModifierComponent") as GameplayModifierComponent
+		if modifiers != null:
+			modifiers.notify_effect_applied(self, target, instigator, context)
 	# 2. 执行具体逻辑（子类实现）
 	_apply(target, instigator, context)
 

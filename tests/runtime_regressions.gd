@@ -53,6 +53,27 @@ func _run() -> void:
 	_check(execution.tick(0.01) == BTNode.Status.SUCCESS, "debug target search uses current strategy API")
 	var component: GameplayAbilityComponent = GameplayAbilityComponent.new()
 	owner.add_child(component)
+	var modifiers: GameplayModifierComponent = GameplayModifierComponent.new()
+	modifiers.name = "GameplayModifierComponent"
+	owner.add_child(modifiers)
+	modifiers.add_modifier(CooldownReductionModifier.new())
+	var extra: MultiCastModifier = MultiCastModifier.new()
+	extra.extra_projectiles = 2
+	modifiers.add_modifier(extra)
+	var active: ActiveAbilityDefinition = ActiveAbilityDefinition.new()
+	active.ability_id = &"modifier_regression"
+	active.cooldown_duration = 1.0
+	active.targeting_strategy = SelfTargetingStrategy.new()
+	active.effects = apply.effects
+	component.learn_ability(active)
+	_check(component.try_activate_ability(active.ability_id), "modified ability activates")
+	var modified: GameplayAbilityInstance = component.get_ability_instance(active.ability_id)
+	modified.update(0.01)
+	var cd: CooldownFeature = modified.get_feature("CooldownFeature") as CooldownFeature
+	_check(is_equal_approx(cd.get_cooldown_remaining(modified), 0.8), "modifier reduces actual cooldown")
+	var modified_context: Dictionary = modified.get_blackboard_var("context")
+	_check(modified_context.get("extra_projectiles", 0) == 2, "pre-apply modifier hook runs")
+	component.forget_ability(active.ability_id)
 	component.cancel_ability()
 	var definition: GameplayAbilityDefinition = GameplayAbilityDefinition.new()
 	definition.ability_id = &"regression_lifecycle"

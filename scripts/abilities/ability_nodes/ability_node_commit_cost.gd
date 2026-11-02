@@ -25,5 +25,4 @@ func _tick(instance: BTInstance, delta: float) -> int:
 		push_warning("AbilityNodeCommitCooldown: context is empty!")
 
 	# 进 CD 通常不会失败
-	cost_feature.try_pay(ability, context)
-	return Status.SUCCESS
+	return Status.SUCCESS if cost_feature.try_pay(ability, context) else Status.FAILURE
