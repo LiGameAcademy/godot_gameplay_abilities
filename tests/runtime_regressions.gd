@@ -51,11 +51,20 @@ func _run() -> void:
 	execution = BTInstance.new(owner, search)
 	execution.blackboard.set_var("context", {"instigator": owner})
 	_check(execution.tick(0.01) == BTNode.Status.SUCCESS, "debug target search uses current strategy API")
+	var sacrifice: SacrificeAbilityDefinition = SacrificeAbilityDefinition.new()
+	sacrifice.ability_id = &"sacrifice_regression"
+	sacrifice.icon_when_active = GradientTexture1D.new()
+	sacrifice.cooldown_duration = 1.0
+	var toggle_instance: GameplayAbilityInstance = sacrifice.create_instance(owner)
+	_check(toggle_instance.has_feature("ToggleFeature") and toggle_instance.has_feature("CooldownFeature"), "sacrifice inherits toggle and cooldown features")
+	_check(sacrifice.area_targeting_strategy == null, "sacrifice default targeting does not mutate config")
+	toggle_instance.dispose()
 	var component: GameplayAbilityComponent = GameplayAbilityComponent.new()
 	owner.add_child(component)
 	var modifiers: GameplayModifierComponent = GameplayModifierComponent.new()
 	modifiers.name = "GameplayModifierComponent"
 	owner.add_child(modifiers)
+	component.modifier_component = modifiers
 	modifiers.add_modifier(CooldownReductionModifier.new())
 	var extra: MultiCastModifier = MultiCastModifier.new()
 	extra.extra_projectiles = 2

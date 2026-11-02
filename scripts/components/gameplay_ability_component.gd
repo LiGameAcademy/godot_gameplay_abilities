@@ -11,6 +11,8 @@ class_name GameplayAbilityComponent
 @export_group("Initialization")
 ## 初始技能列表（在 _ready 时自动学习）
 @export var _initial_abilities: Array[GameplayAbilityDefinition] = []
+## Optional sibling dependency, assigned by the entity composition root.
+@export var modifier_component: GameplayModifierComponent
 
 ## 已学会的技能字典（运行时数据）
 var _learned_abilities: Dictionary[StringName, GameplayAbilityInstance] = {}
@@ -203,7 +205,7 @@ func try_activate_ability(ability_id: StringName, context: Dictionary = {}) -> b
 	context.ability_id = ability_id
 	context.instigator = get_parent()
 	
-	var modifiers: GameplayModifierComponent = get_parent().get_node_or_null("GameplayModifierComponent") as GameplayModifierComponent
+	var modifiers: GameplayModifierComponent = modifier_component
 	if modifiers != null:
 		modifiers.notify_before_ability_cast(self, ability_instance, context)
 	# 正常执行技能：检查消耗和冷却（由 Ability 自己处理）

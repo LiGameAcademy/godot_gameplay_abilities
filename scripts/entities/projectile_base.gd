@@ -75,6 +75,7 @@ func _ready() -> void:
 	
 	# 碰撞监听
 	area_entered.connect(_on_area_entered)
+	body_entered.connect(_on_body_entered)
 	
 	# 调试：输出投射物生成信息
 	print("ProjectileBase: _ready() - position: %s, instigator: %s" % [
@@ -331,3 +332,7 @@ func _on_area_entered(area: Area3D) -> void:
 	# 通常 Area 的 owner 是实际的实体
 	var target = area.owner if area.owner else area
 	_handle_impact(target)
+
+func _on_body_entered(body: Node3D) -> void:
+	if not is_queued_for_deletion():
+		_handle_impact(body)

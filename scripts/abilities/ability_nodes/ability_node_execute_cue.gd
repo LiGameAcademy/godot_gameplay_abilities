@@ -69,6 +69,9 @@ func _tick(instance: BTInstance, delta: float) -> int:
 		
 		# 如果设置了 save_instance_key，保存 Cue 实例到黑板（用于后续停止）
 		if not save_instance_key.is_empty():
+			var ability: GameplayAbilityInstance = instance.blackboard.get_var("ability_instance") as GameplayAbilityInstance
+			if ability != null:
+				ability.register_runtime_cue(cue_instance, target)
 			# 如果目标列表只有一个，直接保存；如果有多个，保存为字典
 			if target_list.size() == 1:
 				instance.blackboard.set_var(save_instance_key, cue_instance)

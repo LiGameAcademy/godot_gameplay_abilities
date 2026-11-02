@@ -112,9 +112,7 @@ func _inject_icon_feature(instance: GameplayAbilityInstance) -> void:
 	else:
 		# 创建新的 Feature
 		var icon_feature = DynamicIconFeature.new()
-		icon_feature.icon_map = {
-			"active": icon_when_active  # 激活时的图标
-		}
+		icon_feature.icon_map[&"active"] = icon_when_active
 		icon_feature.icon_id_key = "current_icon_id"  # 默认的图标ID key
 		instance.add_feature(icon_feature.feature_name, icon_feature)
 

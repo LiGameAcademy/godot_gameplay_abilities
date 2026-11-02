@@ -75,6 +75,7 @@ func _get_execution_tree() -> BTNode:
 ## 在 Instance 中注入 Feature（不修改 Definition，避免资源污染）
 ## [param] instance: GameplayAbilityInstance 技能实例
 func _inject_features_to_instance(instance: GameplayAbilityInstance) -> void:
+	super(instance)
 	# 注入周期性消耗的 CostFeature（如果配置了）
 	if periodic_health_cost > 0.0:
 		if not _has_feature(instance, CostFeature, "PeriodicCostFeature"):
@@ -146,7 +147,6 @@ func _build_default_behavior_tree() -> BTNode:
 		var anim_node = AbilityNodePlayAnimation.new()
 		anim_node.animation_name = animation_name
 		anim_node.animation_speed = animation_speed
-		anim_node.wait_for_finish = false 
 		anim_node.node_id = "play_animation"
 		nodes.append(anim_node)
 	
@@ -271,15 +271,16 @@ func _build_default_behavior_tree() -> BTNode:
 	# 4. 选择周围目标策略（查找敌人）
 	var area_target_node = AbilityNodeTargetSearch.new()
 	# 如果用户没有配置策略，创建默认的
-	if not is_instance_valid(area_targeting_strategy):
-		area_targeting_strategy = AreaTargetingStrategy.new()
+	var area_strategy: AreaTargetingStrategy = area_targeting_strategy
+	if not is_instance_valid(area_strategy):
+		area_strategy = AreaTargetingStrategy.new()
 		var area_hit_detector = AreaHitDetector.new()
 		area_hit_detector.detection_radius = damage_radius
 		area_hit_detector.collision_mask = 4  # 敌人层
 		area_hit_detector.detection_position_source = AreaHitDetector.DetectionPositionSource.CASTER_POSITION
 		area_hit_detector.exclude_caster = true
-		area_targeting_strategy.hit_detector = area_hit_detector
-	area_target_node.strategy = area_targeting_strategy
+		area_strategy.hit_detector = area_hit_detector
+	area_target_node.strategy = area_strategy
 	area_target_node.write_to_key = "area_targets"  # 将目标写入到 "area_targets" key
 	area_target_node.fail_if_empty = false  # 没有目标时静默成功
 	area_target_node.node_id = "select_area_targets"
