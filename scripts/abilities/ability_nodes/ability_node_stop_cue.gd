@@ -16,7 +16,7 @@ func _tick(instance: BTInstance, delta: float) -> int:
 	
 	# 1. 获取上下文和目标
 	var context = _get_context(instance)
-	if not is_instance_valid(context):
+	if context.is_empty():
 		return Status.SUCCESS
 	
 	# 2. 从黑板中获取 Cue 实例

@@ -117,10 +117,15 @@ func forget_ability(ability_id: StringName) -> void:
 		push_warning("GameplayAbilityComponent: Ability %s not found." % ability_id)
 		return
 	
+	if ability_instance.is_active:
+		ability_instance.end_ability(BTNode.Status.FAILURE)
+	if _current_targeting_ability == ability_instance:
+		_current_targeting_ability = null
 	if ability_instance.ability_completed.is_connected(_on_ability_completed):
 		ability_instance.ability_completed.disconnect(_on_ability_completed)
 	# 移除被动技能效果
 	ability_instance.handle_forgotten(self)
+	ability_instance.dispose()
 	_learned_abilities.erase(ability_id)
 
 	ability_forgotten.emit(ability_id)
@@ -227,6 +232,8 @@ func try_activate_ability(ability_id: StringName, context: Dictionary = {}) -> b
 func cancel_ability(ability_id: StringName = &"", context: Dictionary = {}) -> void:
 	var target_id = ability_id
 	if ability_id.is_empty():
+		if not is_instance_valid(_current_casting_ability):
+			return
 		target_id = _current_casting_ability.get_definition().ability_id
 		
 	if target_id.is_empty():
@@ -336,3 +343,16 @@ func _on_ability_completed(ability: GameplayAbilityInstance) -> void:
 		})
 		_current_casting_ability = null
 #endregion
+
+## Dispose only on deletion: reparenting can temporarily exit the tree.
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_PREDELETE:
+		return
+	for ability: GameplayAbilityInstance in _learned_abilities.values():
+		if ability.ability_completed.is_connected(_on_ability_completed):
+			ability.ability_completed.disconnect(_on_ability_completed)
+		ability.handle_forgotten(self)
+		ability.dispose()
+	_learned_abilities.clear()
+	_current_casting_ability = null
+	_current_targeting_ability = null

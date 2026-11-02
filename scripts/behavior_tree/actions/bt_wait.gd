@@ -11,13 +11,8 @@ class_name BTWait
 # 我们不再需要手动判断 "是第一次进来吗？"
 # 因为 _enter 给了我们初始化的机会
 
-func _enter(instance: BTInstance):
-	# 获取实际的等待时间（优先从黑板读取）
-	var actual_duration = _get_actual_duration(instance)
-	# 在进入时，直接记录结束时间到黑板
-	# 这里利用 helper 函数 set_data
-	var end_time = Time.get_ticks_msec() / 1000.0 + actual_duration
-	_set_storage(instance, end_time)
+func _enter(instance: BTInstance) -> void:
+	_set_storage(instance, _get_actual_duration(instance))
 
 ## 获取实际的等待时间（优先从黑板读取）
 ## [param] instance: BTInstance 行为树实例
@@ -32,11 +27,6 @@ func _get_actual_duration(instance: BTInstance) -> float:
 	return duration
 
 func _tick(instance: BTInstance, delta: float) -> int:
-	var current_time = Time.get_ticks_msec() / 1000.0
-	
-	if current_time >= _get_storage(instance):
-		return Status.SUCCESS
-	
-	return Status.RUNNING
-
-# 不需要 _exit，因为 blackboard.erase_var(self) 会由父类 tick 自动处理
+	var remaining: float = float(_get_storage(instance, 0.0)) - maxf(delta, 0.0)
+	_set_storage(instance, remaining)
+	return Status.SUCCESS if remaining <= 0.0 else Status.RUNNING

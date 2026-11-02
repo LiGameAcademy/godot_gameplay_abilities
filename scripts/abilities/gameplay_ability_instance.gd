@@ -293,3 +293,17 @@ func get_current_icon() -> Texture:
 
 func _on_blackboard_value_changed(key: String, value: Variant) -> void:
 	ability_data_changed.emit(self)
+
+## Releases runtime ownership when forgotten or when its component exits the tree.
+## Keep the immutable definition readable for UI callbacks holding an old instance.
+func dispose() -> void:
+	cancel_targeting()
+	if is_active:
+		end_ability(BTNode.Status.FAILURE)
+	if _bt_instance != null:
+		_bt_instance.reset_tree()
+	if _blackboard != null:
+		_blackboard.clear()
+	_bt_instance = null
+	_features.clear()
+	_owner = null

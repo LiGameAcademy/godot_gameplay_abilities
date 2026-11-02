@@ -96,7 +96,7 @@ func _inject_features_to_instance(instance: GameplayAbilityInstance) -> void:
 		instance.add_feature(input_feature.feature_name, input_feature)
 
 ## 动态构建行为树结构 (构建的是 BTNode 资源图，而不是 Instance)
-func _build_default_behavior_tree(include_cooldown: bool = true) -> BTNode:
+func _build_default_behavior_tree(include_cooldown: bool = true, include_cost: bool = true) -> BTNode:
 	var sequence = BTSequence.new()
 	var nodes: Array[BTNode] = []
 
@@ -122,7 +122,7 @@ func _build_default_behavior_tree(include_cooldown: bool = true) -> BTNode:
 		nodes.append(commit_cd)
 
 	# 4. 提交消耗
-	if not costs.is_empty():
+	if include_cost and not costs.is_empty():
 		var commit_cost = AbilityNodeCommitCost.new()
 		commit_cost.node_id = "commit_cost"
 		nodes.append(commit_cost)
@@ -157,7 +157,7 @@ func _build_default_behavior_tree(include_cooldown: bool = true) -> BTNode:
 ## 验证配置的合理性
 func _validate_configuration() -> void:
 	# 验证：如果配置了 targeting_strategy，应该配置了 effects 或 statuses
-	if is_instance_valid(targeting_strategy):
+	if not is_instance_valid(execution_tree) and is_instance_valid(targeting_strategy):
 		if effects.is_empty():
 			push_warning(
 				"ActiveAbilityDefinition [%s]: 配置了 targeting_strategy 但没有配置 effects 或 statuses。\n" % ability_id +
@@ -184,7 +184,7 @@ func _validate_configuration() -> void:
 		animation_speed = 1.0
 
 	# 验证：至少应该配置效果或状态
-	if effects.is_empty():
+	if not is_instance_valid(execution_tree) and effects.is_empty():
 		push_warning(
 			"ActiveAbilityDefinition [%s]: 没有配置 effects 或 statuses，技能可能不会产生任何效果。\n" % ability_id +
 			"请确保这是预期的行为。"

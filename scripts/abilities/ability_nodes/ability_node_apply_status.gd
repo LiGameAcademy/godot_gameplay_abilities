@@ -9,7 +9,7 @@ class_name AbilityNodeApplyStatus
 func _tick(instance: BTInstance, delta: float) -> int:
 	# 1. 获取上下文和施法者
 	var context = _get_context(instance)
-	if not is_instance_valid(context) or not is_instance_valid(context.instigator):
+	if not is_instance_valid(context.get("instigator")):
 		push_warning("AbilityNodeApplyStatus: Instigator is not valid!")
 		return Status.SUCCESS
 	
