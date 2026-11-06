@@ -19,6 +19,20 @@ A reusable Godot 4 plugin for abilities, attributes, and combat effects. See how
 - Apply buffs and debuffs with durations, stacking rules, and periodic effects. Use gameplay tags and filters to control which targets qualify.
 - Trigger visual and audio feedback through gameplay cues. The plugin also includes reusable behavior tree nodes.
 
+## ARPG Demo screenshots
+
+**Fireball cast** · The projectile is in flight and the ability is on cooldown.
+
+![A fireball in flight during the ARPG boss fight](docs/screenshots/arpg_fireball.png)
+
+**Attribute panel (F7)** · View base and derived stats and spend available attribute points.
+
+![The ARPG attribute panel with base stats, derived stats, and available points](docs/screenshots/arpg_attributes.png)
+
+**Tag debug panel (Ctrl+T)** · Select an entity and inspect its gameplay tags. Here the player has the `defense.shield` tag.
+
+![The tag debug panel showing the player's defense.shield tag](docs/screenshots/arpg_tag_debug.png)
+
 ## Installation
 
 From the root of an existing Godot project, add the plugin as a Git submodule.

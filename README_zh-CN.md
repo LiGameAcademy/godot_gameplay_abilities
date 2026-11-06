@@ -19,6 +19,20 @@
 - 为增益和减益配置持续时间、叠加规则与周期效果，通过玩法标签和过滤器判断目标是否满足条件。
 - 使用 Gameplay Cue 触发视觉和音效反馈。插件也提供可复用的行为树节点。
 
+## ARPG 示例实机截图
+
+**释放火球术** · 火球飞向首领，技能栏显示冷却进度。
+
+![ARPG 首领战中飞行的火球](docs/screenshots/arpg_fireball.png)
+
+**属性面板（F7）** · 查看基础属性和衍生属性，也可以分配剩余属性点。
+
+![显示基础属性、衍生属性和可用点数的 ARPG 属性面板](docs/screenshots/arpg_attributes.png)
+
+**标签调试面板（Ctrl+T）** · 选择实体后可查看其玩法标签。图中玩家带有 `defense.shield` 标签。
+
+![显示玩家 defense.shield 标签的调试面板](docs/screenshots/arpg_tag_debug.png)
+
 ## 安装
 
 在已有 Godot 工程的根目录中，将插件添加为 Git 子模块。
