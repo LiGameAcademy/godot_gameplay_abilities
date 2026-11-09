@@ -33,6 +33,8 @@ def main():
              "PASS: GAS Vital lifecycle, payment and attributed damage"),
             (["--verbose", "--fixed-fps", "60", f"{test_root}/attribute_regressions.tscn", "--quit-after", "1800"],
              "PASS: GAS attribute sources, snapshots and definitions"),
+            (["--verbose", "--fixed-fps", "60", f"{test_root}/attribute_dependencies_test.tscn", "--quit-after", "1800"],
+             "PASS: GAS settled attribute snapshots and cycle diagnostics"),
         ]
         for command, expected_marker in commands:
             result = subprocess.run([args.godot, "--headless", "--path", str(host), *command],
