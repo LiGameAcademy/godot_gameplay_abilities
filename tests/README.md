@@ -11,6 +11,8 @@ Dependency regressions check that component subscribers see settled values durin
 
 Lifecycle regressions cover an entire source removal before notifications, a first write that stays below an attribute's minimum, and attributed death after Vital replacement. Consumers that need to observe death across reinitialization can connect to `GameplayVitalAttributeComponent.health_depleted` and filter by Vital ID.
 
+Vital IDs must contain a non-whitespace character. The first valid template for an ID is used. Reinitialization builds replacement attributes and Vitals before publishing changes to existing IDs. Attribute batches refresh all affected Vital maximums and clamp their balances before either component signal is published. Reinitialization and maximum changes do not publish damage or payment events.
+
 For mana assets, use a `GameplayVital` resource with `vital_id = &"mana"` and configure its maximum and regeneration attributes. Existing `ManaVital` resources remain loadable. Skill costs use `can_spend()` and `try_spend()`. Periodic damage can configure `GE_ApplyDamage.fixed_base_damage` and reuse the same damage strategy, immunity checks and death path as direct damage.
 
 Known baseline: Godot 4.7.2 retains the `GameplayEffect` and `GameplayFilterData` scripts at exit (three ObjectDB objects, two script resources). The same diagnostic reproduces with unmodified commit `34bc173` merely preloading `ActiveAbilityDefinition`, without creating any ability instances. The runner prints and allows only that exact resource set and count; other engine errors, script errors, extra retained resources and missing pass markers fail validation. This check does not claim that the baseline script-retention issue is fixed.

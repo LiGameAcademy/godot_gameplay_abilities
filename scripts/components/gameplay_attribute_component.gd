@@ -11,6 +11,7 @@ var _attributes: Dictionary[StringName, GameplayAttributeInstance] = {}
 var _dependency_path: Array[StringName] = []
 var _pending_changes: Dictionary[StringName, float] = {}
 var _change_batch_depth: int = 0
+var _needs_notification_preparation: bool = false
 var _publishing_changes: bool = false
 
 ## Publishes the final value after synchronous dependency updates have settled.
@@ -19,10 +20,14 @@ signal attribute_value_changed(id: StringName, new_val: float)
 ## 初始化属性组件
 ## [param] sets: Array[GameplayAttributeSet] 属性集数组
 func initialize(sets: Array[GameplayAttributeSet] = []) -> void:
-	_change_batch_depth += 1
+	_begin_change_batch()
+	var previous_values: Dictionary[StringName, float] = {}
 	for id: StringName in _attributes:
-		_attributes[id].value_changed.disconnect(_on_instance_value_changed.bind(id))
+		var instance: GameplayAttributeInstance = _attributes[id]
+		previous_values[id] = _pending_changes.get(id, instance.get_value())
+		instance.value_changed.disconnect(_on_instance_value_changed.bind(id))
 	_attributes.clear()
+	_pending_changes.clear()
 	if not sets.is_empty():
 		_active_sets = sets.duplicate(true)
 	
@@ -35,8 +40,18 @@ func initialize(sets: Array[GameplayAttributeSet] = []) -> void:
 	# 2. 再处理依赖关系 (此时所有属性都已存在，可以互相读取)
 	for atr_set in _active_sets:
 		atr_set.resolve_dependencies(self)
-	_change_batch_depth -= 1
-	_publish_changes()
+
+	# A replacement must be compared with the previous runtime value, not its seed.
+	for id: StringName in previous_values:
+		if not has_attribute(id):
+			continue
+		var old_value: float = previous_values[id]
+		if is_equal_approx(old_value, _attributes[id].get_value()):
+			_pending_changes.erase(id)
+		else:
+			_pending_changes[id] = old_value
+			_needs_notification_preparation = true
+	_end_change_batch()
 
 ## 获取属性值
 ## [param] id: StringName 属性ID
@@ -91,11 +106,10 @@ func remove_modifiers_by_source(source_id: StringName) -> void:
 	if source_id.is_empty():
 		return
 
-	_change_batch_depth += 1
+	_begin_change_batch()
 	for instance: GameplayAttributeInstance in _attributes.values():
 		instance.remove_modifiers_by_source(source_id)
-	_change_batch_depth -= 1
-	_publish_changes()
+	_end_change_batch()
 
 ## 注册属性实例（内部方法）
 ## [param] id: StringName 属性ID
@@ -112,6 +126,7 @@ func _register_instance(id: StringName, instance: GameplayAttributeInstance) -> 
 func _on_instance_value_changed(old_value: float, new_value: float, id: StringName) -> void:
 	if not _pending_changes.has(id):
 		_pending_changes[id] = old_value
+	_needs_notification_preparation = true
 	# Direct instance writes have already happened. Stop their recursive propagation.
 	if _is_dependency_cycle(id):
 		return
@@ -128,12 +143,34 @@ func _is_dependency_cycle(id: StringName) -> bool:
 	push_warning("GameplayAttributeComponent: attribute dependency cycle stopped: %s" % " -> ".join(path))
 	return true
 
+func _begin_change_batch() -> void:
+	_change_batch_depth += 1
+
+func _end_change_batch() -> void:
+	_change_batch_depth -= 1
+	_publish_changes()
+
+## Updates dependent state before public signals. Overrides must not publish here.
+func _prepare_attribute_notifications(_changes: Dictionary[StringName, float]) -> void:
+	pass
+
+## Publishes one follow-up notification, allowing new writes to settle before the next one.
+func _publish_next_followup_notification() -> bool:
+	return false
+
 func _publish_changes() -> void:
 	if _change_batch_depth > 0 or _publishing_changes or not _dependency_path.is_empty():
 		return
 
 	_publishing_changes = true
-	while not _pending_changes.is_empty():
+	while true:
+		if _needs_notification_preparation:
+			_needs_notification_preparation = false
+			_prepare_attribute_notifications(_pending_changes)
+		if _pending_changes.is_empty():
+			if not _publish_next_followup_notification():
+				break
+			continue
 		var id: StringName = _pending_changes.keys()[0]
 		var old_value: float = _pending_changes[id]
 		_pending_changes.erase(id)

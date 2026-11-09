@@ -40,9 +40,13 @@ func initialize(p_comp: GameplayAttributeComponent) -> void:
 
 ## Disconnects a discarded runtime instance from its attribute source.
 func unbind_attributes() -> void:
+	_disconnect_attribute_notifications()
+	_owner_comp = null
+
+## Keeps the owner binding when the Vital component coordinates maximum changes itself.
+func _disconnect_attribute_notifications() -> void:
 	if is_instance_valid(_owner_comp) and _owner_comp.attribute_value_changed.is_connected(_on_attribute_changed):
 		_owner_comp.attribute_value_changed.disconnect(_on_attribute_changed)
-	_owner_comp = null
 
 func create_instance(p_comp: GameplayAttributeComponent) -> GameplayVital:
 	var instance : GameplayVital = duplicate(true)
@@ -88,20 +92,25 @@ func _modify_value(amount: float, is_regen: bool = false) -> void:
 	
 	if old_val == current_value: return
 
-	value_changed.emit(current_value, _cached_max, get_percent(), is_regen)
+	_notify_value_changed(is_regen)
 	
 	if current_value <= 0 and old_val > 0:
 		depleted.emit()
 	elif current_value >= _cached_max and old_val < _cached_max:
 		full.emit()
 
-## 属性变化回调
-## [param] attr_id: StringName 变化的属性ID
-## [param] val: float 新值
-func _on_attribute_changed(attr_id: StringName, _value: float) -> void:
-	if attr_id != max_value_attribute: return
+## Synchronizes the maximum and clamps the balance without publishing.
+func _refresh_maximum() -> bool:
 	var old_max: float = _cached_max
 	_update_cached_max()
-	if old_max != _cached_max:
-		current_value = minf(current_value, _cached_max)
-		value_changed.emit(current_value, _cached_max, get_percent(), false)
+	if old_max == _cached_max:
+		return false
+	current_value = minf(current_value, _cached_max)
+	return true
+
+func _notify_value_changed(is_regen: bool = false) -> void:
+	value_changed.emit(current_value, _cached_max, get_percent(), is_regen)
+
+func _on_attribute_changed(attr_id: StringName, _value: float) -> void:
+	if attr_id == max_value_attribute and _refresh_maximum():
+		_notify_value_changed()
