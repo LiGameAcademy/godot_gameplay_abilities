@@ -8,13 +8,18 @@ class_name GameplayAttributeComponent
 @export var _active_sets: Array[GameplayAttributeSet] = []
 # ID -> Instance（运行时实例）
 var _attributes: Dictionary[StringName, GameplayAttributeInstance] = {}
+var _dependency_path: Array[StringName] = []
+var _pending_changes: Dictionary[StringName, float] = {}
+var _initializing: bool = false
+var _publishing_changes: bool = false
 
-# 信号：当属性值发生变化时发出
+## Publishes the final value after synchronous dependency updates have settled.
 signal attribute_value_changed(id: StringName, new_val: float)
 
 ## 初始化属性组件
 ## [param] sets: Array[GameplayAttributeSet] 属性集数组
 func initialize(sets: Array[GameplayAttributeSet] = []) -> void:
+	_initializing = true
 	for id: StringName in _attributes:
 		_attributes[id].value_changed.disconnect(_on_instance_value_changed.bind(id))
 	_attributes.clear()
@@ -30,6 +35,8 @@ func initialize(sets: Array[GameplayAttributeSet] = []) -> void:
 	# 2. 再处理依赖关系 (此时所有属性都已存在，可以互相读取)
 	for atr_set in _active_sets:
 		atr_set.resolve_dependencies(self)
+	_initializing = false
+	_publish_changes()
 
 ## 获取属性值
 ## [param] id: StringName 属性ID
@@ -52,7 +59,10 @@ func get_attribute(id: StringName) -> GameplayAttributeInstance:
 ## [param] val: float 新的基础值
 func set_base_value(id: StringName, val: float) -> bool:
 	if has_attribute(id):
-		_attributes[id].base_value = val
+		var instance: GameplayAttributeInstance = _attributes[id]
+		if instance.base_value != val and _is_dependency_cycle(id):
+			return false
+		instance.base_value = val
 		return true
 	push_warning("AttributeComponent: can not set base value: %s" %id)
 	return false
@@ -99,9 +109,40 @@ func _register_instance(id: StringName, instance: GameplayAttributeInstance) -> 
 	instance.value_changed.connect(_on_instance_value_changed.bind(id))
 	return true
 
-func _on_instance_value_changed(_old: float, new_value: float, id: StringName) -> void:
-	attribute_value_changed.emit(id, new_value)
+func _on_instance_value_changed(old_value: float, new_value: float, id: StringName) -> void:
+	if not _pending_changes.has(id):
+		_pending_changes[id] = old_value
+	# Direct instance writes have already happened. Stop their recursive propagation.
+	if _is_dependency_cycle(id):
+		return
+	_dependency_path.append(id)
 	_handle_dependency(id, new_value)
+	_dependency_path.pop_back()
+	_publish_changes()
+
+func _is_dependency_cycle(id: StringName) -> bool:
+	if not _dependency_path.has(id):
+		return false
+	var path: PackedStringArray = PackedStringArray(_dependency_path)
+	path.append(id)
+	push_warning("GameplayAttributeComponent: attribute dependency cycle stopped: %s" % " -> ".join(path))
+	return true
+
+func _publish_changes() -> void:
+	if _initializing or _publishing_changes or not _dependency_path.is_empty():
+		return
+
+	_publishing_changes = true
+	while not _pending_changes.is_empty():
+		var id: StringName = _pending_changes.keys()[0]
+		var old_value: float = _pending_changes[id]
+		_pending_changes.erase(id)
+		var instance: GameplayAttributeInstance = get_attribute(id)
+		if is_instance_valid(instance):
+			var value: float = instance.get_value()
+			if not is_equal_approx(old_value, value):
+				attribute_value_changed.emit(id, value)
+	_publishing_changes = false
 
 ## 处理依赖关系
 ## [param] attr_id: StringName 变化的属性ID
