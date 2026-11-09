@@ -158,15 +158,22 @@ func _prepare_attribute_notifications(_changes: Dictionary[StringName, float]) -
 func _publish_next_followup_notification() -> bool:
 	return false
 
+func _prepare_pending_notifications() -> void:
+	if _needs_notification_preparation:
+		_needs_notification_preparation = false
+		_prepare_attribute_notifications(_pending_changes)
+
 func _publish_changes() -> void:
-	if _change_batch_depth > 0 or _publishing_changes or not _dependency_path.is_empty():
+	if _change_batch_depth > 0 or not _dependency_path.is_empty():
+		return
+	if _publishing_changes:
+		# Settle synchronous writes before the remaining listeners run.
+		_prepare_pending_notifications()
 		return
 
 	_publishing_changes = true
 	while true:
-		if _needs_notification_preparation:
-			_needs_notification_preparation = false
-			_prepare_attribute_notifications(_pending_changes)
+		_prepare_pending_notifications()
 		if _pending_changes.is_empty():
 			if not _publish_next_followup_notification():
 				break

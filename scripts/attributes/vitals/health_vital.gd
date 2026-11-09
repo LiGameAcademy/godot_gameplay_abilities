@@ -38,7 +38,7 @@ func modify_value(amount: float, is_regen: bool = false) -> void:
 ## [param] owner_entity: Node 拥有者实体
 ## [return] float 最终伤害值（用于 Cue 系统）
 func apply_damage(damage_info: DamageInfo, owner_entity: Node) -> float:
-	if not is_alive: 
+	if not _can_receive_damage():
 		return 0.0
 	
 	if not is_instance_valid(damage_info):
@@ -47,25 +47,34 @@ func apply_damage(damage_info: DamageInfo, owner_entity: Node) -> float:
 	
 	# 发出伤害接收信号（允许其他系统修改伤害，如护盾、减伤等）
 	damage_received.emit(damage_info)
+	# A synchronous listener may replace this Vital before the hit is committed.
+	if not _can_receive_damage():
+		return 0.0
 	AbilityEventBus.trigger_game_event(&"damage_received", {
 		"damage_info": damage_info,
 		"target": owner_entity
 	})
+	if not _can_receive_damage():
+		return 0.0
 	
 	# 获取最终伤害（可能已被 damage_received 监听者修改）
 	damage_info.final_damage = max(0.0, damage_info.final_damage)
 	# 应用伤害
 	_modify_value(-damage_info.final_damage)
+	if not is_instance_valid(_owner_comp):
+		return 0.0
 	
 	# 发出伤害应用信号（UI系统可以监听这个信号来显示伤害飘字）
 	damage_applied.emit(damage_info, damage_info.final_damage)
+	if not is_instance_valid(_owner_comp):
+		return damage_info.final_damage
 	AbilityEventBus.trigger_game_event(&"damage_applied", {
 		"damage_info": damage_info,
 		"target": owner_entity
 	})
 
 	# 处理死亡
-	if not is_alive:
+	if is_instance_valid(_owner_comp) and not is_alive:
 		_die(damage_info.instigator, owner_entity)
 
 	# 返回最终伤害值（供 Cue 系统使用）
@@ -80,6 +89,9 @@ func heal(amount: float) -> void:
 
 	# 发出治疗信号
 	health_restored.emit()
+
+func _can_receive_damage() -> bool:
+	return is_instance_valid(_owner_comp) and is_alive
 
 ## 死亡处理
 ## [param] instigator: Node 造成死亡的实体
