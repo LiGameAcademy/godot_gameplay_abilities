@@ -10,6 +10,7 @@ class_name GameplayVitalAttributeComponent
 
 ## 活跃的 Vital 实例 { vital_id: GameplayVital }
 var _active_vitals: Dictionary[StringName, GameplayVital] = {}
+var _pending_vital_changes: Dictionary[StringName, PackedFloat64Array] = {}
 
 signal vital_value_changed(vital_id: StringName, current: float, max: float, percent: float, is_regen: bool)
 signal vital_depleted(vital_id: StringName)
@@ -30,20 +31,29 @@ func _process(delta: float) -> void:
 ## [param] sets: Array[GameplayAttributeSet] 属性集数组
 ## [param] vitals: Array[GameplayVital] Vital 数组
 func initialize(sets: Array[GameplayAttributeSet] = [], vitals: Array[GameplayVital] = []) -> void:
+	_begin_change_batch()
+	var previous_values: Dictionary[StringName, PackedFloat64Array] = _pending_vital_changes.duplicate()
+	_pending_vital_changes.clear()
 	for id: StringName in _active_vitals:
 		var old_vital: GameplayVital = _active_vitals[id]
-		old_vital.unbind_attributes()
+		if not previous_values.has(id):
+			previous_values[id] = _vital_snapshot(old_vital)
 		old_vital.value_changed.disconnect(_on_vital_value_changed.bind(id))
 		old_vital.depleted.disconnect(_on_vital_depleted.bind(id))
 		var old_health: HealthVital = old_vital as HealthVital
 		if is_instance_valid(old_health):
 			old_health.health_depleted.disconnect(_on_health_depleted.bind(id))
+		old_vital.unbind_attributes()
 	_active_vitals.clear()
 	# 先初始化属性系统（重要：必须在 Vital 之前）
 	super(sets)
 
 	# 再初始化 Vitals
 	_initialize_vitals(vitals)
+	for id: StringName in previous_values:
+		if has_vital(id) and previous_values[id] != _vital_snapshot(_active_vitals[id]):
+			_pending_vital_changes[id] = previous_values[id]
+	_end_change_batch()
 
 # --- API: 操作 Vital ---
 ## 检查是否有指定的 Vital
@@ -118,9 +128,12 @@ func _initialize_vitals(vitals: Array[GameplayVital]) -> void:
 	for vital_template in _vitals:
 		if not is_instance_valid(vital_template): continue
 		
-		# 检查 vital_id 是否设置
-		if vital_template.vital_id.is_empty():
-			push_warning("GameplayVitalAttributeComponent: Vital skipped: vital_id is empty")
+		var vital_id: StringName = vital_template.vital_id
+		if vital_id.strip_edges().is_empty():
+			push_warning("GameplayVitalAttributeComponent: skipped Vital with a blank ID")
+			continue
+		if _active_vitals.has(vital_id):
+			push_warning("GameplayVitalAttributeComponent: duplicate Vital ID '%s' was skipped" % vital_id)
 			continue
 		
 		# 检查依赖的属性是否存在
@@ -129,7 +142,8 @@ func _initialize_vitals(vitals: Array[GameplayVital]) -> void:
 			continue
 
 		# 创建运行时实例 (Template -> Instance)
-		var vital_instance = vital_template.create_instance(self)
+		var vital_instance: GameplayVital = vital_template.create_instance(self)
+		vital_instance._disconnect_attribute_notifications()
 
 		# 注册实例
 		_active_vitals[vital_instance.vital_id] = vital_instance
@@ -141,6 +155,29 @@ func _initialize_vitals(vitals: Array[GameplayVital]) -> void:
 		if is_instance_valid(health):
 			health.health_depleted.connect(_on_health_depleted.bind(health.vital_id))
 
+func _vital_snapshot(vital: GameplayVital) -> PackedFloat64Array:
+	return PackedFloat64Array([vital.current_value, vital.get_max_value()])
+
+func _prepare_attribute_notifications(changes: Dictionary[StringName, float]) -> void:
+	for id: StringName in _active_vitals:
+		var vital: GameplayVital = _active_vitals[id]
+		if not changes.has(vital.max_value_attribute):
+			continue
+		var previous: PackedFloat64Array = _vital_snapshot(vital)
+		if vital._refresh_maximum() and not _pending_vital_changes.has(id):
+			_pending_vital_changes[id] = previous
+
+func _publish_next_followup_notification() -> bool:
+	if _pending_vital_changes.is_empty():
+		return false
+	var id: StringName = _pending_vital_changes.keys()[0]
+	var previous: PackedFloat64Array = _pending_vital_changes[id]
+	_pending_vital_changes.erase(id)
+	var vital: GameplayVital = _active_vitals[id]
+	if previous != _vital_snapshot(vital):
+		vital._notify_value_changed()
+	return true
+
 ## Vital 值变化回调
 ## [param] current: float 当前值
 ## [param] max: float 最大值
@@ -148,6 +185,8 @@ func _initialize_vitals(vitals: Array[GameplayVital]) -> void:
 ## [param] is_regen: bool 是否为自动回复
 ## [param] vital_id: StringName Vital ID（通过 bind 传入）
 func _on_vital_value_changed(current: float, max: float, percent: float, is_regen: bool, vital_id: StringName) -> void:
+	# A direct payment or damage can publish a newer snapshot while a maximum update is queued.
+	_pending_vital_changes.erase(vital_id)
 	vital_value_changed.emit(vital_id, current, max, percent, is_regen)
 
 ## Vital 耗尽回调
