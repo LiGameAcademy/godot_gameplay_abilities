@@ -10,6 +10,7 @@ func _run() -> void:
 	_test_maximum_notifications(failures)
 	_test_payment(failures)
 	_test_damage(failures)
+	_test_death_forwarding_after_reinitialize(failures)
 	for failure: String in failures:
 		push_error("FAIL: " + failure)
 	if failures.is_empty():
@@ -97,6 +98,32 @@ func _add_vitals(owner: Node) -> GameplayVitalAttributeComponent:
 	mana.max_value_attribute = &"max_mana"
 	component.initialize([_make_set({&"max_health": 4.0, &"max_mana": 5.0})], [HealthVital.new(), mana])
 	return component
+
+func _test_death_forwarding_after_reinitialize(failures: Array[String]) -> void:
+	var target: Node = Node.new()
+	var source: Node = Node.new()
+	add_child(target)
+	add_child(source)
+	var component: GameplayVitalAttributeComponent = _add_vitals(target)
+	var original: HealthVital = component.get_vital(&"health") as HealthVital
+	var deaths: Array[Node] = []
+	component.health_depleted.connect(func(id: StringName, instigator: Node) -> void:
+		if id == &"health":
+			deaths.append(instigator)
+	)
+	component.try_spend(&"health", 4.0)
+	_expect(deaths.is_empty(), "health payments do not publish attributed deaths", failures)
+	component.initialize()
+	var replacement: HealthVital = component.get_vital(&"health") as HealthVital
+	original.health_depleted.emit(source)
+	_expect(deaths.is_empty(), "a discarded Vital cannot publish through the component", failures)
+	var damage: DamageInfo = DamageInfo.new(source, source, 4.0)
+	damage.final_damage = damage.base_damage
+	replacement.apply_damage(damage, target)
+	replacement.apply_damage(damage, target)
+	_expect(original != replacement and deaths == [source], "replacement Vital forwards one attributed death", failures)
+	target.free()
+	source.free()
 
 func _make_set(values: Dictionary[StringName, float]) -> GameplayAttributeSet:
 	var attribute_set: GameplayAttributeSet = GameplayAttributeSet.new()

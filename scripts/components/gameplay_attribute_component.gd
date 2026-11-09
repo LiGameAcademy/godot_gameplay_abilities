@@ -10,7 +10,7 @@ class_name GameplayAttributeComponent
 var _attributes: Dictionary[StringName, GameplayAttributeInstance] = {}
 var _dependency_path: Array[StringName] = []
 var _pending_changes: Dictionary[StringName, float] = {}
-var _initializing: bool = false
+var _change_batch_depth: int = 0
 var _publishing_changes: bool = false
 
 ## Publishes the final value after synchronous dependency updates have settled.
@@ -19,7 +19,7 @@ signal attribute_value_changed(id: StringName, new_val: float)
 ## 初始化属性组件
 ## [param] sets: Array[GameplayAttributeSet] 属性集数组
 func initialize(sets: Array[GameplayAttributeSet] = []) -> void:
-	_initializing = true
+	_change_batch_depth += 1
 	for id: StringName in _attributes:
 		_attributes[id].value_changed.disconnect(_on_instance_value_changed.bind(id))
 	_attributes.clear()
@@ -35,7 +35,7 @@ func initialize(sets: Array[GameplayAttributeSet] = []) -> void:
 	# 2. 再处理依赖关系 (此时所有属性都已存在，可以互相读取)
 	for atr_set in _active_sets:
 		atr_set.resolve_dependencies(self)
-	_initializing = false
+	_change_batch_depth -= 1
 	_publish_changes()
 
 ## 获取属性值
@@ -91,11 +91,11 @@ func remove_modifiers_by_source(source_id: StringName) -> void:
 	if source_id.is_empty():
 		return
 
-	# 遍历所有属性实例，移除匹配的修改器
-	for attribute_id in _attributes.keys():
-		var instance = _attributes[attribute_id]
-		if is_instance_valid(instance):
-			instance.remove_modifiers_by_source(source_id)
+	_change_batch_depth += 1
+	for instance: GameplayAttributeInstance in _attributes.values():
+		instance.remove_modifiers_by_source(source_id)
+	_change_batch_depth -= 1
+	_publish_changes()
 
 ## 注册属性实例（内部方法）
 ## [param] id: StringName 属性ID
@@ -129,7 +129,7 @@ func _is_dependency_cycle(id: StringName) -> bool:
 	return true
 
 func _publish_changes() -> void:
-	if _initializing or _publishing_changes or not _dependency_path.is_empty():
+	if _change_batch_depth > 0 or _publishing_changes or not _dependency_path.is_empty():
 		return
 
 	_publishing_changes = true
