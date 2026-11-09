@@ -1,11 +1,20 @@
 extends Node
 ## Exercises attribute replacement, Vital snapshots, payments and attributed damage.
 
+class RecordedHealth extends HealthVital:
+	static var instances: Array[GameplayVital] = []
+
+	func create_instance(component: GameplayAttributeComponent) -> GameplayVital:
+		var instance: GameplayVital = super(component)
+		instances.append(instance)
+		return instance
+
 func _ready() -> void:
 	_run.call_deferred()
 
 func _run() -> void:
 	var failures: Array[String] = []
+	_test_vital_ids(failures)
 	_test_reinitialize(failures)
 	_test_maximum_notifications(failures)
 	_test_payment(failures)
@@ -16,6 +25,36 @@ func _run() -> void:
 	if failures.is_empty():
 		print("PASS: GAS Vital lifecycle, payment and attributed damage")
 	get_tree().quit.call_deferred(0 if failures.is_empty() else 1)
+
+func _test_vital_ids(failures: Array[String]) -> void:
+	var component: GameplayVitalAttributeComponent = GameplayVitalAttributeComponent.new()
+	var empty: HealthVital = RecordedHealth.new()
+	empty.vital_id = &""
+	var blank: HealthVital = RecordedHealth.new()
+	blank.vital_id = &"  "
+	var first: HealthVital = RecordedHealth.new()
+	first.display_name = "First health"
+	component.initialize([_make_set({&"max_health": 4.0})], [first, RecordedHealth.new(), empty, blank])
+	var original: HealthVital = RecordedHealth.instances[0] as HealthVital
+	_expect(RecordedHealth.instances.size() == 1 and component.get_vital(&"health") == original,
+		"only the first valid template with a Vital ID is instantiated", failures)
+	_expect(not component.has_vital(&"") and not component.has_vital(&"  "),
+		"empty and whitespace-only Vital IDs are rejected", failures)
+	var deaths: Array[Node] = []
+	component.health_depleted.connect(func(_id: StringName, instigator: Node) -> void: deaths.append(instigator))
+	component.initialize([], [HealthVital.new()])
+	var damage: DamageInfo = DamageInfo.new(self, self, 4.0)
+	damage.final_damage = damage.base_damage
+	# Emit the retired instance's death signal directly, since damage requires a bound Vital.
+	original.health_depleted.emit(self)
+	_expect(deaths.is_empty() and component.get_vital_value(&"health") == 4.0,
+		"the previous registration cannot report death for the current Vital", failures)
+	var replacement: HealthVital = component.get_vital(&"health") as HealthVital
+	replacement.apply_damage(damage, self)
+	_expect(deaths == [self], "the current registration still reports attributed death", failures)
+	remove_from_group(&"death")
+	RecordedHealth.instances.clear()
+	component.free()
 
 func _test_reinitialize(failures: Array[String]) -> void:
 	var component: GameplayAttributeComponent = GameplayAttributeComponent.new()

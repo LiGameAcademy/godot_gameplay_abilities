@@ -118,9 +118,12 @@ func _initialize_vitals(vitals: Array[GameplayVital]) -> void:
 	for vital_template in _vitals:
 		if not is_instance_valid(vital_template): continue
 		
-		# 检查 vital_id 是否设置
-		if vital_template.vital_id.is_empty():
-			push_warning("GameplayVitalAttributeComponent: Vital skipped: vital_id is empty")
+		var vital_id: StringName = vital_template.vital_id
+		if vital_id.strip_edges().is_empty():
+			push_warning("GameplayVitalAttributeComponent: skipped Vital with a blank ID")
+			continue
+		if _active_vitals.has(vital_id):
+			push_warning("GameplayVitalAttributeComponent: duplicate Vital ID '%s' was skipped" % vital_id)
 			continue
 		
 		# 检查依赖的属性是否存在
@@ -129,7 +132,7 @@ func _initialize_vitals(vitals: Array[GameplayVital]) -> void:
 			continue
 
 		# 创建运行时实例 (Template -> Instance)
-		var vital_instance = vital_template.create_instance(self)
+		var vital_instance: GameplayVital = vital_template.create_instance(self)
 
 		# 注册实例
 		_active_vitals[vital_instance.vital_id] = vital_instance
