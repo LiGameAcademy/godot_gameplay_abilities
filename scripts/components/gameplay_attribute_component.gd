@@ -66,14 +66,14 @@ func has_attribute(id: StringName) -> bool:
 ## 添加属性修改器
 ## [param] mod: GameplayAttributeModifier 修改器实例
 func add_modifier(mod: GameplayAttributeModifier) -> void:
-	if _attributes.has(mod.attribute_id):
+	if is_instance_valid(mod) and _attributes.has(mod.attribute_id):
 		_attributes[mod.attribute_id].add_modifier(mod)
 
 ## 移除属性修改器
 ## [param] mod: GameplayAttributeModifier 修改器实例
 func remove_modifier(mod: GameplayAttributeModifier) -> void:
-	if _attributes.has(mod.attribute_id):
-		_attributes[mod.attribute_id].remove_modifier(mod)
+	for instance: GameplayAttributeInstance in _attributes.values():
+		instance.remove_modifier(mod)
 
 ## 根据 source_id 批量移除属性修改器
 ## [param] source_id: StringName 来源ID

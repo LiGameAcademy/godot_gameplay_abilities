@@ -5,6 +5,8 @@ The runner creates a disposable host with the four GAS autoloads. It checks comb
 
 Vital regressions cover replacing attribute sets, disconnecting old attribute instances, maximum-only and clamped snapshots, atomic payments, shared cost resources, and lethal damage attribution.
 
+Attribute regressions cover independent effect sources, explicit context keys across effect copies, registration snapshots, and rejection of blank or duplicate IDs. An anonymous attribute effect uses the same instance for application and removal. Callers that use separate effect copies should pass the same non-empty context source ID. To change a registered modifier, remove it and register it again with the updated fields.
+
 For mana assets, use a `GameplayVital` resource with `vital_id = &"mana"` and configure its maximum and regeneration attributes. Existing `ManaVital` resources remain loadable. Skill costs use `can_spend()` and `try_spend()`. Periodic damage can configure `GE_ApplyDamage.fixed_base_damage` and reuse the same damage strategy, immunity checks and death path as direct damage.
 
 Known baseline: Godot 4.7.2 retains the `GameplayEffect` and `GameplayFilterData` scripts at exit (three ObjectDB objects, two script resources). The same diagnostic reproduces with unmodified commit `34bc173` merely preloading `ActiveAbilityDefinition`, without creating any ability instances. The runner prints and allows only that exact resource set and count; other engine errors, script errors, extra retained resources and missing pass markers fail validation. This check does not claim that the baseline script-retention issue is fixed.

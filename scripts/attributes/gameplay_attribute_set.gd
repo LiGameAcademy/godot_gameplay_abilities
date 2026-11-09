@@ -11,9 +11,15 @@ class_name GameplayAttributeSet
 ## [return] Dictionary[StringName, GameplayAttributeInstance] 属性实例字典
 func instantiate_attributes() -> Dictionary[StringName, GameplayAttributeInstance]:
 	var instances : Dictionary[StringName, GameplayAttributeInstance] = {}
-	for attr_res in attributes:
-		var init_val = attributes[attr_res]
-		instances[attr_res.attribute_id] = GameplayAttributeInstance.new(attr_res, init_val)
+	for attr_res: GameplayAttribute in attributes:
+		if not is_instance_valid(attr_res) or attr_res.attribute_id.strip_edges().is_empty():
+			push_warning("GameplayAttributeSet: skipped a missing definition or blank attribute ID")
+			continue
+		var id: StringName = attr_res.attribute_id
+		if instances.has(id):
+			push_warning("GameplayAttributeSet: duplicate attribute ID '%s' was skipped" % id)
+			continue
+		instances[id] = GameplayAttributeInstance.new(attr_res, attributes[attr_res])
 	return instances
 
 ## [钩子] 当组件初始化完毕，所有属性都创建好之后调用

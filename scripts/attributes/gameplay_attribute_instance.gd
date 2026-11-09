@@ -8,12 +8,10 @@ const ModifierType = GameplayAttributeModifier.ModifierType
 
 var attribute_def: GameplayAttribute  					## 属性定义（资源）
 var base_value: float = 0.0 : set = _set_base_value		## 基础值
-var _modifiers: Dictionary[ModifierType, Array] = {}  	## 修改器列表
-# 性能优化
-var _cached_final_value: float = 0.0						## 缓存
-var _dirty : bool = true									## 脏标记
-## 索引：source_id -> Array[GameplayAttributeModifier]（性能优化，用于批量移除）
-var _modifiers_by_source_id: Dictionary[StringName, Array] = {}
+## Each registration keeps its own configuration, keyed by the caller's resource.
+var _modifiers: Dictionary[GameplayAttributeModifier, GameplayAttributeModifier] = {}
+var _cached_final_value: float = 0.0
+var _dirty: bool = true
 
 signal value_changed(old_val: float, new_value: float)	## 当最终值实际改变时发出
 
@@ -21,108 +19,62 @@ func _init(attr_res: GameplayAttribute = null, init_val: float = 0.0) -> void:
 	attribute_def = attr_res
 	base_value = init_val
 
-## 获取最终值（当前实现：直接返回基础值，后续会加入 Modifier 计算）
+## Returns the final value after modifiers and bounds.
 ## [return] float 最终值
 func get_value() -> float:
 	if _dirty:
 		_recalculate_value()
 	return _cached_final_value
 
-## 添加修改器
-## [param] mod: GameplayAttributeModifier 修改器实例
+## Registers a snapshot. Remove and re-add to apply changes to the source resource.
 func add_modifier(mod: GameplayAttributeModifier) -> void:
-	var _mods : Array = _modifiers.get(mod.modifier_type, [])
-	if _mods.has(mod):
-		push_warning("AttributeInstance: _modifiers has mod: %s" %mod)
+	if not is_instance_valid(mod) or _modifiers.has(mod):
 		return
-	if not _modifiers.has(mod.modifier_type):
-		_modifiers[mod.modifier_type] = []
-	_modifiers[mod.modifier_type].append(mod)
-	
-	# 更新 source_id 索引（性能优化）
-	if not mod.source_id.is_empty():
-		if not _modifiers_by_source_id.has(mod.source_id):
-			_modifiers_by_source_id[mod.source_id] = []
-		_modifiers_by_source_id[mod.source_id].append(mod)
-	
+	_modifiers[mod] = GameplayAttributeModifier.new(mod.attribute_id, mod.value, mod.modifier_type, mod.source_id)
 	_on_data_changed()
 
-## 移除修改器
-## [param] mod: GameplayAttributeModifier 修改器实例
+## Removes the original registration even if its resource was edited later.
 func remove_modifier(mod: GameplayAttributeModifier) -> void:
-	var _mods : Array = _modifiers.get(mod.modifier_type, [])
-	if not _mods.has(mod):
-		push_warning("AttributeInstance: _modifiers not has mod: %s" %mod)
-		return
-	_modifiers[mod.modifier_type].erase(mod)
-	
-	# 更新 source_id 索引（性能优化）
-	if not mod.source_id.is_empty() and _modifiers_by_source_id.has(mod.source_id):
-		_modifiers_by_source_id[mod.source_id].erase(mod)
-		# 如果该 source_id 没有更多修改器，清理索引
-		if _modifiers_by_source_id[mod.source_id].is_empty():
-			_modifiers_by_source_id.erase(mod.source_id)
-	
-	_on_data_changed()
+	if _modifiers.erase(mod):
+		_on_data_changed()
 
-## 根据 source_id 批量移除修改器
-## [param] source_id: StringName 来源ID
-## 性能优化：使用索引直接查找，避免遍历所有修改器
+## Removes all registrations from the source captured when they were added.
 func remove_modifiers_by_source(source_id: StringName) -> void:
 	if source_id.is_empty():
 		return
-	
-	# 使用索引直接查找（O(1) 查找）
-	if not _modifiers_by_source_id.has(source_id):
-		return
-	
-	var mods_to_remove: Array = _modifiers_by_source_id[source_id].duplicate()
-	if mods_to_remove.is_empty():
-		return
-	
-	# 移除所有匹配的修改器
-	for mod in mods_to_remove:
-		if not is_instance_valid(mod):
-			continue
-		
-		# 从主列表移除
-		var _mods: Array = _modifiers.get(mod.modifier_type, [])
-		_mods.erase(mod)
-	
-	# 清理索引
-	_modifiers_by_source_id.erase(source_id)
-	
-	_on_data_changed()
+	var removed: bool = false
+	for mod: GameplayAttributeModifier in _modifiers.keys():
+		if _modifiers[mod].source_id == source_id:
+			_modifiers.erase(mod)
+			removed = true
+	if removed:
+		_on_data_changed()
 
-## 重新计算最终值（当前版本：只处理基础值和范围限制）
 func _recalculate_value() -> void:
-	var final := base_value
-	
-	# 1. 预计算：先归类，避免多次遍历	
-	var override_mods : Array = _modifiers.get(ModifierType.OVERRIDE, [])
-	if override_mods.size() > 1:
-		push_warning("ArratributeInstance: override modifiers size > 1 !")
-		
-	if not override_mods.is_empty():
-		var mod : GameplayAttributeModifier = override_mods[0]
-		final = mod.value
-	else:
-		var sum_add = 0.0
-		var product_mult = 0.0
-		for mod in _modifiers.get(ModifierType.ADD, []):
-			sum_add += mod.value
-		for mod in _modifiers.get(ModifierType.MULTIPLY, []):
-			product_mult += mod.value
-		# 标准公式：(基础值 + 加法修正) * (1 + 乘法修正总和)
-		# 假设 Modifier 的 Multiply 填 0.1 代表增加 10%
-		final = (base_value + sum_add) * (1.0 + product_mult)
-		
-	# 限制范围
+	var sum_add: float = 0.0
+	var sum_multiplier: float = 0.0
+	var first_override: GameplayAttributeModifier = null
+	var override_count: int = 0
+	for mod: GameplayAttributeModifier in _modifiers.values():
+		match mod.modifier_type:
+			ModifierType.ADD:
+				sum_add += mod.value
+			ModifierType.MULTIPLY:
+				sum_multiplier += mod.value
+			ModifierType.OVERRIDE:
+				if first_override == null:
+					first_override = mod
+				override_count += 1
+	if override_count > 1:
+		push_warning("GameplayAttributeInstance: multiple overrides, using the first registration")
+
+	var final: float = (base_value + sum_add) * (1.0 + sum_multiplier)
+	if first_override != null:
+		final = first_override.value
 	if is_instance_valid(attribute_def):
 		final = clampf(final, attribute_def.min_value, attribute_def.max_value)
 	else:
 		push_warning("AttributeInstance: attribute def is not valid!")
-	
 	_cached_final_value = final
 	_dirty = false
 
