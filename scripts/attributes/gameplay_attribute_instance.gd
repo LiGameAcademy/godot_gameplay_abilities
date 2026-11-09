@@ -18,6 +18,8 @@ signal value_changed(old_val: float, new_value: float)	## 当最终值实际改�
 func _init(attr_res: GameplayAttribute = null, init_val: float = 0.0) -> void:
 	attribute_def = attr_res
 	base_value = init_val
+	if _dirty and is_instance_valid(attribute_def):
+		_recalculate_value()
 
 ## Returns the final value after modifiers and bounds.
 ## [return] float 最终值

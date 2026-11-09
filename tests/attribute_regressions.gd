@@ -25,6 +25,8 @@ func _run() -> void:
 	_expect(not component.has_attribute(&"") and not component.has_attribute(&"  "), "blank IDs are skipped")
 	_test_effect_sources(target, component)
 	_test_modifier_snapshots(component)
+	_test_source_removal_batch()
+	_test_cold_attribute_cache()
 	target.free()
 	for failure: String in _failures:
 		push_error("FAIL: " + failure)
@@ -71,6 +73,36 @@ func _test_modifier_snapshots(component: GameplayAttributeComponent) -> void:
 	_expect(component.get_value(&"defense") == 18.0, "re-registering uses the edited configuration")
 	component.remove_modifiers_by_source(&"edited")
 	_expect(component.get_value(&"defense") == 2.0, "source removal also clears the re-registration")
+
+func _test_source_removal_batch() -> void:
+	var component: GameplayAttributeComponent = GameplayAttributeComponent.new()
+	var attribute_set: GameplayAttributeSet = GameplayAttributeSet.new()
+	attribute_set.attributes[_definition(&"attack")] = 10.0
+	attribute_set.attributes[_definition(&"defense")] = 20.0
+	component.initialize([attribute_set])
+	component.add_modifier(GameplayAttributeModifier.new(&"attack", 5.0, ModifierType.ADD, &"gear"))
+	component.add_modifier(GameplayAttributeModifier.new(&"defense", 5.0, ModifierType.ADD, &"gear"))
+	var snapshots: Array[Vector2] = []
+	var observe: Callable = func(_id: StringName, _value: float) -> void:
+		snapshots.append(Vector2(component.get_value(&"attack"), component.get_value(&"defense")))
+	component.attribute_value_changed.connect(observe)
+	component.remove_modifiers_by_source(&"gear")
+	component.remove_modifiers_by_source(&"gear")
+	_expect(snapshots == [Vector2(10.0, 20.0), Vector2(10.0, 20.0)],
+		"source removal publishes each change once after the entire batch")
+	component.attribute_value_changed.disconnect(observe)
+	component.free()
+
+func _test_cold_attribute_cache() -> void:
+	var definition: GameplayAttribute = _definition(&"bounded")
+	definition.min_value = 10.0
+	var instance: GameplayAttributeInstance = GameplayAttributeInstance.new(definition, 0.0)
+	var events: Array[Vector2] = []
+	instance.value_changed.connect(func(old: float, value: float) -> void: events.append(Vector2(old, value)))
+	instance.base_value = 1.0
+	_expect(events.is_empty(), "a first write under the minimum does not publish a false change")
+	instance.base_value = 12.0
+	_expect(events == [Vector2(10.0, 12.0)], "the first real change reports the clamped old value")
 
 func _definition(id: StringName) -> GameplayAttribute:
 	var definition: GameplayAttribute = GameplayAttribute.new()

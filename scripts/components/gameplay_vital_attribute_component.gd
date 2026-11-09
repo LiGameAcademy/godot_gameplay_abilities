@@ -13,6 +13,8 @@ var _active_vitals: Dictionary[StringName, GameplayVital] = {}
 
 signal vital_value_changed(vital_id: StringName, current: float, max: float, percent: float, is_regen: bool)
 signal vital_depleted(vital_id: StringName)
+## Forwards attributed deaths from the currently registered health Vitals.
+signal health_depleted(vital_id: StringName, instigator: Node)
 
 func _ready() -> void:
 	# 确保开启 process 以处理 Vital 恢复
@@ -33,6 +35,9 @@ func initialize(sets: Array[GameplayAttributeSet] = [], vitals: Array[GameplayVi
 		old_vital.unbind_attributes()
 		old_vital.value_changed.disconnect(_on_vital_value_changed.bind(id))
 		old_vital.depleted.disconnect(_on_vital_depleted.bind(id))
+		var old_health: HealthVital = old_vital as HealthVital
+		if is_instance_valid(old_health):
+			old_health.health_depleted.disconnect(_on_health_depleted.bind(id))
 	_active_vitals.clear()
 	# 先初始化属性系统（重要：必须在 Vital 之前）
 	super(sets)
@@ -132,6 +137,9 @@ func _initialize_vitals(vitals: Array[GameplayVital]) -> void:
 		# 转发信号
 		vital_instance.value_changed.connect(_on_vital_value_changed.bind(vital_instance.vital_id))
 		vital_instance.depleted.connect(_on_vital_depleted.bind(vital_instance.vital_id))
+		var health: HealthVital = vital_instance as HealthVital
+		if is_instance_valid(health):
+			health.health_depleted.connect(_on_health_depleted.bind(health.vital_id))
 
 ## Vital 值变化回调
 ## [param] current: float 当前值
@@ -146,3 +154,6 @@ func _on_vital_value_changed(current: float, max: float, percent: float, is_rege
 ## [param] vital_id: StringName Vital ID
 func _on_vital_depleted(vital_id: StringName) -> void:
 	vital_depleted.emit(vital_id)
+
+func _on_health_depleted(instigator: Node, vital_id: StringName) -> void:
+	health_depleted.emit(vital_id, instigator)
