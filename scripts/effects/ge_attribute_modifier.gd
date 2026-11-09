@@ -2,9 +2,8 @@ extends GameplayEffect
 class_name GE_AttributeModifier
 
 @export var modifiers: Array[GameplayAttributeModifier] = []
-## 来源ID（用于批量移除）
-## 如果不设置，会从 context 中读取 source_id
-## 如果 context 中也没有，则使用 "effect." + 效果资源路径
+## Source for batch removal. Context takes precedence. Without an explicit source,
+## application and removal must use the same effect instance.
 @export var source_id: StringName = &""
 @export var attribute_component_name : StringName = "GameplayVitalAttributeComponent"
 
@@ -16,7 +15,7 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 		return
 
 	# 确定 source_id
-	var final_source_id = context.get("source_id", "effect." + source_id)
+	var final_source_id: StringName = _resolve_source_id(context)
 	var stacks = context.get("stacks", 1)
 
 	# 应用所有修改器
@@ -49,10 +48,18 @@ func _remove_modifiers(target: Node, context: Dictionary) -> void:
 		return
 		
 	# 确定 source_id
-	var final_source_id = context.get("source_id", "effect." + source_id)
+	var final_source_id: StringName = _resolve_source_id(context)
 
 	# 批量移除修改器（通过 source_id）
 	attr_comp.remove_modifiers_by_source(final_source_id)
+
+func _resolve_source_id(context: Dictionary) -> StringName:
+	var context_source: StringName = context.get("source_id", &"")
+	if not context_source.is_empty():
+		return context_source
+	if not source_id.is_empty():
+		return StringName("effect." + source_id)
+	return StringName("effect.instance.%d" % get_instance_id())
 	
 	
 	
