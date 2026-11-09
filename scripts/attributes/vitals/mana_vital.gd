@@ -1,8 +1,7 @@
 extends GameplayVital
 class_name ManaVital
 
-## 法力值 Vital
-## 处理消耗和恢复
+## Compatibility resource for existing mana assets. New assets can use GameplayVital.
 
 func _init(p_comp: GameplayAttributeComponent = null) -> void:
 	# 设置 ManaVital 的默认值（在调用 super 之前设置）
@@ -15,8 +14,5 @@ func _init(p_comp: GameplayAttributeComponent = null) -> void:
 ## [param] amount: float 要消耗的法力值
 ## [return] bool 是否成功消耗
 func try_spend_mana(amount: float) -> bool:
-	if not _owner_comp.has_sufficient_vital(vital_id, amount):
-		return false
-
-	_owner_comp.modify_vital(vital_id, -amount)
-	return true
+	var component: GameplayVitalAttributeComponent = _owner_comp as GameplayVitalAttributeComponent
+	return is_instance_valid(component) and component.try_spend(vital_id, amount)

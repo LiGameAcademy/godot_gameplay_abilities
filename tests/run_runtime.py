@@ -24,9 +24,15 @@ def main():
             config += f'{name}="*res://addons/godot_gameplay_abilities/scripts/singletons/{script}.gd"\n'
         config += '[rendering]\nrenderer/rendering_method="gl_compatibility"\n'
         (host / "project.godot").write_text(config, encoding="utf-8")
-        commands = [["--editor", "--import"],
-                    ["--verbose", "--fixed-fps", "60", "res://addons/godot_gameplay_abilities/tests/runtime_regressions.tscn", "--quit-after", "1800"]]
-        for index, command in enumerate(commands):
+        test_root = "res://addons/godot_gameplay_abilities/tests"
+        commands = [
+            (["--editor", "--import"], None),
+            (["--verbose", "--fixed-fps", "60", f"{test_root}/runtime_regressions.tscn", "--quit-after", "1800"],
+             "PASS: GAS combo"),
+            (["--verbose", "--fixed-fps", "60", f"{test_root}/vital_regressions.tscn", "--quit-after", "1800"],
+             "PASS: GAS Vital lifecycle, payment and attributed damage"),
+        ]
+        for command, expected_marker in commands:
             result = subprocess.run([args.godot, "--headless", "--path", str(host), *command],
                                     capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)
             output = result.stdout + result.stderr
@@ -46,11 +52,11 @@ def main():
                     print(output)
                     raise SystemExit(1)
                 print("KNOWN BASELINE: Godot 4.7.2 retains GameplayEffect/GameplayFilterData scripts at exit.")
-            if result.returncode or (index == 1 and "PASS: GAS combo" not in output):
+            if result.returncode or (expected_marker and expected_marker not in output):
                 print(output)
                 raise SystemExit(1)
-            if index == 1:
-                print("PASS: GAS runtime contracts (combo, context, game-time waits, reparent and disposal)")
+            if expected_marker:
+                print(expected_marker)
 
 
 if __name__ == "__main__":
