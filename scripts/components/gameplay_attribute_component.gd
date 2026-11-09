@@ -15,6 +15,9 @@ signal attribute_value_changed(id: StringName, new_val: float)
 ## 初始化属性组件
 ## [param] sets: Array[GameplayAttributeSet] 属性集数组
 func initialize(sets: Array[GameplayAttributeSet] = []) -> void:
+	for id: StringName in _attributes:
+		_attributes[id].value_changed.disconnect(_on_instance_value_changed.bind(id))
+	_attributes.clear()
 	if not sets.is_empty():
 		_active_sets = sets.duplicate(true)
 	
@@ -93,12 +96,12 @@ func _register_instance(id: StringName, instance: GameplayAttributeInstance) -> 
 		return false
 	_attributes[id] = instance
 	# 转发信号：当实例值变化时，组件也发出信号
-	instance.value_changed.connect(
-		func(old, new) -> void: 
-			attribute_value_changed.emit(id, new)
-			_handle_dependency(id, new)
-	)
+	instance.value_changed.connect(_on_instance_value_changed.bind(id))
 	return true
+
+func _on_instance_value_changed(_old: float, new_value: float, id: StringName) -> void:
+	attribute_value_changed.emit(id, new_value)
+	_handle_dependency(id, new_value)
 
 ## 处理依赖关系
 ## [param] attr_id: StringName 变化的属性ID

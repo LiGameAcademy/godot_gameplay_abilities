@@ -10,6 +10,8 @@ class_name GE_ApplyDamage
 @export var vital_comp_name : StringName = &"GameplayVitalAttributeComponent"
 @export var vital_id : StringName = &"health"
 @export var base_damage_attribute : StringName = &""  ## 基础伤害属性（如果为空，从 context 获取 base_damage）
+## Fallback base damage when no attribute or context value is supplied.
+@export var fixed_base_damage: float = 0.0
 
 func _init() -> void:
 	# 为伤害效果提供默认的免疫标签，避免在每个资源里手工配置
@@ -39,15 +41,14 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 			push_warning("GE_ApplyDamage: Instigator %s has no GameplayAttributeComponent" % instigator.name)
 	else:
 		# 从 context 中获取基础伤害
-		base_damage = context.get("base_damage", 0.0)
+		base_damage = context.get("base_damage", fixed_base_damage)
 	
 	if base_damage <= 0.0:
 		push_warning("GE_ApplyDamage: base_damage is 0 or negative, skipping damage application")
 		return
 	
 	# 3. 更新 context 中的伤害倍率
-	damage_multiplier = context.get("damage_multiplier", damage_multiplier)
-	context["damage_multiplier"] = damage_multiplier
+	context["damage_multiplier"] = context.get("damage_multiplier", damage_multiplier)
 	
 	# 4. 获取 stacks 并创建 DamageInfo
 	var stacks = context.get("stacks", 1)

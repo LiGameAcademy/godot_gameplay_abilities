@@ -25,43 +25,27 @@ class_name AbilityNodeApplyCost
 ## Vital 组件名称（用于查找组件）
 @export var vital_comp_name: StringName = &"GameplayVitalAttributeComponent"
 
-func _tick(instance: BTInstance, delta: float) -> int:
+func _tick(instance: BTInstance, _delta: float) -> int:
 	if not _validate_context(instance, "AbilityNodeApplyCost"):
 		return Status.FAILURE
 	
 	# 获取目标列表（默认使用自身）
-	var target_list = _get_target_list(instance, true)  # use_instigator_as_fallback = true
+	var target_list: Array[Node] = _get_target_list(instance, true)
 	if target_list.is_empty():
 		push_warning("AbilityNodeApplyCost: 没有找到目标")
 		return Status.FAILURE
 	
 	# 处理第一个目标的 Vital（通常只有一个目标）
-	var target = target_list[0]
+	var target: Node = target_list[0]
 	if not is_instance_valid(target):
 		return Status.FAILURE
 	
 	# 获取 Vital 组件
-	var vital_comp = GameplayAbilitySystem.get_component_by_interface(target, vital_comp_name)
+	var vital_comp: GameplayVitalAttributeComponent = GameplayAbilitySystem.get_component_by_interface(target, vital_comp_name) as GameplayVitalAttributeComponent
 	if not is_instance_valid(vital_comp):
 		push_warning("AbilityNodeApplyCost: 目标 %s 没有 %s 组件" % [target.name, vital_comp_name])
 		return Status.FAILURE
 	
-	# 获取 Vital 实例
-	var vital = vital_comp.get_vital(vital_id)
-	if not is_instance_valid(vital):
-		push_warning("AbilityNodeApplyCost: 目标 %s 没有 %s Vital" % [target.name, vital_id])
-		return Status.FAILURE
-	
-	# 检查是否可以支付消耗
-	if not allow_overdraft and vital.current_value < cost_amount:
-		# 消耗不足，返回失败
-		return Status.FAILURE
-	
-	# 如果只检查不消耗，直接返回成功
 	if check_only:
-		return Status.SUCCESS
-	
-	# 扣除 Vital（modify_value 会自动处理边界值）
-	vital.modify_value(-cost_amount)
-	
-	return Status.SUCCESS
+		return Status.SUCCESS if vital_comp.can_spend(vital_id, cost_amount, allow_overdraft) else Status.FAILURE
+	return Status.SUCCESS if vital_comp.try_spend(vital_id, cost_amount, allow_overdraft) else Status.FAILURE

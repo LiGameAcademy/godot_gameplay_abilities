@@ -28,6 +28,12 @@ func _process(delta: float) -> void:
 ## [param] sets: Array[GameplayAttributeSet] 属性集数组
 ## [param] vitals: Array[GameplayVital] Vital 数组
 func initialize(sets: Array[GameplayAttributeSet] = [], vitals: Array[GameplayVital] = []) -> void:
+	for id: StringName in _active_vitals:
+		var old_vital: GameplayVital = _active_vitals[id]
+		old_vital.unbind_attributes()
+		old_vital.value_changed.disconnect(_on_vital_value_changed.bind(id))
+		old_vital.depleted.disconnect(_on_vital_depleted.bind(id))
+	_active_vitals.clear()
 	# 先初始化属性系统（重要：必须在 Vital 之前）
 	super(sets)
 
@@ -62,6 +68,21 @@ func get_vital_value(vital_id: StringName) -> float:
 func has_sufficient_vital(vital_id: StringName, amount: float) -> bool:
 	return get_vital_value(vital_id) >= amount
 
+## Checks whether a resource payment can be committed.
+func can_spend(vital_id: StringName, amount: float, allow_overdraft: bool = false) -> bool:
+	var vital: GameplayVital = get_vital(vital_id)
+	if not is_instance_valid(vital) or not is_finite(amount) or amount < 0.0:
+		return false
+	return vital.current_value >= amount or (allow_overdraft and vital.current_value > 0.0)
+
+## Commits a payment. An explicit overdraft spends the remaining balance.
+func try_spend(vital_id: StringName, amount: float, allow_overdraft: bool = false) -> bool:
+	if not can_spend(vital_id, amount, allow_overdraft):
+		return false
+	if amount > 0.0:
+		get_vital(vital_id).modify_value(-amount)
+	return true
+
 ## 获取 Vital 百分比
 ## [param] vital_id: StringName Vital ID
 ## [return] float 百分比（0.0-1.0），如果不存在则返回 0.0
@@ -88,8 +109,6 @@ func modify_vital(vital_id: StringName, amount: float) -> bool:
 func _initialize_vitals(vitals: Array[GameplayVital]) -> void:
 	if not vitals.is_empty():
 		_vitals = vitals.duplicate(true)
-
-	_active_vitals.clear()
 
 	for vital_template in _vitals:
 		if not is_instance_valid(vital_template): continue

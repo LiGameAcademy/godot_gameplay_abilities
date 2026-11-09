@@ -29,15 +29,20 @@ signal full()      # 满值
 ## 绑定到指定的属性组件并初始化数值
 ## [param] p_comp: GameplayAttributeComponent 属性组件引用
 func initialize(p_comp: GameplayAttributeComponent) -> void:
+	unbind_attributes()
 	_owner_comp = p_comp
 	# 初始化数值（必须在设置 _owner_comp 之后）
 	_update_cached_max()
 	current_value = _cached_max
 	# 连接属性变化信号（确保 Vital 能响应属性变化）
 	if is_instance_valid(_owner_comp):
-		if _owner_comp.attribute_value_changed.is_connected(_on_attribute_changed):
-			_owner_comp.attribute_value_changed.disconnect(_on_attribute_changed)
 		_owner_comp.attribute_value_changed.connect(_on_attribute_changed)
+
+## Disconnects a discarded runtime instance from its attribute source.
+func unbind_attributes() -> void:
+	if is_instance_valid(_owner_comp) and _owner_comp.attribute_value_changed.is_connected(_on_attribute_changed):
+		_owner_comp.attribute_value_changed.disconnect(_on_attribute_changed)
+	_owner_comp = null
 
 func create_instance(p_comp: GameplayAttributeComponent) -> GameplayVital:
 	var instance : GameplayVital = duplicate(true)
@@ -93,10 +98,10 @@ func _modify_value(amount: float, is_regen: bool = false) -> void:
 ## 属性变化回调
 ## [param] attr_id: StringName 变化的属性ID
 ## [param] val: float 新值
-func _on_attribute_changed(attr_id: StringName, val: float) -> void:
+func _on_attribute_changed(attr_id: StringName, _value: float) -> void:
 	if attr_id != max_value_attribute: return
+	var old_max: float = _cached_max
 	_update_cached_max()
-	# 策略：最大值变大时，保持当前值不变，但截断上限
-	if current_value > _cached_max:
-		current_value = _cached_max
+	if old_max != _cached_max:
+		current_value = minf(current_value, _cached_max)
 		value_changed.emit(current_value, _cached_max, get_percent(), false)

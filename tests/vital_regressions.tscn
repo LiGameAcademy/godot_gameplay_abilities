@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://addons/godot_gameplay_abilities/tests/vital_regressions.gd" id="1"]
+
+[node name="VitalRegressions" type="Node"]
+script = ExtResource("1")
