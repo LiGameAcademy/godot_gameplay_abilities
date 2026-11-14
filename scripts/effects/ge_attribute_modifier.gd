@@ -7,8 +7,9 @@ class_name GE_AttributeModifier
 @export var source_id: StringName = &""
 @export var attribute_component_name : StringName = "GameplayVitalAttributeComponent"
 
-func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
-	var attr_comp = GameplayAbilitySystem.get_component_by_interface(target, attribute_component_name)
+func _apply(target: Node, _instigator: Node, context: Dictionary) -> void:
+	var attr_comp: GameplayAttributeComponent = GameplayAbilitySystem.get_component_by_interface(
+		target, attribute_component_name) as GameplayAttributeComponent
 	if not is_instance_valid(attr_comp):
 		# 如果没有 AttributeComponent，静默失败（不是所有实体都需要属性）
 		push_error("GE_AttributeModifier: attr comp is not valid!")
@@ -16,14 +17,22 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 
 	# 确定 source_id
 	var final_source_id: StringName = _resolve_source_id(context)
-	var stacks = context.get("stacks", 1)
+	var raw_stacks: Variant = context.get("stacks", 1)
+	if not (raw_stacks is int or raw_stacks is float):
+		push_warning("GE_AttributeModifier: ignored non-numeric stack count")
+		return
+	var stacks: float = float(raw_stacks)
+	if not is_finite(stacks):
+		push_warning("GE_AttributeModifier: ignored non-finite stack count")
+		return
 
 	# 应用所有修改器
-	for mod_template in modifiers:
+	var batch: Array[GameplayAttributeModifier] = []
+	for mod_template: GameplayAttributeModifier in modifiers:
 		if not is_instance_valid(mod_template):
 			continue
 		# 创建修改器的副本（避免修改模板）
-		var mod = mod_template.duplicate() as GameplayAttributeModifier
+		var mod: GameplayAttributeModifier = mod_template.duplicate() as GameplayAttributeModifier
 		if not is_instance_valid(mod):
 			continue
 
@@ -31,8 +40,8 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 		mod.source_id = final_source_id
 		mod.value *= stacks
 	
-		# 应用修改器
-		attr_comp.add_modifier(mod)
+		batch.append(mod)
+	attr_comp.add_modifiers(batch)
 
 ## 移除效果的具体实现
 ## 注意：Effect 保持无状态特性，通过 context 中的 source_id 来识别要移除的修改器

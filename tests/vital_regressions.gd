@@ -25,7 +25,9 @@ func _run() -> void:
 	_test_batch_vital_notifications(failures)
 	_test_vital_subscriber_updates_another_maximum(failures)
 	_test_payment(failures)
+	_test_nonfinite_vital_writes(failures)
 	_test_damage(failures)
+	_test_reentrant_damage(failures)
 	_test_death_forwarding_after_reinitialize(failures)
 	_test_damage_during_vital_replacement(failures)
 	for failure: String in failures:
@@ -191,6 +193,37 @@ func _test_payment(failures: Array[String]) -> void:
 	first.free()
 	second.free()
 
+func _test_nonfinite_vital_writes(failures: Array[String]) -> void:
+	var target: Node = Node.new()
+	add_child(target)
+	var component: GameplayVitalAttributeComponent = _add_vitals(target)
+	var mana: GameplayVital = component.get_vital(&"mana")
+	var health: HealthVital = component.get_vital(&"health") as HealthVital
+	var changes: Array[StringName] = []
+	component.vital_value_changed.connect(func(id: StringName, _current: float, _max: float, _fraction: float, _regen: bool) -> void:
+		changes.append(id)
+	)
+	for invalid: float in [NAN, INF, -INF]:
+		_expect(not component.modify_vital(&"mana", invalid) and not component.try_spend(&"mana", invalid),
+			"non-finite modifications and payments are rejected", failures)
+		mana.modify_value(invalid)
+		mana.current_value = invalid
+		health.heal(invalid)
+		var damage: DamageInfo = DamageInfo.new(self, self, 1.0)
+		damage.final_damage = invalid
+		_expect(health.apply_damage(damage, target) == 0.0, "non-finite damage is rejected", failures)
+	var hit: DamageInfo = DamageInfo.new(self, self, 1.0)
+	hit.final_damage = 1.0
+	health.damage_received.connect(func(info: DamageInfo) -> void: info.final_damage = NAN, CONNECT_ONE_SHOT)
+	_expect(health.apply_damage(hit, target) == 0.0 and changes.is_empty() and
+		mana.current_value == 5.0 and health.current_value == 4.0,
+		"invalid writes and callback-supplied damage leave both Vitals unchanged", failures)
+	hit.final_damage = 1.0
+	_expect(component.try_spend(&"mana", 1.0) and health.apply_damage(hit, target) == 1.0 and
+		mana.current_value == 4.0 and health.current_value == 3.0 and changes == [&"mana", &"health"],
+		"finite payment and damage still work after rejected writes", failures)
+	target.free()
+
 func _test_damage(failures: Array[String]) -> void:
 	var target: Node = Node.new()
 	var source: Node = Node.new()
@@ -268,6 +301,32 @@ func _test_damage_during_vital_replacement(failures: Array[String]) -> void:
 	_expect(not target.is_in_group(&"death") and component.get_vital_value(&"health") == 4.0,
 		"replacing a Vital during the applied event prevents its death from affecting the new owner state", failures)
 	target.free()
+
+func _test_reentrant_damage(failures: Array[String]) -> void:
+	var target: Node = Node.new()
+	var followup_source: Node = Node.new()
+	add_child(target)
+	add_child(followup_source)
+	var component: GameplayVitalAttributeComponent = _add_vitals(target)
+	var health: HealthVital = component.get_vital(&"health") as HealthVital
+	var deaths: Array[Node] = []
+	var depletions: Array[StringName] = []
+	component.health_depleted.connect(func(_id: StringName, instigator: Node) -> void: deaths.append(instigator))
+	component.vital_depleted.connect(func(id: StringName) -> void: depletions.append(id))
+	var followup: DamageInfo = DamageInfo.new(followup_source, followup_source, 3.0)
+	followup.final_damage = followup.base_damage
+	health.damage_applied.connect(func(info: DamageInfo, _amount: float) -> void:
+		if info.instigator == self:
+			health.apply_damage(followup, target)
+	)
+	var original: DamageInfo = DamageInfo.new(self, self, 1.0)
+	original.final_damage = original.base_damage
+	var applied: float = health.apply_damage(original, target)
+	_expect(applied == 1.0 and health.current_value == 0.0 and target.is_in_group(&"death") and
+		deaths == [followup_source] and depletions == [&"health"],
+		"only the nested lethal hit reports death and gets kill credit", failures)
+	target.free()
+	followup_source.free()
 
 func _make_set(values: Dictionary[StringName, float]) -> GameplayAttributeSet:
 	var attribute_set: GameplayAttributeSet = GameplayAttributeSet.new()

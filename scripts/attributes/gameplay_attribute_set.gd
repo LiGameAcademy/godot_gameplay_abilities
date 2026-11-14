@@ -19,7 +19,11 @@ func instantiate_attributes() -> Dictionary[StringName, GameplayAttributeInstanc
 		if instances.has(id):
 			push_warning("GameplayAttributeSet: duplicate attribute ID '%s' was skipped" % id)
 			continue
-		instances[id] = GameplayAttributeInstance.new(attr_res, attributes[attr_res])
+		var initial_value: float = attributes[attr_res]
+		if not is_finite(initial_value):
+			push_warning("GameplayAttributeSet: skipped non-finite initial value for '%s'" % id)
+			continue
+		instances[id] = GameplayAttributeInstance.new(attr_res, initial_value)
 	return instances
 
 ## [钩子] 当组件初始化完毕，所有属性都创建好之后调用

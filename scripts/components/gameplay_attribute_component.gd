@@ -73,6 +73,9 @@ func get_attribute(id: StringName) -> GameplayAttributeInstance:
 ## [param] id: StringName 属性ID
 ## [param] val: float 新的基础值
 func set_base_value(id: StringName, val: float) -> bool:
+	if not is_finite(val):
+		push_warning("GameplayAttributeComponent: ignored non-finite base value for '%s'" % id)
+		return false
 	if has_attribute(id):
 		var instance: GameplayAttributeInstance = _attributes[id]
 		if instance.base_value != val and _is_dependency_cycle(id):
@@ -93,6 +96,13 @@ func has_attribute(id: StringName) -> bool:
 func add_modifier(mod: GameplayAttributeModifier) -> void:
 	if is_instance_valid(mod) and _attributes.has(mod.attribute_id):
 		_attributes[mod.attribute_id].add_modifier(mod)
+
+## Applies the modifiers before publishing settled component notifications.
+func add_modifiers(modifiers: Array[GameplayAttributeModifier]) -> void:
+	_begin_change_batch()
+	for modifier: GameplayAttributeModifier in modifiers:
+		add_modifier(modifier)
+	_end_change_batch()
 
 ## 移除属性修改器
 ## [param] mod: GameplayAttributeModifier 修改器实例

@@ -32,6 +32,9 @@ func get_value() -> float:
 func add_modifier(mod: GameplayAttributeModifier) -> void:
 	if not is_instance_valid(mod) or _modifiers.has(mod):
 		return
+	if not is_finite(mod.value):
+		push_warning("GameplayAttributeInstance: ignored non-finite modifier")
+		return
 	_modifiers[mod] = GameplayAttributeModifier.new(mod.attribute_id, mod.value, mod.modifier_type, mod.source_id)
 	_on_data_changed()
 
@@ -82,6 +85,9 @@ func _recalculate_value() -> void:
 
 ## 设置基础值（会触发重新计算）
 func _set_base_value(val: float) -> void:
+	if not is_finite(val):
+		push_warning("GameplayAttributeInstance: ignored non-finite base value")
+		return
 	if base_value == val:
 		return
 	
