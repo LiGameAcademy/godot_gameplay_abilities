@@ -33,6 +33,7 @@ func _run() -> void:
 	_test_source_removal_batch()
 	_test_effect_apply_batch()
 	_test_nonfinite_attribute_writes()
+	_test_nonfinite_attribute_results()
 	_test_cold_attribute_cache()
 	target.free()
 	for failure: String in _failures:
@@ -149,6 +150,24 @@ func _test_nonfinite_attribute_writes() -> void:
 	component.set_base_value(&"attack", 11.0)
 	_expect(values == [11.0], "a finite write still updates and publishes")
 	component.free()
+
+func _test_nonfinite_attribute_results() -> void:
+	var definition: GameplayAttribute = _definition(&"power")
+	var instance: GameplayAttributeInstance = GameplayAttributeInstance.new(definition, 1.0e308)
+	var events: Array[float] = []
+	instance.value_changed.connect(func(_old: float, value: float) -> void: events.append(value))
+	var modifier: GameplayAttributeModifier = GameplayAttributeModifier.new(&"power", 2.0, ModifierType.MULTIPLY)
+	instance.add_modifier(modifier)
+	_expect(is_finite(instance.get_value()) and events.is_empty(),
+		"overflow from finite inputs cannot enter the attribute cache or signals")
+	instance.base_value = 2.0
+	_expect(instance.get_value() == 6.0 and events == [6.0],
+		"the same registered modifier works again after a finite recalculation")
+	var invalid_bounds: GameplayAttribute = _definition(&"bounded")
+	invalid_bounds.min_value = INF
+	invalid_bounds.max_value = -INF
+	var bounded: GameplayAttributeInstance = GameplayAttributeInstance.new(invalid_bounds, 10.0)
+	_expect(bounded.get_value() == 10.0, "invalid infinite bounds cannot force a non-finite value")
 
 func _test_cold_attribute_cache() -> void:
 	var definition: GameplayAttribute = _definition(&"bounded")

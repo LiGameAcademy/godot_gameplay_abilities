@@ -27,7 +27,8 @@ func _run() -> void:
 	_test_payment(failures)
 	_test_nonfinite_vital_writes(failures)
 	_test_damage(failures)
-	_test_reentrant_damage(failures)
+	_test_reentrant_damage(failures, false)
+	_test_reentrant_damage(failures, true)
 	_test_death_forwarding_after_reinitialize(failures)
 	_test_damage_during_vital_replacement(failures)
 	for failure: String in failures:
@@ -302,7 +303,7 @@ func _test_damage_during_vital_replacement(failures: Array[String]) -> void:
 		"replacing a Vital during the applied event prevents its death from affecting the new owner state", failures)
 	target.free()
 
-func _test_reentrant_damage(failures: Array[String]) -> void:
+func _test_reentrant_damage(failures: Array[String], during_value_change: bool) -> void:
 	var target: Node = Node.new()
 	var followup_source: Node = Node.new()
 	add_child(target)
@@ -315,13 +316,21 @@ func _test_reentrant_damage(failures: Array[String]) -> void:
 	component.vital_depleted.connect(func(id: StringName) -> void: depletions.append(id))
 	var followup: DamageInfo = DamageInfo.new(followup_source, followup_source, 3.0)
 	followup.final_damage = followup.base_damage
-	health.damage_applied.connect(func(info: DamageInfo, _amount: float) -> void:
-		if info.instigator == self:
+	var on_value_changed: Callable = func(current: float, _max: float, _fraction: float, _regen: bool) -> void:
+		if current > 0.0:
 			health.apply_damage(followup, target)
-	)
+	if during_value_change:
+		health.value_changed.connect(on_value_changed)
+	else:
+		health.damage_applied.connect(func(info: DamageInfo, _amount: float) -> void:
+			if info.instigator == self:
+				health.apply_damage(followup, target)
+		)
 	var original: DamageInfo = DamageInfo.new(self, self, 1.0)
 	original.final_damage = original.base_damage
 	var applied: float = health.apply_damage(original, target)
+	if during_value_change:
+		health.value_changed.disconnect(on_value_changed)
 	_expect(applied == 1.0 and health.current_value == 0.0 and target.is_in_group(&"death") and
 		deaths == [followup_source] and depletions == [&"health"],
 		"only the nested lethal hit reports death and gets kill credit", failures)

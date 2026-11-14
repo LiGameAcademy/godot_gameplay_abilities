@@ -77,10 +77,18 @@ func _recalculate_value() -> void:
 	if first_override != null:
 		final = first_override.value
 	if is_instance_valid(attribute_def):
-		final = clampf(final, attribute_def.min_value, attribute_def.max_value)
+		var minimum: float = attribute_def.min_value
+		var maximum: float = attribute_def.max_value
+		if minimum <= maximum and minimum < INF and maximum > -INF:
+			final = clampf(final, minimum, maximum)
+		else:
+			push_warning("GameplayAttributeInstance: ignored invalid attribute bounds")
 	else:
 		push_warning("AttributeInstance: attribute def is not valid!")
-	_cached_final_value = final
+	if is_finite(final):
+		_cached_final_value = final
+	else:
+		push_warning("GameplayAttributeInstance: kept the previous value after non-finite calculation")
 	_dirty = false
 
 ## 设置基础值（会触发重新计算）
