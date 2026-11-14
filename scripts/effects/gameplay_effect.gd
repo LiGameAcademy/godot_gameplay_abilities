@@ -43,7 +43,7 @@ func apply(target: Node, instigator: Node, context: Dictionary = {}) -> void:
 	if is_instance_valid(instigator):
 		var modifiers: GameplayModifierComponent = instigator.get_node_or_null("GameplayModifierComponent") as GameplayModifierComponent
 		if modifiers != null:
-			modifiers.notify_effect_applied(self, target, instigator, context)
+			_notify_effect_modifiers(modifiers, target, instigator, context)
 	# 2. 执行具体逻辑（子类实现）
 	_apply(target, instigator, context)
 
@@ -64,6 +64,20 @@ func remove(target: Node, instigator: Node, context: Dictionary = {}) -> void:
 	
 	# 2. 递归移除子效果
 	_remove_sub_effects(target, instigator, context)
+
+func _notify_effect_modifiers(modifiers: GameplayModifierComponent, target: Node, instigator: Node,
+		context: Dictionary) -> void:
+	# Removal uses the caller's context. Hooks can tune the effect but cannot change its source.
+	var source_context: Dictionary = {}
+	for key: StringName in [&"source_id", _SUB_EFFECT_SOURCE_KEY]:
+		if context.has(key):
+			source_context[key] = context[key]
+	modifiers.notify_effect_applied(self, target, instigator, context)
+	for key: StringName in [&"source_id", _SUB_EFFECT_SOURCE_KEY]:
+		if source_context.has(key):
+			context[key] = source_context[key]
+		else:
+			context.erase(key)
 
 ## 检查过滤器
 func _check_filters(target: Node, instigator: Node, context: Dictionary) -> bool:

@@ -94,6 +94,7 @@ func on_before_apply_ability(
 ## [param] target: Node 目标
 ## [param] instigator: Node 施法者
 ## [param] context: Dictionary 上下文（可修改）
+## The caller's removal source is preserved across this hook.
 func on_effect_applied(
 	effect: GameplayEffect,
 	target: Node,
