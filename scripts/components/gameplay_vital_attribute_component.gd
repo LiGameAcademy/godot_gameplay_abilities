@@ -111,7 +111,7 @@ func get_vital_percent(vital_id: StringName) -> float:
 ## [param] amount: float 修改量（正数为增加，负数为减少）
 ## [return] bool 是否成功修改
 func modify_vital(vital_id: StringName, amount: float) -> bool:
-	if not has_vital(vital_id):
+	if not has_vital(vital_id) or not is_finite(amount):
 		return false
 	if amount < 0 and not has_sufficient_vital(vital_id, -amount):
 		return false

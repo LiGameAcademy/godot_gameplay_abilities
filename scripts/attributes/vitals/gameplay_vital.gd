@@ -16,7 +16,10 @@ class_name GameplayVital
 
 # --- 运行时数据 ---
 var _owner_comp: GameplayAttributeComponent  ## 属性组件引用
-var current_value: float = 0.0  				## 当前值
+var current_value: float = 0.0:
+	set(value):
+		if is_finite(value):
+			current_value = value
 var _cached_max: float = 0.0     			## 缓存的最大值
 
 # --- 信号 ---
@@ -83,21 +86,29 @@ func _update_cached_max() -> void:
 	if not is_instance_valid(_owner_comp):
 		push_error("Vital: _owner component is not valid!")
 		return
-	_cached_max = _owner_comp.get_value(max_value_attribute)
+	var maximum: float = _owner_comp.get_value(max_value_attribute)
+	if is_finite(maximum):
+		_cached_max = maxf(0.0, maximum)
 
-func _modify_value(amount: float, is_regen: bool = false) -> void:
+## Returns whether this write depleted the Vital, even if a listener writes again.
+func _modify_value(amount: float, is_regen: bool = false) -> bool:
+	if not is_finite(amount):
+		return false
 	_update_cached_max()
-	var old_val = current_value
+	var old_val: float = current_value
 	current_value = clampf(current_value + amount, 0.0, _cached_max)
-	
-	if old_val == current_value: return
+	if old_val == current_value:
+		return false
 
+	var became_depleted: bool = current_value <= 0.0 and old_val > 0.0
+	var became_full: bool = current_value >= _cached_max and old_val < _cached_max
 	_notify_value_changed(is_regen)
-	
-	if current_value <= 0 and old_val > 0:
+
+	if became_depleted:
 		depleted.emit()
-	elif current_value >= _cached_max and old_val < _cached_max:
+	elif became_full:
 		full.emit()
+	return became_depleted
 
 ## Synchronizes the maximum and clamps the balance without publishing.
 func _refresh_maximum() -> bool:

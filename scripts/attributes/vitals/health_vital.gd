@@ -44,46 +44,52 @@ func apply_damage(damage_info: DamageInfo, owner_entity: Node) -> float:
 	if not is_instance_valid(damage_info):
 		push_error("HealthVital.apply_damage: damage_info is invalid")
 		return 0.0
+	if not is_finite(damage_info.final_damage):
+		return 0.0
 	
 	# 发出伤害接收信号（允许其他系统修改伤害，如护盾、减伤等）
 	damage_received.emit(damage_info)
 	# A synchronous listener may replace this Vital before the hit is committed.
-	if not _can_receive_damage():
+	if not _can_receive_damage() or not is_finite(damage_info.final_damage):
 		return 0.0
 	AbilityEventBus.trigger_game_event(&"damage_received", {
 		"damage_info": damage_info,
 		"target": owner_entity
 	})
-	if not _can_receive_damage():
+	if not _can_receive_damage() or not is_finite(damage_info.final_damage):
 		return 0.0
 	
 	# 获取最终伤害（可能已被 damage_received 监听者修改）
 	damage_info.final_damage = max(0.0, damage_info.final_damage)
-	# 应用伤害
-	_modify_value(-damage_info.final_damage)
+	var final_damage: float = damage_info.final_damage
+	var instigator: Node = damage_info.instigator
+	var lethal_hit: bool = _modify_value(-final_damage)
 	if not is_instance_valid(_owner_comp):
 		return 0.0
 	
 	# 发出伤害应用信号（UI系统可以监听这个信号来显示伤害飘字）
-	damage_applied.emit(damage_info, damage_info.final_damage)
+	damage_applied.emit(damage_info, final_damage)
 	if not is_instance_valid(_owner_comp):
-		return damage_info.final_damage
+		return final_damage
 	AbilityEventBus.trigger_game_event(&"damage_applied", {
 		"damage_info": damage_info,
 		"target": owner_entity
 	})
 
 	# 处理死亡
-	if is_instance_valid(_owner_comp) and not is_alive:
-		_die(damage_info.instigator, owner_entity)
+	if lethal_hit and is_instance_valid(_owner_comp):
+		var valid_instigator: Node = instigator if is_instance_valid(instigator) else null
+		var valid_owner: Node = owner_entity if is_instance_valid(owner_entity) else null
+		_die(valid_instigator, valid_owner)
 
 	# 返回最终伤害值（供 Cue 系统使用）
-	return damage_info.final_damage
+	return final_damage
 
 ## 受到治疗
 ## [param] amount: float 要增加的生命值数量
 func heal(amount: float) -> void:
-	if not is_alive: return
+	if not is_alive or not is_finite(amount):
+		return
 
 	_modify_value(amount)
 
