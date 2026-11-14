@@ -2,6 +2,14 @@ extends Node
 ## Tests source isolation, immutable registrations and invalid attribute definitions.
 
 const ModifierType = GameplayAttributeModifier.ModifierType
+
+class RewriteEffectSource extends GameplayAbilityModifier:
+	func on_effect_applied(effect: GameplayEffect, _target: Node, _instigator: Node, context: Dictionary) -> void:
+		if effect is GE_AttributeModifier:
+			context["source_id"] = &"other-effect"
+			context.erase(&"_gas_sub_effect_source")
+			context["stacks"] = 2
+
 var _failures: Array[String] = []
 
 class CombinedAttributes extends GameplayAttributeSet:
@@ -29,6 +37,7 @@ func _run() -> void:
 		"duplicate IDs preserve the first definition and other attributes still initialize")
 	_expect(not component.has_attribute(&"") and not component.has_attribute(&"  "), "blank IDs are skipped")
 	_test_effect_sources(target, component)
+	_test_effect_hook_source(target, component)
 	_test_composite_effect_sources(target, component)
 	_test_configured_child_isolation(target, component)
 	_test_modifier_snapshots(component)
@@ -62,6 +71,31 @@ func _test_effect_sources(target: Node, component: GameplayAttributeComponent) -
 	var removal_copy: GE_AttributeModifier = second.duplicate() as GE_AttributeModifier
 	removal_copy.remove(target, self, {"source_id": &"status-token"})
 	_expect(component.get_value(&"attack") == 10.0, "explicit context supports removal through a duplicate")
+
+func _test_effect_hook_source(target: Node, component: GameplayAttributeComponent) -> void:
+	var caster: Node = Node.new()
+	add_child(caster)
+	var modifier_component: GameplayModifierComponent = GameplayModifierComponent.new()
+	modifier_component.name = &"GameplayModifierComponent"
+	caster.add_child(modifier_component)
+	modifier_component.add_modifier(RewriteEffectSource.new())
+	var other: GE_AttributeModifier = _effect(4.0)
+	var other_context: Dictionary = {"source_id": &"other-effect"}
+	var effect: GE_AttributeModifier = _effect(3.0)
+	var child: GE_AttributeModifier = _effect(2.0)
+	child.modifiers[0].attribute_id = &"defense"
+	effect.sub_effects = [child]
+	for source: StringName in [&"", &"caller-source"]:
+		other.apply(target, self, other_context)
+		var context: Dictionary = {"source_id": source}
+		effect.apply(target, caster, context)
+		_expect(component.get_value(&"attack") == 20.0 and component.get_value(&"defense") == 6.0,
+			"effect hooks still update stacks for the effect and its child")
+		effect.remove(target, caster, context)
+		_expect(component.get_value(&"attack") == 14.0 and component.get_value(&"defense") == 2.0,
+			"removal uses the original caller source and preserves the other effect")
+		other.remove(target, self, other_context)
+	caster.free()
 
 func _test_composite_effect_sources(target: Node, component: GameplayAttributeComponent) -> void:
 	var child: GE_AttributeModifier = _effect(3.0)

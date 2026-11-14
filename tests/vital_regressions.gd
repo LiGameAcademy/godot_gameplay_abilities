@@ -22,6 +22,8 @@ func _run() -> void:
 	_test_reinitialize(failures)
 	_test_maximum_notifications(failures)
 	_test_alive_filter(failures)
+	_test_healing_after_zero_maximum(failures)
+	_test_lethal_hit_after_direct_health_write(failures)
 	_test_reinitialize_vital_notifications(failures)
 	_test_batch_vital_notifications(failures)
 	_test_vital_subscriber_updates_another_maximum(failures)
@@ -137,6 +139,58 @@ func _test_alive_filter(failures: Array[String]) -> void:
 		"target without a HealthVital still uses the death group", failures)
 	component.attribute_value_changed.disconnect(read_alive)
 	legacy.free()
+	target.free()
+
+func _test_healing_after_zero_maximum(failures: Array[String]) -> void:
+	var target: Node = Node.new()
+	add_child(target)
+	var component: GameplayVitalAttributeComponent = _add_vitals(target)
+	var health: HealthVital = component.get_vital(&"health") as HealthVital
+	var restored: Array[float] = []
+	var deaths: Array[Node] = []
+	component.health_depleted.connect(func(_id: StringName, instigator: Node) -> void: deaths.append(instigator))
+	var on_restored: Callable = func() -> void: restored.append(health.current_value)
+	health.health_restored.connect(on_restored)
+	component.set_base_value(&"max_health", 0.0)
+	_expect(not component.modify_vital(&"health", 2.0) and restored.is_empty(),
+		"healing fails while there is no health capacity", failures)
+	component.set_base_value(&"max_health", 4.0)
+	_expect(health.current_value == 0.0 and not health.is_alive,
+		"restoring capacity alone does not restore health", failures)
+	_expect(component.modify_vital(&"health", 2.0) and health.current_value == 2.0 and
+		health.is_alive and restored == [2.0] and deaths.is_empty(),
+		"healing after capacity returns restores health without reporting a kill", failures)
+	var lethal: DamageInfo = DamageInfo.new(self, self, 4.0)
+	lethal.final_damage = lethal.base_damage
+	health.apply_damage(lethal, target)
+	component.set_base_value(&"max_health", 0.0)
+	component.set_base_value(&"max_health", 4.0)
+	_expect(not component.modify_vital(&"health", 2.0) and health.current_value == 0.0 and
+		restored == [2.0] and deaths == [self],
+		"changing the maximum cannot make a killed target eligible for ordinary healing", failures)
+	health.health_restored.disconnect(on_restored)
+	target.free()
+
+func _test_lethal_hit_after_direct_health_write(failures: Array[String]) -> void:
+	var target: Node = Node.new()
+	add_child(target)
+	var component: GameplayVitalAttributeComponent = _add_vitals(target)
+	var health: HealthVital = component.get_vital(&"health") as HealthVital
+	component.set_base_value(&"max_health", 0.0)
+	component.set_base_value(&"max_health", 4.0)
+	# Existing consumers can set the balance directly when restoring game state.
+	health.current_value = 2.0
+	var callback_results: Array[bool] = []
+	health.value_changed.connect(func(current: float, _max: float, _fraction: float, _regen: bool) -> void:
+		if current == 0.0:
+			callback_results.append(component.modify_vital(&"health", 1.0))
+	)
+	var hit: DamageInfo = DamageInfo.new(self, self, 2.0)
+	hit.final_damage = 2.0
+	health.apply_damage(hit, target)
+	_expect(callback_results == [false] and target.is_in_group(&"death") and
+		not component.modify_vital(&"health", 1.0) and health.current_value == 0.0,
+		"a fresh lethal hit invalidates recovery from an earlier zero maximum", failures)
 	target.free()
 
 func _test_reinitialize_vital_notifications(failures: Array[String]) -> void:
