@@ -68,7 +68,14 @@ func _resolve_source_id(context: Dictionary) -> StringName:
 		return context_source
 	if not source_id.is_empty():
 		return StringName("effect." + source_id)
+	if context.has(_SUB_EFFECT_SOURCE_KEY):
+		return StringName(context[_SUB_EFFECT_SOURCE_KEY])
 	return StringName("effect.instance.%d" % get_instance_id())
+
+func _composite_source() -> String:
+	if source_id.is_empty():
+		return super()
+	return "effect.composite.source.%d.%s" % [source_id.length(), source_id]
 	
 	
 	

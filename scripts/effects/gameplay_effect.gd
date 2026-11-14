@@ -5,6 +5,8 @@ class_name GameplayEffect
 ## 游戏效果基类（抽象类）
 ## 所有具体效果都继承此类，实现 _apply 方法
 
+const _SUB_EFFECT_SOURCE_KEY: StringName = &"_gas_sub_effect_source"
+
 # --- 过滤与组合 ---
 @export var filters: Array[GameplayFilterData] = []  ## 过滤器，如果为空，则不过滤
 @export var sub_effects: Array[GameplayEffect] = []  ## 子效果，支持效果组合
@@ -94,32 +96,44 @@ func _execute_cue(target: Node, context: Dictionary) -> void:
 
 func _apply_sub_effects(target: Node, instigator: Node, context: Dictionary) -> void:
 	# 注意：子效果也需要克隆，避免运行时状态共享
-	for effect in sub_effects:
+	for index: int in range(sub_effects.size()):
+		var effect: GameplayEffect = sub_effects[index]
 		if not is_instance_valid(effect):
 			continue
 		
 		# 克隆子效果实例
-		var sub_effect_inst = effect.duplicate(true) as GameplayEffect
+		var sub_effect_inst: GameplayEffect = effect.duplicate(true) as GameplayEffect
 		if not is_instance_valid(sub_effect_inst):
 			continue
 		
 		# 递归应用子效果（每个子效果会自己执行完整的 apply 流程）
-		sub_effect_inst.apply(target, instigator, context)
+		sub_effect_inst.apply(target, instigator, _sub_effect_context(context, index))
 
 ## 移除子效果（内部方法，供基类和子类使用）
 ## [param] target: Node 目标节点
 ## [param] instigator: Node 施法者节点
 ## [param] context: 上下文信息
 func _remove_sub_effects(target: Node, instigator: Node, context: Dictionary) -> void:
-	for effect in sub_effects:
+	for index: int in range(sub_effects.size()):
+		var effect: GameplayEffect = sub_effects[index]
 		if not is_instance_valid(effect):
 			continue
 		# 克隆子效果实例
-		var sub_effect_inst = effect.duplicate(true) as GameplayEffect
+		var sub_effect_inst: GameplayEffect = effect.duplicate(true) as GameplayEffect
 		if not is_instance_valid(sub_effect_inst):
 			continue
 		
-		sub_effect_inst.remove(target, instigator, context)
+		sub_effect_inst.remove(target, instigator, _sub_effect_context(context, index))
+
+## Anonymous descendants use the root's source and their child indices.
+func _sub_effect_context(context: Dictionary, index: int) -> Dictionary:
+	var child_context: Dictionary = context.duplicate()
+	var parent_source: String = context.get(_SUB_EFFECT_SOURCE_KEY, _composite_source())
+	child_context[_SUB_EFFECT_SOURCE_KEY] = "%s.%d" % [parent_source, index]
+	return child_context
+
+func _composite_source() -> String:
+	return "effect.composite.instance.%d" % get_instance_id()
 
 @abstract func _apply(target: Node, instigator: Node, context: Dictionary)  -> void
 
