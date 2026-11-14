@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/godot_gameplay_abilities/tests/arpg_attribute_integration.gd" id="1"]
+
+[node name="ArpgAttributeIntegration" type="Node"]
+script = ExtResource("1")
