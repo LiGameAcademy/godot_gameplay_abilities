@@ -122,6 +122,13 @@ func _test_alive_filter(failures: Array[String]) -> void:
 	component.initialize()
 	_expect(alive.check(target, self, {}) and not dead.check(target, self, {}),
 		"replacement health becomes the source of truth again", failures)
+	var replacement: HealthVital = component.get_vital(&"health") as HealthVital
+	var lethal_hit: DamageInfo = DamageInfo.new(self, self, 4.0)
+	lethal_hit.final_damage = lethal_hit.base_damage
+	replacement.apply_damage(lethal_hit, target)
+	replacement.apply_damage(lethal_hit, target)
+	_expect(deaths == [self] and not alive.check(target, self, {}) and dead.check(target, self, {}),
+		"real damage after recovery reports one attributed kill and agrees with both filters", failures)
 	var legacy: Node = Node.new()
 	add_child(legacy)
 	_expect(alive.check(legacy, self, {}), "target without a HealthVital defaults to alive", failures)

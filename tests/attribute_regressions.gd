@@ -30,6 +30,7 @@ func _run() -> void:
 	_expect(not component.has_attribute(&"") and not component.has_attribute(&"  "), "blank IDs are skipped")
 	_test_effect_sources(target, component)
 	_test_composite_effect_sources(target, component)
+	_test_configured_child_isolation(target, component)
 	_test_modifier_snapshots(component)
 	_test_source_removal_batch()
 	_test_effect_apply_batch()
@@ -93,6 +94,25 @@ func _test_composite_effect_sources(target: Node, component: GameplayAttributeCo
 	copy.remove(target, self)
 	_expect(component.get_value(&"attack") == 10.0 and component.get_value(&"defense") == 2.0,
 		"a configured root source matches its anonymous descendants across copies")
+
+func _test_configured_child_isolation(target: Node, component: GameplayAttributeComponent) -> void:
+	var child: GE_AttributeModifier = _effect(3.0)
+	child.source_id = &"shared-child"
+	var first: GE_AttributeModifier = _effect(5.0)
+	var second: GE_AttributeModifier = _effect(7.0)
+	first.source_id = &"first-root"
+	first.sub_effects = [child]
+	second.sub_effects = [child]
+	child.apply(target, self)
+	first.apply(target, self)
+	second.apply(target, self)
+	var copy: GE_AttributeModifier = first.duplicate(true) as GE_AttributeModifier
+	copy.remove(target, self)
+	_expect(component.get_value(&"attack") == 23.0,
+		"removing a composed configured child preserves standalone and other composed uses")
+	second.remove(target, self)
+	child.remove(target, self)
+	_expect(component.get_value(&"attack") == 10.0, "each configured child use can be removed")
 
 func _test_modifier_snapshots(component: GameplayAttributeComponent) -> void:
 	var mod: GameplayAttributeModifier = GameplayAttributeModifier.new(&"attack", 3.0, ModifierType.ADD, &"gear")

@@ -2,8 +2,9 @@ extends GameplayEffect
 class_name GE_AttributeModifier
 
 @export var modifiers: Array[GameplayAttributeModifier] = []
-## Source for batch removal. Context takes precedence. Without an explicit source,
-## application and removal must use the same effect instance.
+## Source for batch removal. An explicit context source takes precedence.
+## A composed child uses its position under the root source to isolate each use.
+## Without either source, standalone application and removal must use the same instance.
 @export var source_id: StringName = &""
 @export var attribute_component_name : StringName = "GameplayVitalAttributeComponent"
 
@@ -66,10 +67,10 @@ func _resolve_source_id(context: Dictionary) -> StringName:
 	var context_source: StringName = context.get("source_id", &"")
 	if not context_source.is_empty():
 		return context_source
-	if not source_id.is_empty():
-		return StringName("effect." + source_id)
 	if context.has(_SUB_EFFECT_SOURCE_KEY):
 		return StringName(context[_SUB_EFFECT_SOURCE_KEY])
+	if not source_id.is_empty():
+		return StringName("effect." + source_id)
 	return StringName("effect.instance.%d" % get_instance_id())
 
 func _composite_source() -> String:
