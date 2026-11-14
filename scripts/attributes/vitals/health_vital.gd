@@ -6,6 +6,8 @@ class_name HealthVital
 
 const DEATH_GROUP_NAME: String = "death"
 
+var _recoverable_zero: bool = false
+
 ## 是否存活
 var is_alive: bool:
 	get:
@@ -27,9 +29,13 @@ signal damage_received(damage_info: DamageInfo)
 ## 受到伤害时发出（在计算减免之后）
 signal damage_applied(damage_info: DamageInfo, final_damage: float)
 
+func initialize(component: GameplayAttributeComponent) -> void:
+	super(component)
+	_recoverable_zero = get_max_value() == 0.0
+
 func modify_value(amount: float, is_regen: bool = false) -> void:
 	if amount >= 0:
-		heal(amount)
+		heal(amount, is_regen)
 	else:
 		_modify_value(amount, is_regen)
 
@@ -85,16 +91,28 @@ func apply_damage(damage_info: DamageInfo, owner_entity: Node) -> float:
 	# 返回最终伤害值（供 Cue 系统使用）
 	return final_damage
 
-## 受到治疗
-## [param] amount: float 要增加的生命值数量
-func heal(amount: float) -> void:
-	if not is_alive or not is_finite(amount):
-		return
-
-	_modify_value(amount)
-
-	# 发出治疗信号
+## Returns true when positive healing raises health. A zero caused by the maximum
+## can recover once capacity returns, while damage and payments cannot revive it.
+func heal(amount: float, is_regen: bool = false) -> bool:
+	if not is_instance_valid(_owner_comp) or not is_finite(amount) or amount <= 0.0:
+		return false
+	if not is_alive and not _recoverable_zero:
+		return false
+	var before: float = current_value
+	var maximum: float = get_max_value()
+	if before >= maximum or minf(before + amount, maximum) <= before:
+		return false
+	_recoverable_zero = false
+	_modify_value(amount, is_regen)
 	health_restored.emit()
+	return true
+
+func _refresh_maximum() -> bool:
+	var was_alive: bool = is_alive
+	var changed: bool = super()
+	if was_alive and current_value == 0.0:
+		_recoverable_zero = true
+	return changed
 
 func _can_receive_damage() -> bool:
 	return is_instance_valid(_owner_comp) and is_alive
