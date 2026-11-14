@@ -21,6 +21,7 @@ func _run() -> void:
 	_test_vital_ids(failures)
 	_test_reinitialize(failures)
 	_test_maximum_notifications(failures)
+	_test_alive_filter(failures)
 	_test_reinitialize_vital_notifications(failures)
 	_test_batch_vital_notifications(failures)
 	_test_vital_subscriber_updates_another_maximum(failures)
@@ -97,6 +98,46 @@ func _test_maximum_notifications(failures: Array[String]) -> void:
 	_expect(snapshots == [Vector3(4.0, 8.0, 0.5), Vector3(4.0, 6.0, 4.0 / 6.0), Vector3(2.0, 2.0, 1.0)],
 		"every maximum change emits one consistent snapshot", failures)
 	owner.free()
+
+func _test_alive_filter(failures: Array[String]) -> void:
+	var target: Node = Node.new()
+	add_child(target)
+	var component: GameplayVitalAttributeComponent = _add_vitals(target)
+	var health: HealthVital = component.get_vital(&"health") as HealthVital
+	var alive: FilterTargetIsAlive = FilterTargetIsAlive.new()
+	var dead: FilterTargetIsAlive = FilterTargetIsAlive.new()
+	dead.must_be_alive = false
+	var snapshots: Array[bool] = []
+	var deaths: Array[Node] = []
+	component.health_depleted.connect(func(_id: StringName, instigator: Node) -> void: deaths.append(instigator))
+	var read_alive: Callable = func(_id: StringName, _value: float) -> void:
+		snapshots.append(alive.check(target, self, {}))
+	component.attribute_value_changed.connect(read_alive)
+	_expect(alive.check(target, self, {}) and not dead.check(target, self, {}),
+		"positive health passes the living filter", failures)
+	component.set_base_value(&"max_health", 0.0)
+	_expect(not health.is_alive and not alive.check(target, self, {}) and dead.check(target, self, {}) and
+		snapshots == [false] and deaths.is_empty(),
+		"zero maximum is already visible to filter subscribers and awards no kill", failures)
+	component.initialize()
+	_expect(alive.check(target, self, {}) and not dead.check(target, self, {}),
+		"replacement health becomes the source of truth again", failures)
+	var replacement: HealthVital = component.get_vital(&"health") as HealthVital
+	var lethal_hit: DamageInfo = DamageInfo.new(self, self, 4.0)
+	lethal_hit.final_damage = lethal_hit.base_damage
+	replacement.apply_damage(lethal_hit, target)
+	replacement.apply_damage(lethal_hit, target)
+	_expect(deaths == [self] and not alive.check(target, self, {}) and dead.check(target, self, {}),
+		"real damage after recovery reports one attributed kill and agrees with both filters", failures)
+	var legacy: Node = Node.new()
+	add_child(legacy)
+	_expect(alive.check(legacy, self, {}), "target without a HealthVital defaults to alive", failures)
+	legacy.add_to_group(&"death")
+	_expect(not alive.check(legacy, self, {}) and dead.check(legacy, self, {}),
+		"target without a HealthVital still uses the death group", failures)
+	component.attribute_value_changed.disconnect(read_alive)
+	legacy.free()
+	target.free()
 
 func _test_reinitialize_vital_notifications(failures: Array[String]) -> void:
 	var owner: Node = Node.new()
