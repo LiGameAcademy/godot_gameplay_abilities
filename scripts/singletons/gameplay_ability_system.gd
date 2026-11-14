@@ -7,9 +7,11 @@ extends Node
 ## [param] entity: Node 实体节点
 ## [param] component_name: String 组件名称（如"GameplayAttributeComponent"）
 ## [returns] Node 组件节点，如果不存在则返回null
-func get_component_by_interface(entity: Node, component_name: String) -> Node:
+## Optional lookups can disable diagnostics for targets without the component.
+func get_component_by_interface(entity: Node, component_name: String, report_missing: bool = true) -> Node:
 	if not is_instance_valid(entity):
-		push_error("AbilitySystem: entity is not valid!")
+		if report_missing:
+			push_error("AbilitySystem: entity is not valid!")
 		return null
 	
 	var method_name : String = "get_" + component_name.to_snake_case()
@@ -22,5 +24,6 @@ func get_component_by_interface(entity: Node, component_name: String) -> Node:
 	if entity.has_node(component_name):
 		return entity.get_node(component_name)
 	
-	push_error("AbilitySystem: can not found component name: %s !" % component_name)
+	if report_missing:
+		push_error("AbilitySystem: can not found component name: %s !" % component_name)
 	return null
