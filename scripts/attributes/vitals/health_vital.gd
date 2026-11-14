@@ -107,6 +107,12 @@ func heal(amount: float, is_regen: bool = false) -> bool:
 	health_restored.emit()
 	return true
 
+func _modify_value(amount: float, is_regen: bool = false) -> bool:
+	# Consume stale capacity recovery before damage or payment can notify listeners.
+	if is_alive and is_finite(amount) and amount < 0.0:
+		_recoverable_zero = false
+	return super(amount, is_regen)
+
 func _refresh_maximum() -> bool:
 	var was_alive: bool = is_alive
 	var changed: bool = super()
