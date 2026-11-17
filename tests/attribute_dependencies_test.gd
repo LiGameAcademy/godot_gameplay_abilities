@@ -53,6 +53,7 @@ func _run() -> void:
 	_test_snapshots()
 	_test_listener_write()
 	_test_vital_listener_damage()
+	_test_vital_listener_spend()
 	_test_vital_listener_write(false)
 	_test_vital_listener_write(true)
 	_test_listener_modifier_writes()
@@ -322,4 +323,33 @@ func _test_vital_listener_damage() -> void:
 	component.modify_vital(&"health", -0.25)
 	var expected: Array[Vector2] = [Vector2(0.75, 0.75), Vector2(0.625, 0.625), Vector2(0.375, 0.375)]
 	_expect(first == expected and second == expected, "Vital deduction snapshots: %s / %s" % [first, second])
+	component.free()
+
+func _test_vital_listener_spend() -> void:
+	var component: GameplayVitalAttributeComponent = _precision_component()
+	var health: GameplayVital = component.get_vital(&"health")
+	var first: Array[Vector2] = []
+	var results: Array[bool] = []
+	var complete: Callable = func(paid: bool) -> void: results.append(paid)
+	var second: Array[Vector2] = []
+	component.vital_value_changed.connect(func(id: StringName, current: float, _max: float, _fraction: float, _regen: bool) -> void:
+		if id != &"health":
+			return
+		if current == 0.75:
+			_expect(not component.try_spend(&"health", 0.125), "reentrant synchronous payment must fail")
+			component.request_spend(&"health", 0.125, complete)
+			component.request_spend(&"health", 0.25, complete)
+			component.request_spend(&"health", 0.5, complete)
+		first.append(Vector2(current, health.current_value))
+	)
+	component.vital_value_changed.connect(func(id: StringName, current: float, _max: float, _fraction: float, _regen: bool) -> void:
+		if id == &"health":
+			second.append(Vector2(current, health.current_value))
+	)
+	health.current_value = 1.0
+	_expect(component.try_spend(&"health", 0.25) and health.current_value == 0.375,
+		"ordinary payment commits before returning")
+	_expect(results == [true, true, false], "payment outcomes follow request order")
+	var expected: Array[Vector2] = [Vector2(0.75, 0.75), Vector2(0.625, 0.625), Vector2(0.375, 0.375)]
+	_expect(first == expected and second == expected, "Vital payment snapshots: %s / %s" % [first, second])
 	component.free()

@@ -26,3 +26,5 @@ Known baseline: Godot 4.7.2 retains the `GameplayEffect` and `GameplayFilterData
 During attribute_value_changed or vital_value_changed, set_base_value() accepts valid writes and commits them in order after the current notifications finish. Both listeners see the same attribute and derived snapshot. The component also queues individual modifier additions/removals, batch additions and removal by source in the same order. Each batch is one queued operation. The list passed to add_modifiers() is copied when queued, and modifier resources are read when the operation commits. Use component APIs from public notification callbacks.
 
 In a component attribute or Vital value callback, modify_vital() returns true when the request is queued. Eligibility is evaluated against the balance and Vital state at commit. An ineligible request emits no value notification. Outside these callbacks the method returns the synchronous result.
+
+A nonzero try_spend() called during a component snapshot returns false. Use request_spend() to queue a payment in write order and receive its actual success result as a bool in the completion callback.
