@@ -29,6 +29,8 @@ def main():
             (["--editor", "--import"], None),
             (["--verbose", "--fixed-fps", "60", f"{test_root}/runtime_regressions.tscn", "--quit-after", "1800"],
              "PASS: GAS combo"),
+            (["--verbose", "--fixed-fps", "60", f"{test_root}/channeling_regressions.tscn", "--quit-after", "1800"],
+             "PASS: GAS channeling tree and missing-tree guard"),
             (["--verbose", "--fixed-fps", "60", f"{test_root}/vital_regressions.tscn", "--quit-after", "1800"],
              "PASS: GAS Vital lifecycle, payment and attributed damage"),
             (["--verbose", "--fixed-fps", "60", f"{test_root}/healing_regressions.tscn", "--quit-after", "1800"],

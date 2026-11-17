@@ -179,7 +179,7 @@ func can_activate_ability(ability_id: StringName, context: Dictionary = {}) -> b
 		push_error("GameplayAbilityComponent: Ability instance is not valid.")
 		return false
 
-	if ability_instance.disabled:
+	if ability_instance.disabled or not is_instance_valid(ability_instance.get_bt_instance()):
 		return false
 
 	context.ability = ability_instance
@@ -200,7 +200,7 @@ func try_activate_ability(ability_id: StringName, context: Dictionary = {}) -> b
 		push_error("GameplayAbilityComponent: Ability instance is not valid.")
 		return false
 	
-	if ability_instance.disabled:
+	if ability_instance.disabled or not is_instance_valid(ability_instance.get_bt_instance()):
 		return false
 
 	context.ability = ability_instance
