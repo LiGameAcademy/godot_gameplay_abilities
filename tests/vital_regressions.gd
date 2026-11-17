@@ -264,10 +264,10 @@ func _test_vital_subscriber_updates_another_maximum(failures: Array[String]) -> 
 				component.get_vital(&"mana").get_max_value(), component.get_vital_value(&"mana")))
 	)
 	component.remove_modifiers_by_source(&"gear")
-	_expect(mana_maxima == [3.0] and component.get_vital_value(&"mana") == 3.0,
-		"a subscriber write settles before the next queued Vital notification", failures)
-	_expect(mana_reads == [Vector3(3.0, 3.0, 3.0)],
-		"a later subscriber to the same signal sees settled attributes and Vitals", failures)
+	_expect(mana_maxima == [5.0, 3.0] and component.get_vital_value(&"mana") == 3.0,
+		"a subscriber write publishes after the current batch of Vital notifications", failures)
+	_expect(mana_reads == [Vector3(5.0, 5.0, 5.0)],
+		"a later subscriber to the same signal sees the current batch snapshot", failures)
 	owner.free()
 
 func _test_payment(failures: Array[String]) -> void:
