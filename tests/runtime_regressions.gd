@@ -368,6 +368,12 @@ func _test_combo_case(scenario: String) -> void:
 		step.execution_tree = node
 		combo.combo_steps.append(step)
 	component.learn_ability(combo)
+	var next: GameplayAbilityDefinition = GameplayAbilityDefinition.new()
+	next.ability_id = &"follow_up_cast"
+	next.execution_tree = BTWait.new()
+	component.learn_ability(next)
+	var completed: Array[GameplayAbilityInstance] = []
+	component.ability_completed.connect(func(finished: GameplayAbilityInstance) -> void: completed.append(finished))
 	var ability: GameplayAbilityInstance = component.get_ability_instance(combo.ability_id)
 	var cooldown: CooldownFeature = ability.get_feature("CooldownFeature") as CooldownFeature
 	var events: Array[StringName] = []
@@ -378,6 +384,8 @@ func _test_combo_case(scenario: String) -> void:
 			if event == &"ability_combo_step_failed":
 				var step_number: int = context.get("step_number", 0)
 				failures.append(Vector3(step_number, owner.get_meta("balance"), cooldown.get_cooldown_remaining(ability)))
+				if scenario == "second_step_failure":
+					_check(component.try_activate_ability(next.ability_id), "failure observer starts follow-up cast")
 	AbilityEventBus.game_event_occurred.connect(observe)
 	var accepted: bool = component.try_activate_ability(combo.ability_id)
 	_check(accepted and owner.get_meta("balance") == 1 and events == [&"ability_activated"]
@@ -424,6 +432,9 @@ func _test_combo_case(scenario: String) -> void:
 			and failures == [Vector3(fail_step, 0, 1)]
 			and events == [&"ability_activated", &"ability_committed", &"ability_combo_step_failed", &"ability_completed"],
 			scenario + ": stop on the failed segment and report its number after starting cooldown")
+		if scenario == "second_step_failure":
+			_check(completed == [ability] and component.get_current_casting_ability() == component.get_ability_instance(next.ability_id),
+				"original combo completes once and the next cast remains current")
 	else:
 		var expected_steps: Array[int] = [1]
 		if scenario == "full" or fail_step == 2:
