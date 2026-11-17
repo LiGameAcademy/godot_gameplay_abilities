@@ -112,7 +112,11 @@ func request_spend(vital_id: StringName, amount: float, completed: Callable, all
 func _complete_spend(vital_id: StringName, amount: float, completed: Callable, allow_overdraft: bool) -> void:
 	var paid: bool = try_spend(vital_id, amount, allow_overdraft)
 	if completed.is_valid():
+		# A queued payment can have older writes waiting behind it.
+		var was_emitting: bool = _emitting_snapshot
+		_emitting_snapshot = was_emitting or _publishing_changes
 		completed.call(paid)
+		_emitting_snapshot = was_emitting
 
 ## 获取 Vital 百分比
 ## [param] vital_id: StringName Vital ID

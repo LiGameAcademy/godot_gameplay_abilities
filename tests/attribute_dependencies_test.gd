@@ -54,6 +54,7 @@ func _run() -> void:
 	_test_listener_write()
 	_test_vital_listener_damage()
 	_test_vital_listener_spend()
+	_test_payment_completion_writes()
 	_test_vital_listener_write(false)
 	_test_vital_listener_write(true)
 	_test_listener_modifier_writes()
@@ -354,4 +355,48 @@ func _test_vital_listener_spend() -> void:
 	_expect(results == [true, true, false], "payment outcomes follow request order")
 	var expected: Array[Vector2] = [Vector2(0.75, 0.75), Vector2(0.625, 0.625), Vector2(0.375, 0.375)]
 	_expect(first == expected and second == expected, "Vital payment snapshots: %s / %s" % [first, second])
+	component.free()
+
+func _test_payment_completion_writes() -> void:
+	var component: GameplayVitalAttributeComponent = _precision_component()
+	var health: GameplayVital = component.get_vital(&"health")
+	health.current_value = 1.0
+	var first: Array[Vector4] = []
+	var second: Array[Vector4] = []
+	var outcomes: Array[bool] = []
+	var modifier: GameplayAttributeModifier = GameplayAttributeModifier.new(
+		&"root", 1.0, GameplayAttributeModifier.ModifierType.ADD, &"completion")
+	var snapshot: Callable = func(value: float) -> Vector4:
+		return Vector4(value, health.current_value, component.get_value(&"root"), component.get_value(&"scaled"))
+	var complete: Callable = func(paid: bool) -> void: outcomes.append(paid)
+	var first_complete: Callable = func(paid: bool) -> void:
+		outcomes.append(paid)
+		component.set_base_value(&"root", 2.0)
+		component.add_modifier(modifier)
+		component.remove_modifier(modifier)
+	component.vital_value_changed.connect(func(id: StringName, current: float, _max: float, _fraction: float, _regen: bool) -> void:
+		if id != &"health":
+			return
+		if current == 0.75:
+			component.request_spend(&"health", 0.125, first_complete)
+			component.request_spend(&"health", 0.25, complete)
+		first.append(snapshot.call(current))
+	)
+	component.vital_value_changed.connect(func(id: StringName, current: float, _max: float, _fraction: float, _regen: bool) -> void:
+		if id == &"health":
+			second.append(snapshot.call(current))
+	)
+	component.attribute_value_changed.connect(func(id: StringName, value: float) -> void:
+		if id == &"root":
+			_expect(value == component.get_value(id) and _precision_snapshot_matches(component),
+				"attribute listeners see settled dependencies")
+	)
+	component.try_spend(&"health", 0.25)
+	var expected: Array[Vector4] = [
+		Vector4(0.75, 0.75, 1.1, 110000), Vector4(0.625, 0.625, 1.1, 110000),
+		Vector4(0.375, 0.375, 1.1, 110000), Vector4(0.375, 0.375, 2, 200000),
+		Vector4(0.375, 0.375, 3, 300000), Vector4(0.375, 0.375, 2, 200000),
+	]
+	_expect(outcomes == [true, true] and first == expected and second == expected,
+		"payment completion writes preserve ordered snapshots: %s / %s" % [first, second])
 	component.free()
