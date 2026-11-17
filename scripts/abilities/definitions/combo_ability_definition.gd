@@ -168,8 +168,11 @@ func _build_combo_tree() -> BTNode:
 
 	# 1. 【头部】应用消耗 (无论第几段，只要触发技能就检查消耗)
 	# 如果你想只在第一段消耗，可以在 Switch 内部的第一段里加 Cost
-	var cost_node = AbilityNodeCommitCost.new()
+	var cost_node: AbilityNodeCommitCost = AbilityNodeCommitCost.new()
 	cost_node.node_id = "commit_cost"
+	cost_node.allow_missing_feature = costs.is_empty()
+	cost_node.report_commit_success = true
+	cost_node.report_commit_failure = true
 	root_sequence.children.append(cost_node)
 
 	# 2. 【中部】RepeatUntilFailure 包裹 Switch 选择器
@@ -265,7 +268,8 @@ func _build_combo_tree() -> BTNode:
 
 	# 3. 【尾部】应用冷却
 	# 当 RepeatUntilFailure 返回 FAILURE（某一段超时）时，执行 CD 并完成技能
-	var cd_node = AbilityNodeCommitCooldown.new()
+	var cd_node: AbilityNodeCommitCooldown = AbilityNodeCommitCooldown.new()
+	cd_node.allow_missing_feature = cooldown_duration <= 0.0
 	cd_node.node_id = "commit_cooldown"
 	root_sequence.children.append(cd_node)
 

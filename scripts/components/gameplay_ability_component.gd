@@ -208,6 +208,9 @@ func try_activate_ability(ability_id: StringName, context: Dictionary = {}) -> b
 	context.ability_id = ability_id
 	context.instigator = get_parent()
 	
+	if ability_instance.is_active and ability_instance.uses_default_combo():
+		return ability_instance.try_activate(context)
+
 	var modifiers: GameplayModifierComponent = modifier_component
 	if modifiers != null:
 		modifiers.notify_before_ability_cast(self, ability_instance, context)
@@ -218,7 +221,9 @@ func try_activate_ability(ability_id: StringName, context: Dictionary = {}) -> b
 
 	if modifiers != null:
 		var active_definition: ActiveAbilityDefinition = ability_instance.get_definition() as ActiveAbilityDefinition
-		if active_definition == null or not active_definition.uses_default_commit():
+		var uses_generated_commit: bool = ability_instance.uses_default_combo() or (
+			active_definition != null and active_definition.uses_default_commit())
+		if not uses_generated_commit:
 			modifiers.notify_after_ability_commit(self, ability_instance, context)
 		modifiers.notify_before_apply_ability(self, ability_instance, context.get("target_unit"), context)
 	# 设置当前正在执行的技能（用于后摇可取消机制）
@@ -236,7 +241,7 @@ func try_activate_ability(ability_id: StringName, context: Dictionary = {}) -> b
 	return true
 #endregion
 
-## Reports the generated active tree's payment outcome at its commit point.
+## Reports the generated tree's payment outcome at its commit point.
 func report_default_commit(ability: GameplayAbilityInstance, context: Dictionary, committed: bool) -> void:
 	if committed and is_instance_valid(modifier_component):
 		modifier_component.notify_after_ability_commit(self, ability, context)

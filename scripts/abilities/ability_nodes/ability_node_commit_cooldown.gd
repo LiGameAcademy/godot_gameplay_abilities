@@ -3,6 +3,7 @@ class_name AbilityNodeCommitCooldown
 
 @export var cooldown_feature_name: String = "CooldownFeature"
 var report_commit_success: bool = false
+var allow_missing_feature: bool = false
 
 func _tick(instance: BTInstance, delta: float) -> int:
 	var ability = instance.blackboard.get_var("ability_instance")
@@ -12,7 +13,7 @@ func _tick(instance: BTInstance, delta: float) -> int:
 	var cooldown_feature : CooldownFeature = ability.get_feature(cooldown_feature_name)
 	if is_instance_valid(cooldown_feature):
 		cooldown_feature.start_cooldown(ability)
-	elif not report_commit_success:
+	elif not (report_commit_success or allow_missing_feature):
 		push_error("AbilityNodeCommitCooldown: cooldown_feature is not valid!")
 		return Status.FAILURE
 	if report_commit_success:

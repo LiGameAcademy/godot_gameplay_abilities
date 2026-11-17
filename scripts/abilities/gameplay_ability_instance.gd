@@ -158,6 +158,10 @@ func _stop_targeting_visuals() -> void:
 func get_definition() -> GameplayAbilityDefinition:
 	return _definition
 
+## Generated combos treat reactivation as input for the running execution tree.
+func uses_default_combo() -> bool:
+	return _definition is ComboAbilityDefinition and _definition.execution_tree == null
+
 ## 尝试激活技能 (由 Player/Component 调用)
 func try_activate(context: Dictionary = {}) -> bool:
 	if disabled:
@@ -173,6 +177,9 @@ func try_activate(context: Dictionary = {}) -> bool:
 			_blackboard.set_var("event_input_received", false)
 			_blackboard.set_var("event_input_received", true)
 		
+		if uses_default_combo():
+			return true
+
 		# 检查所有特性的 can_activate
 		# 某些特性（如 ToggleFeature）可能允许在已激活时重新激活
 		if not can_activate(context):
@@ -254,6 +261,8 @@ func end_ability(final_status: int = BTNode.Status.SUCCESS) -> void:
 func can_activate(context: Dictionary = {}) -> bool:
 	if disabled:
 		return false
+	if is_active and uses_default_combo():
+		return true
 	# 如果技能已激活，先让所有特性有机会设置 skip 标志（如 ToggleFeature 设置 skip_cost/skip_cooldown）
 	# 然后再进行实际的检查
 	if is_active:
