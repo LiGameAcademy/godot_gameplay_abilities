@@ -2,50 +2,58 @@ extends GameplayAbilityFeature
 class_name CostFeature
 
 @export_group("Cost Settings")
-## 技能消耗器数组（支持多种消耗类型）
+## A single cost can use any implementation. Multiple costs must be built-in VitalCost resources.
 @export var costs: Array[AbilityCostBase] = []
 
 func _init() -> void:
 	super("CostFeature")
 
-#func on_activate(ability: GameplayAbilityInstance, context: Dictionary) -> void:
-	#try_pay(ability, context)
+func can_activate(_ability_instance: GameplayAbilityInstance, context: Dictionary) -> bool:
+	return _process_costs(context, false)
 
-func can_activate(ability_instance: GameplayAbilityInstance, context: Dictionary) -> bool:
+func try_pay(_ability_instance: GameplayAbilityInstance, context: Dictionary) -> bool:
+	return _process_costs(context, true)
+
+func _process_costs(context: Dictionary, pay: bool) -> bool:
 	if context.get("skip_cost", false):
 		return true
-	
-	var ability_comp = context.get("ability_component", null)
-	var instigator = context.get("instigator", null)
-
+	var ability_comp: Node = context.get("ability_component") as Node
+	var instigator: Node = context.get("instigator") as Node
 	if not is_instance_valid(ability_comp) or not is_instance_valid(instigator):
-		push_warning("can not found ability_component or instigator")
 		return false
 
-	# 检查是否可以支付所有消耗
-	for cost in costs:
-		if not is_instance_valid(cost):
-			continue
-		if not cost.can_pay(ability_comp, instigator):
-			return false
-
-	return true
-
-func try_pay(ability_instance: GameplayAbilityInstance, context: Dictionary) -> bool:
-	if context.get("skip_cost", false):
+	var valid_costs: Array[AbilityCostBase] = []
+	for cost: AbilityCostBase in costs:
+		if is_instance_valid(cost):
+			valid_costs.append(cost)
+	if valid_costs.is_empty():
 		return true
-	
-	var ability_comp = context.get("ability_component", null)
-	var instigator = context.get("instigator", null)
-	if not is_instance_valid(ability_comp) or not is_instance_valid(instigator):
-		push_warning("can not found ability_component or instigator")
-		return false
+	if valid_costs.size() == 1:
+		var cost: AbilityCostBase = valid_costs[0]
+		return cost.try_pay(ability_comp, instigator) if pay else cost.can_pay(ability_comp, instigator)
 
-	# 遍历所有消耗器，检查并消耗资源
-	for cost in costs:
-		if not is_instance_valid(cost):
-			continue
-		# 尝试支付消耗
-		if not cost.try_pay(ability_comp, instigator):
+	var component: GameplayVitalAttributeComponent = GameplayAbilitySystem.get_component_by_interface(
+		instigator, "GameplayAttributeComponent", false) as GameplayVitalAttributeComponent
+	if not is_instance_valid(component):
+		return false
+	var remaining: Dictionary[StringName, float] = {}
+	for cost: AbilityCostBase in valid_costs:
+		var vital_cost: VitalCost = cost as VitalCost
+		if vital_cost == null or vital_cost.get_script() != VitalCost:
 			return false
-	return true
+		if not is_finite(vital_cost.amount) or vital_cost.amount < 0.0:
+			return false
+		var id: StringName = vital_cost.vital_id
+		if not component.has_vital(id):
+			return false
+		var balance: float = remaining.get(id, component.get_vital_value(id))
+		if balance < vital_cost.amount and not (vital_cost.allow_overdraft and balance > 0.0):
+			return false
+		remaining[id] = maxf(0.0, balance - vital_cost.amount)
+	if not pay:
+		return true
+
+	var payments: Dictionary[StringName, float] = {}
+	for id: StringName in remaining:
+		payments[id] = component.get_vital_value(id) - remaining[id]
+	return component.try_spend_batch(payments)

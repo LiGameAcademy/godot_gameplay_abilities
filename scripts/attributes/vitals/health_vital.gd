@@ -121,6 +121,11 @@ func _modify_value(amount: float, is_regen: bool = false) -> bool:
 		_recoverable_zero = false
 	return super(amount, is_regen)
 
+func _apply_batch_payment(amount: float) -> void:
+	if is_alive and amount > 0.0:
+		_recoverable_zero = false
+	super(amount)
+
 func _refresh_maximum() -> bool:
 	var was_alive: bool = is_alive
 	var changed: bool = super()

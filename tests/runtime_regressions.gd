@@ -4,6 +4,7 @@ var _failed: int = 0
 func _ready() -> void:
 	call_deferred("_run")
 func _run() -> void:
+	_test_atomic_vital_costs()
 	_test_default_commit()
 	var debug_scene: PackedScene = load("res://addons/godot_gameplay_abilities/ui/bt_debug_panel.tscn") as PackedScene
 	var debug_window: Window = debug_scene.instantiate() as Window
@@ -178,5 +179,77 @@ func _test_default_commit() -> void:
 	_check(events == [&"ability_activated", &"ability_committed", &"ability_completed"]
 		and owner.get_meta("commit_hook", Vector2(-1, -1)).is_equal_approx(Vector2(0, 0.8)),
 		"successful payment and reduced cooldown are visible to the commit hook")
+	AbilityEventBus.game_event_occurred.disconnect(observe)
+	owner.free()
+
+func _test_atomic_vital_costs() -> void:
+	var owner: Node = Node.new()
+	add_child(owner)
+	var attributes: GameplayVitalAttributeComponent = GameplayVitalAttributeComponent.new()
+	attributes.name = &"GameplayAttributeComponent"
+	owner.add_child(attributes)
+	var definitions: GameplayAttributeSet = GameplayAttributeSet.new()
+	var vitals: Array[GameplayVital] = []
+	for id: StringName in [&"mana", &"stamina"]:
+		var maximum: GameplayAttribute = GameplayAttribute.new()
+		maximum.attribute_id = StringName("max_" + String(id))
+		definitions.attributes[maximum] = 7.0 if id == &"mana" else 2.0
+		var vital: GameplayVital = GameplayVital.new()
+		vital.vital_id = id
+		vital.max_value_attribute = maximum.attribute_id
+		vitals.append(vital)
+	attributes.initialize([definitions], vitals)
+	var component: GameplayAbilityComponent = GameplayAbilityComponent.new()
+	owner.add_child(component)
+	var definition: ActiveAbilityDefinition = ActiveAbilityDefinition.new()
+	definition.ability_id = &"atomic_cost"
+	definition.pre_cast_delay = 0.1
+	definition.cooldown_duration = 1.0
+	var stamina: VitalCost = VitalCost.new()
+	stamina.vital_id = &"stamina"
+	stamina.amount = 1.0
+	var first: VitalCost = VitalCost.new()
+	first.amount = 3.0
+	var second: VitalCost = VitalCost.new()
+	second.amount = 4.0
+	definition.costs = [stamina, first, second]
+	component.learn_ability(definition)
+	var ability: GameplayAbilityInstance = component.get_ability_instance(definition.ability_id)
+	var cooldown: CooldownFeature = ability.get_feature("CooldownFeature") as CooldownFeature
+	var snapshots: Array[Vector2] = []
+	var notifications: Array[StringName] = []
+	var events: Array[StringName] = []
+	var observe: Callable = func(event: StringName, context: Dictionary) -> void:
+		if context.get("ability_id") == definition.ability_id:
+			events.append(event)
+	AbilityEventBus.game_event_occurred.connect(observe)
+	attributes.vital_value_changed.connect(func(id: StringName, _current: float, _maximum: float, _fraction: float, _regen: bool) -> void:
+		notifications.append(id)
+		snapshots.append(Vector2(attributes.get_vital_value(&"mana"), attributes.get_vital_value(&"stamina")))
+	)
+	_check(attributes.try_spend(&"mana", 2.0), "prepare insufficient combined balance")
+	_check(not component.can_activate_ability(definition.ability_id), "preflight checks combined mana cost")
+	_check(attributes.modify_vital(&"mana", 2.0), "restore balance before activation")
+	_check(component.try_activate_ability(definition.ability_id), "accept affordable cast")
+	ability.update(0.05)
+	_check(attributes.try_spend(&"mana", 2.0), "balance falls during windup")
+	notifications.clear()
+	snapshots.clear()
+	ability.update(0.06)
+	_check(attributes.get_vital_value(&"mana") == 5.0 and attributes.get_vital_value(&"stamina") == 2.0
+		and notifications.is_empty() and cooldown.get_cooldown_remaining(ability) == 0.0
+		and events == [&"ability_activated", &"ability_commit_failed", &"ability_completed"],
+		"failed batch leaves all balances and cooldown untouched")
+	_check(attributes.modify_vital(&"mana", 2.0), "restore balance for retry")
+	notifications.clear()
+	snapshots.clear()
+	events.clear()
+	_check(component.try_activate_ability(definition.ability_id), "retry with enough mana")
+	ability.update(0.05)
+	ability.update(0.06)
+	_check(notifications == [&"stamina", &"mana"] and snapshots == [Vector2(0, 1), Vector2(0, 1)]
+		and cooldown.get_cooldown_remaining(ability) == 1.0
+		and events == [&"ability_activated", &"ability_committed", &"ability_completed"],
+		"successful batch exposes both final balances and commits once")
 	AbilityEventBus.game_event_occurred.disconnect(observe)
 	owner.free()

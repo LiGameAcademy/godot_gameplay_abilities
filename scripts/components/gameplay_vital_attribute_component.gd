@@ -101,6 +101,35 @@ func try_spend(vital_id: StringName, amount: float, allow_overdraft: bool = fals
 		get_vital(vital_id).modify_value(-amount)
 	return true
 
+## Commits all validated payments before publishing any changed balance.
+func try_spend_batch(payments: Dictionary[StringName, float]) -> bool:
+	for id: StringName in payments:
+		var amount: float = payments[id]
+		if not can_spend(id, amount) or (_emitting_snapshot and amount > 0.0):
+			return false
+
+	var changed: Array[GameplayVital] = []
+	var depleted: Array[GameplayVital] = []
+	for id: StringName in payments:
+		if payments[id] == 0.0:
+			continue
+		var vital: GameplayVital = get_vital(id)
+		var before: float = vital.current_value
+		vital._apply_batch_payment(payments[id])
+		if vital.current_value != before:
+			changed.append(vital)
+			if before > 0.0 and vital.current_value == 0.0:
+				depleted.append(vital)
+	if not changed.is_empty():
+		_emitting_snapshot = true
+		for vital: GameplayVital in changed:
+			vital._notify_value_changed()
+			if depleted.has(vital):
+				vital.depleted.emit()
+		_emitting_snapshot = false
+		_publish_changes()
+	return true
+
 ## Reports the actual payment outcome. During a snapshot or queue drain, executes in write order
 ## after the current notifications; otherwise completes in this call.
 func request_spend(vital_id: StringName, amount: float, completed: Callable, allow_overdraft: bool = false) -> void:
