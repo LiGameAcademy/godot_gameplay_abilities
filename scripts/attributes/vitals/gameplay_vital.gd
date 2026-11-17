@@ -110,6 +110,11 @@ func _modify_value(amount: float, is_regen: bool = false) -> bool:
 		full.emit()
 	return became_depleted
 
+## Writes a validated batch payment without notifying listeners.
+func _apply_batch_payment(amount: float) -> void:
+	_update_cached_max()
+	current_value = clampf(current_value - amount, 0.0, _cached_max)
+
 ## Synchronizes the maximum and clamps the balance without publishing.
 func _refresh_maximum() -> bool:
 	var old_max: float = _cached_max
