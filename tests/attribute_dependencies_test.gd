@@ -51,6 +51,7 @@ func _ready() -> void:
 
 func _run() -> void:
 	_test_snapshots()
+	_test_listener_write()
 	_test_cycle(false)
 	_test_cycle(true)
 	_test_small_writes(false)
@@ -208,3 +209,22 @@ func _add_attributes(attribute_set: GameplayAttributeSet, ids: Array[StringName]
 func _expect(condition: bool, label: String) -> void:
 	if not condition:
 		_failures.append(label)
+
+func _test_listener_write() -> void:
+	var component: GameplayVitalAttributeComponent = _precision_component()
+	var first: Array[Vector3] = []
+	var second: Array[Vector3] = []
+	component.attribute_value_changed.connect(func(id: StringName, value: float) -> void:
+		if id == &"root":
+			if value == 2.0:
+				component.set_base_value(&"root", 3.0)
+			first.append(Vector3(value, component.get_value(&"root"), component.get_value(&"scaled")))
+	)
+	component.attribute_value_changed.connect(func(id: StringName, value: float) -> void:
+		if id == &"root":
+			second.append(Vector3(value, component.get_value(&"root"), component.get_value(&"scaled")))
+	)
+	component.set_base_value(&"root", 2.0)
+	var expected: Array[Vector3] = [Vector3(2.0, 2.0, 200000.0), Vector3(3.0, 3.0, 300000.0)]
+	_expect(first == expected and second == expected, "listener writes preserve both snapshots: %s / %s" % [first, second])
+	component.free()

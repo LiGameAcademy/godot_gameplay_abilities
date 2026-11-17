@@ -13,6 +13,8 @@ var _pending_changes: Dictionary[StringName, float] = {}
 var _change_batch_depth: int = 0
 var _needs_notification_preparation: bool = false
 var _publishing_changes: bool = false
+var _emitting_attribute_change: bool = false
+var _listener_writes: Array[Callable] = []
 
 ## Publishes every changed final value after synchronous dependencies have settled.
 signal attribute_value_changed(id: StringName, new_val: float)
@@ -72,6 +74,7 @@ func get_attribute(id: StringName) -> GameplayAttributeInstance:
 ## 设置基础值
 ## [param] id: StringName 属性ID
 ## [param] val: float 新的基础值
+## Writes requested by attribute signal listeners commit after the current snapshot is published.
 func set_base_value(id: StringName, val: float) -> bool:
 	if not is_finite(val):
 		push_warning("GameplayAttributeComponent: ignored non-finite base value for '%s'" % id)
@@ -80,6 +83,9 @@ func set_base_value(id: StringName, val: float) -> bool:
 		var instance: GameplayAttributeInstance = _attributes[id]
 		if instance.base_value != val and _is_dependency_cycle(id):
 			return false
+		if _emitting_attribute_change:
+			_listener_writes.append(set_base_value.bind(id, val))
+			return true
 		instance.base_value = val
 		return true
 	push_warning("AttributeComponent: can not set base value: %s" %id)
@@ -185,8 +191,12 @@ func _publish_changes() -> void:
 	while true:
 		_prepare_pending_notifications()
 		if _pending_changes.is_empty():
-			if not _publish_next_followup_notification():
+			if _publish_next_followup_notification():
+				continue
+			if _listener_writes.is_empty():
 				break
+			var write: Callable = _listener_writes.pop_front()
+			write.call()
 			continue
 		var id: StringName = _pending_changes.keys()[0]
 		var old_value: float = _pending_changes[id]
@@ -195,7 +205,9 @@ func _publish_changes() -> void:
 		if is_instance_valid(instance):
 			var value: float = instance.get_value()
 			if old_value != value:
+				_emitting_attribute_change = true
 				attribute_value_changed.emit(id, value)
+				_emitting_attribute_change = false
 	_publishing_changes = false
 
 ## 处理依赖关系
