@@ -208,14 +208,15 @@ func try_activate_ability(ability_id: StringName, context: Dictionary = {}) -> b
 	var modifiers: GameplayModifierComponent = modifier_component
 	if modifiers != null:
 		modifiers.notify_before_ability_cast(self, ability_instance, context)
-	# 正常执行技能：检查消耗和冷却（由 Ability 自己处理）
-	# 注意：冷却检查、冷却时间计算、冷却缩减应用都由 Ability._commit_cast() 处理
+	# Activation accepts the cast. The generated active tree commits after windup.
 	if not ability_instance.try_activate(context):
 		push_error("GameplayAbilityComponent: Ability %s try activate failed." % ability_instance.get_definition().ability_id)
 		return false
 
 	if modifiers != null:
-		modifiers.notify_after_ability_commit(self, ability_instance, context)
+		var active_definition: ActiveAbilityDefinition = ability_instance.get_definition() as ActiveAbilityDefinition
+		if active_definition == null or not active_definition.uses_default_commit():
+			modifiers.notify_after_ability_commit(self, ability_instance, context)
 		modifiers.notify_before_apply_ability(self, ability_instance, context.get("target_unit"), context)
 	# 设置当前正在执行的技能（用于后摇可取消机制）
 	_current_casting_ability = ability_instance
@@ -231,6 +232,16 @@ func try_activate_ability(ability_id: StringName, context: Dictionary = {}) -> b
 		ability_instance.ability_completed.connect(_on_ability_completed)
 	return true
 #endregion
+
+## Reports the generated active tree's payment outcome at its commit point.
+func report_default_commit(ability: GameplayAbilityInstance, context: Dictionary, committed: bool) -> void:
+	if committed and is_instance_valid(modifier_component):
+		modifier_component.notify_after_ability_commit(self, ability, context)
+	var event: StringName = &"ability_committed" if committed else &"ability_commit_failed"
+	AbilityEventBus.trigger_game_event(event, {
+		"entity": get_parent(),
+		"ability_id": ability.get_definition().ability_id,
+	})
 
 ## 强制中断当前技能（任何阶段都可以中断）
 ## 注意：这与后摇取消（can_interrupt）不同，强制中断可以在前摇阶段执行

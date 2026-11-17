@@ -30,3 +30,5 @@ In a component attribute or Vital value callback, modify_vital() returns true wh
 A nonzero try_spend() called during a component snapshot returns false. Use request_spend() to queue a payment in write order and receive its actual success result as a bool in the completion callback.
 
 While the write queue is draining, payment completion callbacks follow the same write rules as snapshot listeners. Their attribute, modifier and Vital requests append to the queue. Nonzero synchronous payments are rejected during those callbacks; request_spend() reports the result after executing.
+
+For a generated ActiveAbilityDefinition tree, ability_activated means the cast was accepted. After windup the tree pays the cost before starting cooldown. The after-commit modifier hook and ability_committed event observe a successful commit; a rejected payment emits ability_commit_failed, followed by the usual ability_completed lifecycle event. Cooldown reduction is prepared before casting so the commit hook can observe the started timer.

@@ -4,7 +4,7 @@ class_name ActiveAbilityDefinition
 ## 简易主动技能模板
 ## 
 ## 用途：
-## 快速创建标准的 "动画 -> 前摇 -> 冷却 -> 效果 -> 后摇" 流程的技能。
+## 快速创建标准的 "动画 -> 前摇 -> 扣费 -> 冷却与提交 -> 效果 -> 后摇" 流程的技能。
 ## 如果需要更复杂的逻辑，请直接使用基类 GameplayAbilityDefinition 并手动配置 Execution Tree。
 
 @export_group("Quick Config")
@@ -54,6 +54,10 @@ func create_instance(owner: Node) -> GameplayAbilityInstance:
 	_inject_features_to_instance(instance)
 
 	return instance
+
+## The generated tree owns commit reporting. Custom trees keep their existing lifecycle.
+func uses_default_commit() -> bool:
+	return not is_instance_valid(execution_tree)
 
 ## 获取执行树（优先使用用户配置，否则使用缓存的默认树）
 ## 符合享元模式：所有实例共享同一个行为树
@@ -115,17 +119,18 @@ func _build_default_behavior_tree(include_cooldown: bool = true, include_cost: b
 		wait.node_id = "pre_cast_delay"
 		nodes.append(wait)
 
-	# 3. 提交冷却 (前摇结束后进CD)
-	if include_cooldown:
-		var commit_cd = AbilityNodeCommitCooldown.new()
-		commit_cd.node_id = "commit_cooldown"
-		nodes.append(commit_cd)
-
-	# 4. 提交消耗
+	# Finish paying before the cast commits or starts its cooldown.
 	if include_cost and not costs.is_empty():
-		var commit_cost = AbilityNodeCommitCost.new()
+		var commit_cost: AbilityNodeCommitCost = AbilityNodeCommitCost.new()
 		commit_cost.node_id = "commit_cost"
+		commit_cost.report_commit_failure = include_cooldown
 		nodes.append(commit_cost)
+
+	if include_cooldown:
+		var commit_cd: AbilityNodeCommitCooldown = AbilityNodeCommitCooldown.new()
+		commit_cd.node_id = "commit_cooldown"
+		commit_cd.report_commit_success = true
+		nodes.append(commit_cd)
 
 	# 5. 查找目标
 	if is_instance_valid(targeting_strategy):

@@ -9,6 +9,7 @@ class_name AbilityNodeCommitCost
 ## 如果消耗失败，节点返回 FAILURE，中断技能执行。
 
 @export var cost_feature_name: String = "CostFeature"
+var report_commit_failure: bool = false
 
 func _tick(instance: BTInstance, delta: float) -> int:
 	var ability = instance.blackboard.get_var("ability_instance")
@@ -24,5 +25,10 @@ func _tick(instance: BTInstance, delta: float) -> int:
 	if context.is_empty():
 		push_warning("AbilityNodeCommitCooldown: context is empty!")
 
-	# 进 CD 通常不会失败
-	return Status.SUCCESS if cost_feature.try_pay(ability, context) else Status.FAILURE
+	if cost_feature.try_pay(ability, context):
+		return Status.SUCCESS
+	if report_commit_failure:
+		var component: GameplayAbilityComponent = context.get("ability_component") as GameplayAbilityComponent
+		if is_instance_valid(component):
+			component.report_default_commit(ability, context, false)
+	return Status.FAILURE
