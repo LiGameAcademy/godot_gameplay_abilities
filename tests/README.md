@@ -28,3 +28,5 @@ During attribute_value_changed or vital_value_changed, set_base_value() accepts 
 In a component attribute or Vital value callback, modify_vital() returns true when the request is queued. Eligibility is evaluated against the balance and Vital state at commit. An ineligible request emits no value notification. Outside these callbacks the method returns the synchronous result.
 
 A nonzero try_spend() called during a component snapshot returns false. Use request_spend() to queue a payment in write order and receive its actual success result as a bool in the completion callback.
+
+While the write queue is draining, payment completion callbacks follow the same write rules as snapshot listeners. Their attribute, modifier and Vital requests append to the queue. Nonzero synchronous payments are rejected during those callbacks; request_spend() reports the result after executing.
