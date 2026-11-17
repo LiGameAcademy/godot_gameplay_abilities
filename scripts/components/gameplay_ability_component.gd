@@ -359,6 +359,13 @@ func _on_ability_completed(ability: GameplayAbilityInstance) -> void:
 	if not is_instance_valid(ability):
 		return
 		
+	if ability.uses_default_combo() and ability.combo_failed_step > 0:
+		AbilityEventBus.trigger_game_event(&"ability_combo_step_failed", {
+			"entity": get_parent(),
+			"ability_id": ability.get_definition().ability_id,
+			"step_number": ability.combo_failed_step,
+		})
+
 	# 只有当前正在执行的技能才需要结束
 	if _current_casting_ability != ability:
 		return

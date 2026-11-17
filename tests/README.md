@@ -38,3 +38,5 @@ CostFeature validates built-in VitalCost groups against a running balance for ea
 Generated combo trees accept the cast once. Follow-up input advances the running combo without checking costs again. The opening cost node reports success after payment and before the first step, including a free combo, or reports failure without executing a step. Finishing all steps or timing out the follow-up window starts configured cooldown at the end.
 
 For a generated combo, forced cancellation before successful payment has no cost or cooldown. After successful payment, including a free cast, cancellation retains the committed cost and starts configured cooldown before completion observers run. A cancellation requested synchronously during payment is applied once the outcome is known.
+
+After a generated combo commits, a segment body returning FAILURE ends the combo, retains payment and starts the configured cooldown. The ability_combo_step_failed event includes a one-based step_number. The lifecycle still ends with ability_completed. A completed final step or an input-window timeout does not emit the segment failure event.
