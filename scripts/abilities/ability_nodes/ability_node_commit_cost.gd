@@ -29,4 +29,5 @@ func _tick(instance: BTInstance, _delta: float) -> int:
 		var component: GameplayAbilityComponent = context.get("ability_component") as GameplayAbilityComponent
 		if is_instance_valid(component):
 			component.report_default_commit(ability, context, paid)
-	return Status.SUCCESS if paid else Status.FAILURE
+	# A commit observer may synchronously end the combo.
+	return Status.SUCCESS if paid and (not report_commit_success or ability.is_active) else Status.FAILURE

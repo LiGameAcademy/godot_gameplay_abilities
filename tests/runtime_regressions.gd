@@ -319,9 +319,11 @@ class ProbeModifier extends GameplayAbilityModifier:
 		var hooks: Array = owner.get_meta("hooks")
 		hooks.append(owner.get_meta("balance"))
 		owner.set_meta("steps_at_commit", owner.get_meta("steps").size())
+		if owner.get_meta("cancel_on_commit", false):
+			_component.cancel_ability(_ability.get_definition().ability_id)
 
 func _test_combo_commit() -> void:
-	for scenario: String in ["full", "timeout", "late_cost_failure", "no_cost", "no_cost_no_cooldown"]:
+	for scenario: String in ["full", "timeout", "late_cost_failure", "cancel_on_commit", "no_cost", "no_cost_no_cooldown"]:
 		_test_combo_case(scenario)
 
 func _test_combo_case(scenario: String) -> void:
@@ -330,6 +332,7 @@ func _test_combo_case(scenario: String) -> void:
 	owner.set_meta("balance", 1)
 	owner.set_meta("steps", [])
 	owner.set_meta("hooks", [])
+	owner.set_meta("cancel_on_commit", scenario == "cancel_on_commit")
 	var component: GameplayAbilityComponent = GameplayAbilityComponent.new()
 	owner.add_child(component)
 	component.set_process(false)
@@ -377,6 +380,11 @@ func _test_combo_case(scenario: String) -> void:
 			and cooldown.get_cooldown_remaining(ability) == 0.0 and not ability.is_active
 			and events == [&"ability_activated", &"ability_commit_failed", &"ability_completed"],
 			"combo commit failure runs no segments, success hook or cooldown")
+	elif scenario == "cancel_on_commit":
+		_check(owner.get_meta("hooks") == [0] and owner.get_meta("steps").is_empty()
+			and not ability.is_active and cooldown.get_cooldown_remaining(ability) == 0.0
+			and events == [&"ability_activated", &"ability_committed", &"ability_completed", &"ability_cancelled"],
+			"commit-hook cancellation stops before the first step and follows the commit event")
 	else:
 		var expected_steps: Array[int] = [1]
 		if scenario == "full":
