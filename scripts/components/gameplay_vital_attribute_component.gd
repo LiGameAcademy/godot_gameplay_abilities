@@ -111,9 +111,13 @@ func get_vital_percent(vital_id: StringName) -> float:
 ## [param] amount: float 修改量（正数为增加，负数为减少）
 ## [return] bool 是否成功修改
 ## Positive health changes succeed only when healing increases health.
+## During a snapshot callback, true means queued; eligibility is checked at commit.
 func modify_vital(vital_id: StringName, amount: float) -> bool:
 	if not has_vital(vital_id) or not is_finite(amount):
 		return false
+	if _emitting_snapshot:
+		_listener_writes.append(modify_vital.bind(vital_id, amount))
+		return true
 	if amount < 0 and not has_sufficient_vital(vital_id, -amount):
 		return false
 

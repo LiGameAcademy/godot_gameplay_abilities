@@ -52,6 +52,7 @@ func _ready() -> void:
 func _run() -> void:
 	_test_snapshots()
 	_test_listener_write()
+	_test_vital_listener_damage()
 	_test_vital_listener_write(false)
 	_test_vital_listener_write(true)
 	_test_listener_modifier_writes()
@@ -297,4 +298,28 @@ func _test_vital_listener_write(direct: bool) -> void:
 		component.set_base_value(&"root", 2.0)
 	var expected: Array[Vector3] = [Vector3(2, 2, 2), Vector3(3, 3, 3), Vector3(4, 4, 4)]
 	_expect(first == expected and second == expected, "Vital listener snapshots: %s / %s" % [first, second])
+	component.free()
+
+func _test_vital_listener_damage() -> void:
+	var component: GameplayVitalAttributeComponent = _precision_component()
+	var health: GameplayVital = component.get_vital(&"health")
+	var first: Array[Vector2] = []
+	var second: Array[Vector2] = []
+	component.vital_value_changed.connect(func(id: StringName, current: float, _max: float, _fraction: float, _regen: bool) -> void:
+		if id != &"health":
+			return
+		if current == 0.75:
+			_expect(component.modify_vital(&"health", -0.125), "first listener deduction accepted")
+			_expect(component.modify_vital(&"health", -0.25), "second listener deduction accepted")
+			_expect(component.modify_vital(&"health", -0.5), "third request is accepted into the queue before balance validation")
+		first.append(Vector2(current, health.current_value))
+	)
+	component.vital_value_changed.connect(func(id: StringName, current: float, _max: float, _fraction: float, _regen: bool) -> void:
+		if id == &"health":
+			second.append(Vector2(current, health.current_value))
+	)
+	health.current_value = 1.0
+	component.modify_vital(&"health", -0.25)
+	var expected: Array[Vector2] = [Vector2(0.75, 0.75), Vector2(0.625, 0.625), Vector2(0.375, 0.375)]
+	_expect(first == expected and second == expected, "Vital deduction snapshots: %s / %s" % [first, second])
 	component.free()
