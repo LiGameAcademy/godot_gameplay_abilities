@@ -4,6 +4,7 @@ var _failed: int = 0
 func _ready() -> void:
 	call_deferred("_run")
 func _run() -> void:
+	_test_disabled_cast()
 	_test_atomic_vital_costs()
 	_test_default_commit()
 	var debug_scene: PackedScene = load("res://addons/godot_gameplay_abilities/ui/bt_debug_panel.tscn") as PackedScene
@@ -251,5 +252,50 @@ func _test_atomic_vital_costs() -> void:
 		and cooldown.get_cooldown_remaining(ability) == 1.0
 		and events == [&"ability_activated", &"ability_committed", &"ability_completed"],
 		"successful batch exposes both final balances and commits once")
+	AbilityEventBus.game_event_occurred.disconnect(observe)
+	owner.free()
+
+func _test_disabled_cast() -> void:
+	var owner: Node = Node.new()
+	add_child(owner)
+	owner.set_meta("balance", 1)
+	var component: GameplayAbilityComponent = GameplayAbilityComponent.new()
+	owner.add_child(component)
+	var definition: ActiveAbilityDefinition = ActiveAbilityDefinition.new()
+	definition.ability_id = &"disabled_cast"
+	definition.disabled = true
+	definition.cooldown_duration = 1.0
+	definition.costs = [WindupCost.new()]
+	component.learn_ability(definition)
+	var ability: GameplayAbilityInstance = component.get_ability_instance(definition.ability_id)
+	var cd: CooldownFeature = ability.get_feature("CooldownFeature") as CooldownFeature
+	var events: Array[StringName] = []
+	var observe: Callable = func(event: StringName, context: Dictionary) -> void:
+		if context.get("ability_id") == definition.ability_id:
+			events.append(event)
+	AbilityEventBus.game_event_occurred.connect(observe)
+
+	_check(not component.can_activate_ability(definition.ability_id), "disabled definition rejects preflight")
+	_check(not component.try_activate_ability(definition.ability_id), "disabled definition rejects direct component activation")
+	_check(not ability.try_activate(), "disabled instance rejects direct activation")
+	ability.update(0.01)
+	_check(owner.get_meta("balance") == 1 and cd.get_cooldown_remaining(ability) == 0.0
+		and not ability.is_active and events.is_empty(), "disabled cast has no payment, cooldown or events")
+
+	component.enable_ability(definition.ability_id)
+	var other_instance: GameplayAbilityInstance = definition.create_instance(owner)
+	_check(not ability.disabled and other_instance.disabled and definition.disabled,
+		"runtime enabling does not mutate the shared definition or another instance")
+	other_instance.dispose()
+	component.disable_ability(definition.ability_id)
+	_check(not component.can_activate_ability(definition.ability_id)
+		and not component.try_activate_ability(definition.ability_id), "runtime disable blocks both entries")
+	component.enable_ability(definition.ability_id)
+	_check(component.can_activate_ability(definition.ability_id)
+		and component.try_activate_ability(definition.ability_id), "re-enabled cast can start")
+	ability.update(0.01)
+	_check(owner.get_meta("balance") == 0 and cd.get_cooldown_remaining(ability) == 1.0
+		and events == [&"ability_activated", &"ability_committed", &"ability_completed"],
+		"re-enabled cast pays, starts cooldown and emits normally")
 	AbilityEventBus.game_event_occurred.disconnect(observe)
 	owner.free()
