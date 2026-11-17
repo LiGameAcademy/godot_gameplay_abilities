@@ -11,6 +11,10 @@ var _blackboard: BTBlackboard = null
 
 # 【核心状态】技能是否正在执行（行为树是否在跑）
 var is_active: bool = false
+## Generated combo payment state for the current cast.
+var combo_committed: bool = false
+var combo_payment_in_progress: bool = false
+var combo_cancel_pending: bool = false
 ## Runtime availability, initialized from the shared definition.
 var disabled: bool = false
 
@@ -203,6 +207,10 @@ func try_activate(context: Dictionary = {}) -> bool:
 	if not can_activate(context):
 		return false
 
+	combo_committed = false
+	combo_payment_in_progress = false
+	combo_cancel_pending = false
+
 	# 2. 注入初始黑板数据（在设置 is_active 之前）
 	if is_instance_valid(_blackboard):
 		_blackboard.clear() # 清理上一轮的残留
@@ -239,10 +247,15 @@ func update(delta: float) -> void:
 			end_ability(result)
 
 ## 结束技能
-func end_ability(final_status: int = BTNode.Status.SUCCESS) -> void:
+func end_ability(final_status: int = BTNode.Status.SUCCESS, forced_cancel: bool = false) -> void:
 	if not is_active: return
 
 	is_active = false
+	# Apply cooldown before completion observers can try to cast again.
+	if forced_cancel and uses_default_combo() and combo_committed:
+		var cooldown: CooldownFeature = get_feature("CooldownFeature") as CooldownFeature
+		if is_instance_valid(cooldown):
+			cooldown.start_cooldown(self)
 	_stop_runtime_cues()
 	
 	# 通知特性技能结束了

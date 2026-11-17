@@ -274,7 +274,14 @@ func cancel_ability(ability_id: StringName = &"", context: Dictionary = {}) -> v
 	if not is_instance_valid(ability_instance):
 		return
 
-	ability_instance.end_ability(BTNode.Status.FAILURE)
+	if ability_instance.uses_default_combo():
+		if not ability_instance.is_active:
+			return
+		if ability_instance.combo_payment_in_progress:
+			ability_instance.combo_cancel_pending = true
+			return
+
+	ability_instance.end_ability(BTNode.Status.FAILURE, true)
 	AbilityEventBus.trigger_game_event(&"ability_cancelled", {
 		"entity": get_parent(),
 		"ability_id": target_id

@@ -322,8 +322,14 @@ class ProbeModifier extends GameplayAbilityModifier:
 		if owner.get_meta("cancel_on_commit", false):
 			_component.cancel_ability(_ability.get_definition().ability_id)
 
+class CancelDuringPayment extends WindupCost:
+	func _try_pay(component: Node, owner: Node) -> bool:
+		var paid: bool = super(component, owner)
+		(component as GameplayAbilityComponent).cancel_ability(&"cancel_during_payment")
+		return paid
+
 func _test_combo_commit() -> void:
-	for scenario: String in ["full", "timeout", "late_cost_failure", "cancel_on_commit", "no_cost", "no_cost_no_cooldown"]:
+	for scenario: String in ["full", "timeout", "late_cost_failure", "cancel_before_tick", "cancel_after_first", "cancel_on_commit", "cancel_during_payment", "no_cost", "no_cost_no_cooldown"]:
 		_test_combo_case(scenario)
 
 func _test_combo_case(scenario: String) -> void:
@@ -345,7 +351,8 @@ func _test_combo_case(scenario: String) -> void:
 	combo.window_duration = 0.2
 	combo.cooldown_duration = 0.0 if scenario == "no_cost_no_cooldown" else 1.0
 	if not scenario.begins_with("no_cost"):
-		combo.costs = [WindupCost.new()]
+		var cost: AbilityCostBase = CancelDuringPayment.new() if scenario == "cancel_during_payment" else WindupCost.new()
+		combo.costs = [cost]
 	for index: int in range(2):
 		var step: ActiveAbilityDefinition = ActiveAbilityDefinition.new()
 		var node: ProbeStep = ProbeStep.new()
@@ -366,7 +373,11 @@ func _test_combo_case(scenario: String) -> void:
 		and owner.get_meta("hooks").is_empty(), scenario + ": acceptance has no commit or payment")
 	if scenario == "late_cost_failure":
 		owner.set_meta("balance", 0)
+	if scenario == "cancel_before_tick":
+		component.cancel_ability(combo.ability_id)
 	ability.update(0.01)
+	if scenario == "cancel_after_first":
+		component.cancel_ability(combo.ability_id)
 	var first_cd: float = cooldown.get_cooldown_remaining(ability) if cooldown != null else 0.0
 	if scenario == "full":
 		_check(component.can_activate_ability(combo.ability_id) and component.try_activate_ability(combo.ability_id),
@@ -380,11 +391,20 @@ func _test_combo_case(scenario: String) -> void:
 			and cooldown.get_cooldown_remaining(ability) == 0.0 and not ability.is_active
 			and events == [&"ability_activated", &"ability_commit_failed", &"ability_completed"],
 			"combo commit failure runs no segments, success hook or cooldown")
-	elif scenario == "cancel_on_commit":
-		_check(owner.get_meta("hooks") == [0] and owner.get_meta("steps").is_empty()
-			and not ability.is_active and cooldown.get_cooldown_remaining(ability) == 0.0
+	elif scenario == "cancel_before_tick":
+		_check(owner.get_meta("balance") == 1 and owner.get_meta("steps").is_empty()
+			and owner.get_meta("hooks").is_empty() and not ability.is_active and first_cd == 0.0
+			and events == [&"ability_activated", &"ability_completed", &"ability_cancelled"],
+			"cancel before commit leaves balance and cooldown untouched")
+		_check(component.can_activate_ability(combo.ability_id), "pre-commit cancellation permits an immediate retry")
+	elif scenario.begins_with("cancel_"):
+		var expected: Array[int] = []
+		if scenario == "cancel_after_first":
+			expected.append(1)
+		_check(owner.get_meta("balance") == 0 and owner.get_meta("hooks") == [0]
+			and owner.get_meta("steps") == expected and not ability.is_active and first_cd == 1.0
 			and events == [&"ability_activated", &"ability_committed", &"ability_completed", &"ability_cancelled"],
-			"commit-hook cancellation stops before the first step and follows the commit event")
+			scenario + ": retain payment and start cooldown without executing more steps")
 	else:
 		var expected_steps: Array[int] = [1]
 		if scenario == "full":
