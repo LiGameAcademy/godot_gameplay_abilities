@@ -52,6 +52,7 @@ func _ready() -> void:
 func _run() -> void:
 	_test_snapshots()
 	_test_listener_write()
+	_test_listener_modifier_writes()
 	_test_cycle(false)
 	_test_cycle(true)
 	_test_small_writes(false)
@@ -227,4 +228,43 @@ func _test_listener_write() -> void:
 	component.set_base_value(&"root", 2.0)
 	var expected: Array[Vector3] = [Vector3(2.0, 2.0, 200000.0), Vector3(3.0, 3.0, 300000.0)]
 	_expect(first == expected and second == expected, "listener writes preserve both snapshots: %s / %s" % [first, second])
+	component.free()
+
+func _test_listener_modifier_writes() -> void:
+	var component: GameplayVitalAttributeComponent = _precision_component()
+	var first: Array[Vector4] = []
+	var second: Array[Vector4] = []
+	var single: GameplayAttributeModifier = GameplayAttributeModifier.new(&"root", 1.0, GameplayAttributeModifier.ModifierType.ADD, &"single")
+	var batch: Array[GameplayAttributeModifier] = [
+		GameplayAttributeModifier.new(&"root", 2.0, GameplayAttributeModifier.ModifierType.ADD, &"batch"),
+		GameplayAttributeModifier.new(&"root", 4.0, GameplayAttributeModifier.ModifierType.ADD, &"batch"),
+	]
+	var snapshot: Callable = func(value: float) -> Vector4:
+		return Vector4(value, component.get_value(&"root"),
+			component.get_attribute(&"root").base_value, component.get_value(&"scaled"))
+	component.attribute_value_changed.connect(func(id: StringName, value: float) -> void:
+		if id != &"root":
+			return
+		if value == 2.0:
+			component.add_modifier(single)
+			_expect(snapshot.call(value) == Vector4(2, 2, 2, 200000), "single addition changed in-flight snapshot: %s" % snapshot.call(value))
+			component.add_modifiers(batch)
+			component.remove_modifier(single)
+			component.set_base_value(&"root", 3.0)
+			component.remove_modifiers_by_source(&"batch")
+			component.add_modifier(single)
+		first.append(snapshot.call(value))
+	)
+	component.attribute_value_changed.connect(func(id: StringName, value: float) -> void:
+		if id == &"root":
+			second.append(snapshot.call(value))
+	)
+	component.set_base_value(&"root", 2.0)
+	var expected: Array[Vector4] = [
+		Vector4(2, 2, 2, 200000), Vector4(3, 3, 2, 300000),
+		Vector4(9, 9, 2, 900000), Vector4(8, 8, 2, 800000),
+		Vector4(9, 9, 3, 900000), Vector4(3, 3, 3, 300000), Vector4(4, 4, 3, 400000),
+	]
+	_expect(first == expected and second == expected,
+		"modifier listener writes preserve ordered snapshots: %s / %s" % [first, second])
 	component.free()
