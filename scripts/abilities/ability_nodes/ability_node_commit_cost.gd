@@ -10,25 +10,24 @@ class_name AbilityNodeCommitCost
 
 @export var cost_feature_name: String = "CostFeature"
 var report_commit_failure: bool = false
+var report_commit_success: bool = false
+var allow_missing_feature: bool = false
 
-func _tick(instance: BTInstance, delta: float) -> int:
-	var ability = instance.blackboard.get_var("ability_instance")
+func _tick(instance: BTInstance, _delta: float) -> int:
+	var ability: GameplayAbilityInstance = instance.blackboard.get_var("ability_instance") as GameplayAbilityInstance
 	if not is_instance_valid(ability):
-		push_error("AbilityNodeCommitCooldown: ability is not valid!")
+		push_error("AbilityNodeCommitCost: ability is not valid!")
 		return Status.FAILURE
-	var cost_feature : CostFeature = ability.get_feature(cost_feature_name)
-	if not is_instance_valid(cost_feature):
-		push_error("AbilityNodeCommitCooldown: cost_feature is not valid!")
-		return Status.FAILURE
-
-	var context : Dictionary = instance.blackboard.get_var("context", {})
-	if context.is_empty():
-		push_warning("AbilityNodeCommitCooldown: context is empty!")
-
-	if cost_feature.try_pay(ability, context):
-		return Status.SUCCESS
-	if report_commit_failure:
+	var cost_feature: CostFeature = ability.get_feature(cost_feature_name) as CostFeature
+	var context: Dictionary = instance.blackboard.get_var("context", {})
+	var paid: bool = allow_missing_feature
+	if is_instance_valid(cost_feature):
+		paid = cost_feature.try_pay(ability, context)
+	elif not allow_missing_feature:
+		push_error("AbilityNodeCommitCost: cost feature is not valid!")
+	if (paid and report_commit_success) or (not paid and report_commit_failure):
 		var component: GameplayAbilityComponent = context.get("ability_component") as GameplayAbilityComponent
 		if is_instance_valid(component):
-			component.report_default_commit(ability, context, false)
-	return Status.FAILURE
+			component.report_default_commit(ability, context, paid)
+	# A commit observer may synchronously end the combo.
+	return Status.SUCCESS if paid and (not report_commit_success or ability.is_active) else Status.FAILURE

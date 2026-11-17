@@ -4,6 +4,7 @@ var _failed: int = 0
 func _ready() -> void:
 	call_deferred("_run")
 func _run() -> void:
+	_test_combo_commit()
 	_test_disabled_cast()
 	_test_atomic_vital_costs()
 	_test_default_commit()
@@ -297,5 +298,105 @@ func _test_disabled_cast() -> void:
 	_check(owner.get_meta("balance") == 0 and cd.get_cooldown_remaining(ability) == 1.0
 		and events == [&"ability_activated", &"ability_committed", &"ability_completed"],
 		"re-enabled cast pays, starts cooldown and emits normally")
+	AbilityEventBus.game_event_occurred.disconnect(observe)
+	owner.free()
+
+class ProbeStep extends BTNode:
+	@export var index: int = 0
+
+	func _tick(instance: BTInstance, _delta: float) -> int:
+		var context: Dictionary = instance.blackboard.get_var("context", {})
+		var owner: Node = context["instigator"]
+		var steps: Array = owner.get_meta("steps")
+		steps.append(index)
+		return Status.SUCCESS
+
+class ProbeModifier extends GameplayAbilityModifier:
+	func on_after_ability_commit(
+		_component: GameplayAbilityComponent, _ability: GameplayAbilityInstance, context: Dictionary
+	) -> void:
+		var owner: Node = context["instigator"]
+		var hooks: Array = owner.get_meta("hooks")
+		hooks.append(owner.get_meta("balance"))
+		owner.set_meta("steps_at_commit", owner.get_meta("steps").size())
+		if owner.get_meta("cancel_on_commit", false):
+			_component.cancel_ability(_ability.get_definition().ability_id)
+
+func _test_combo_commit() -> void:
+	for scenario: String in ["full", "timeout", "late_cost_failure", "cancel_on_commit", "no_cost", "no_cost_no_cooldown"]:
+		_test_combo_case(scenario)
+
+func _test_combo_case(scenario: String) -> void:
+	var owner: Node = Node.new()
+	add_child(owner)
+	owner.set_meta("balance", 1)
+	owner.set_meta("steps", [])
+	owner.set_meta("hooks", [])
+	owner.set_meta("cancel_on_commit", scenario == "cancel_on_commit")
+	var component: GameplayAbilityComponent = GameplayAbilityComponent.new()
+	owner.add_child(component)
+	component.set_process(false)
+	var modifiers: GameplayModifierComponent = GameplayModifierComponent.new()
+	owner.add_child(modifiers)
+	component.modifier_component = modifiers
+	modifiers.add_modifier(ProbeModifier.new())
+	var combo: ComboAbilityDefinition = ComboAbilityDefinition.new()
+	combo.ability_id = StringName(scenario)
+	combo.window_duration = 0.2
+	combo.cooldown_duration = 0.0 if scenario == "no_cost_no_cooldown" else 1.0
+	if not scenario.begins_with("no_cost"):
+		combo.costs = [WindupCost.new()]
+	for index: int in range(2):
+		var step: ActiveAbilityDefinition = ActiveAbilityDefinition.new()
+		var node: ProbeStep = ProbeStep.new()
+		node.index = index + 1
+
+		step.execution_tree = node
+		combo.combo_steps.append(step)
+	component.learn_ability(combo)
+	var ability: GameplayAbilityInstance = component.get_ability_instance(combo.ability_id)
+	var cooldown: CooldownFeature = ability.get_feature("CooldownFeature") as CooldownFeature
+	var events: Array[StringName] = []
+	var observe: Callable = func(event: StringName, context: Dictionary) -> void:
+		if context.get("ability_id") == combo.ability_id:
+			events.append(event)
+	AbilityEventBus.game_event_occurred.connect(observe)
+	var accepted: bool = component.try_activate_ability(combo.ability_id)
+	_check(accepted and owner.get_meta("balance") == 1 and events == [&"ability_activated"]
+		and owner.get_meta("hooks").is_empty(), scenario + ": acceptance has no commit or payment")
+	if scenario == "late_cost_failure":
+		owner.set_meta("balance", 0)
+	ability.update(0.01)
+	var first_cd: float = cooldown.get_cooldown_remaining(ability) if cooldown != null else 0.0
+	if scenario == "full":
+		_check(component.can_activate_ability(combo.ability_id) and component.try_activate_ability(combo.ability_id),
+		"follow-up works after spending the last point")
+		ability.update(0.01)
+		ability.update(0.01)
+	elif scenario == "timeout" or scenario.begins_with("no_cost"):
+		ability.update(0.3)
+	if scenario == "late_cost_failure":
+		_check(owner.get_meta("steps").is_empty() and owner.get_meta("hooks").is_empty()
+			and cooldown.get_cooldown_remaining(ability) == 0.0 and not ability.is_active
+			and events == [&"ability_activated", &"ability_commit_failed", &"ability_completed"],
+			"combo commit failure runs no segments, success hook or cooldown")
+	elif scenario == "cancel_on_commit":
+		_check(owner.get_meta("hooks") == [0] and owner.get_meta("steps").is_empty()
+			and not ability.is_active and cooldown.get_cooldown_remaining(ability) == 0.0
+			and events == [&"ability_activated", &"ability_committed", &"ability_completed", &"ability_cancelled"],
+			"commit-hook cancellation stops before the first step and follows the commit event")
+	else:
+		var expected_steps: Array[int] = [1]
+		if scenario == "full":
+			expected_steps.append(2)
+		var expected_balance: int = 1 if scenario.begins_with("no_cost") else 0
+		_check(owner.get_meta("steps") == expected_steps and owner.get_meta("balance") == expected_balance
+			and owner.get_meta("hooks") == [expected_balance] and owner.get_meta("steps_at_commit") == 0,
+			scenario + ": whole cost commits once before the first segment")
+		var final_cd: float = cooldown.get_cooldown_remaining(ability) if cooldown != null else 0.0
+		_check(first_cd == 0.0 and not ability.is_active
+			and final_cd == combo.cooldown_duration
+			and events == [&"ability_activated", &"ability_committed", &"ability_completed"],
+			scenario + ": no reactivation event and cooldown starts only on exit")
 	AbilityEventBus.game_event_occurred.disconnect(observe)
 	owner.free()
