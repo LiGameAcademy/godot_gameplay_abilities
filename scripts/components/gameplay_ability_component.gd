@@ -42,7 +42,7 @@ func _process(delta: float) -> void:
 	# 统一调用所有技能的 update 方法（符合开闭原则）
 	# 技能会在自己的 update 中管理冷却时间
 	for ability_id in _learned_abilities:
-		var ability_instance : GameplayAbilityInstance = _learned_abilities[ability_id]
+		var ability_instance: GameplayAbilityInstance = get_ability_instance(ability_id)
 		if not is_instance_valid(ability_instance):
 			continue
 
@@ -113,7 +113,7 @@ func forget_ability(ability_id: StringName) -> void:
 	if not _learned_abilities.has(ability_id):
 		push_warning("GameplayAbilityComponent: Ability %s not found." % ability_id)
 		return
-	var ability_instance : GameplayAbilityInstance = _learned_abilities[ability_id]
+	var ability_instance: GameplayAbilityInstance = get_ability_instance(ability_id)
 	# 取消订阅信号
 	if not is_instance_valid(ability_instance):
 		push_warning("GameplayAbilityComponent: Ability %s not found." % ability_id)
@@ -139,7 +139,7 @@ func forget_ability(ability_id: StringName) -> void:
 ## 禁用技能
 ## [param] ability_id: StringName 技能ID
 func disable_ability(ability_id: StringName) -> void:
-	var ability_instance : GameplayAbilityInstance = _learned_abilities[ability_id]
+	var ability_instance: GameplayAbilityInstance = get_ability_instance(ability_id)
 	if is_instance_valid(ability_instance):
 		ability_instance.disabled = true
 	else:
@@ -149,7 +149,7 @@ func disable_ability(ability_id: StringName) -> void:
 ## 启用技能
 ## [param] ability_id: StringName 技能ID
 func enable_ability(ability_id: StringName) -> void:
-	var ability_instance : GameplayAbilityInstance = _learned_abilities[ability_id]
+	var ability_instance: GameplayAbilityInstance = get_ability_instance(ability_id)
 	if is_instance_valid(ability_instance):
 		ability_instance.disabled = false
 	else:
@@ -200,6 +200,9 @@ func try_activate_ability(ability_id: StringName, context: Dictionary = {}) -> b
 		push_error("GameplayAbilityComponent: Ability instance is not valid.")
 		return false
 	
+	if ability_instance.disabled:
+		return false
+
 	context.ability = ability_instance
 	context.ability_component = self
 	context.ability_id = ability_id
