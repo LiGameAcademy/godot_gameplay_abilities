@@ -14,7 +14,7 @@ var _change_batch_depth: int = 0
 var _needs_notification_preparation: bool = false
 var _publishing_changes: bool = false
 
-## Publishes the final value after synchronous dependency updates have settled.
+## Publishes every changed final value after synchronous dependencies have settled.
 signal attribute_value_changed(id: StringName, new_val: float)
 
 ## 初始化属性组件
@@ -46,7 +46,7 @@ func initialize(sets: Array[GameplayAttributeSet] = []) -> void:
 		if not has_attribute(id):
 			continue
 		var old_value: float = previous_values[id]
-		if is_equal_approx(old_value, _attributes[id].get_value()):
+		if old_value == _attributes[id].get_value():
 			_pending_changes.erase(id)
 		else:
 			_pending_changes[id] = old_value
@@ -194,7 +194,7 @@ func _publish_changes() -> void:
 		var instance: GameplayAttributeInstance = get_attribute(id)
 		if is_instance_valid(instance):
 			var value: float = instance.get_value()
-			if not is_equal_approx(old_value, value):
+			if old_value != value:
 				attribute_value_changed.emit(id, value)
 	_publishing_changes = false
 

@@ -104,9 +104,9 @@ func _set_base_value(val: float) -> void:
 
 ## 内部通知：数据变化时触发重新计算
 func _on_data_changed() -> void:
-	var old_val = _cached_final_value
+	var old_val: float = _cached_final_value
 	_dirty = true
-	var new_val = get_value()
-	# 如果值发生变化，发出信号
-	if not is_equal_approx(old_val, new_val):
+	var new_val: float = get_value()
+	# Tiny effective changes can be amplified by dependencies; never discard them.
+	if old_val != new_val:
 		value_changed.emit(old_val, new_val)

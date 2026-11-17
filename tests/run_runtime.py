@@ -31,6 +31,8 @@ def main():
              "PASS: GAS combo"),
             (["--verbose", "--fixed-fps", "60", f"{test_root}/vital_regressions.tscn", "--quit-after", "1800"],
              "PASS: GAS Vital lifecycle, payment and attributed damage"),
+            (["--verbose", "--fixed-fps", "60", f"{test_root}/healing_regressions.tscn", "--quit-after", "1800"],
+             "PASS: GAS actual healing events and reentrant recovery"),
             (["--verbose", "--fixed-fps", "60", f"{test_root}/attribute_regressions.tscn", "--quit-after", "1800"],
              "PASS: GAS attribute sources, snapshots and definitions"),
             (["--verbose", "--fixed-fps", "60", f"{test_root}/attribute_dependencies_test.tscn", "--quit-after", "1800"],

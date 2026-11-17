@@ -94,18 +94,26 @@ func apply_damage(damage_info: DamageInfo, owner_entity: Node) -> float:
 ## Returns true when positive healing raises health. A zero caused by the maximum
 ## can recover once capacity returns, while damage and payments cannot revive it.
 func heal(amount: float, is_regen: bool = false) -> bool:
+	return apply_healing(amount, is_regen) > 0.0
+
+## Returns the health restored by this write, excluding synchronous listener writes.
+## A rejected heal returns zero; this does not revive targets killed by damage.
+func apply_healing(amount: float, is_regen: bool = false) -> float:
 	if not is_instance_valid(_owner_comp) or not is_finite(amount) or amount <= 0.0:
-		return false
+		return 0.0
 	if not is_alive and not _recoverable_zero:
-		return false
+		return 0.0
+	_update_cached_max()
 	var before: float = current_value
 	var maximum: float = get_max_value()
-	if before >= maximum or minf(before + amount, maximum) <= before:
-		return false
+	var restored: float = minf(before + amount, maximum) - before
+	if restored <= 0.0:
+		return 0.0
+	# Capture this transaction before value_changed/health_restored can reenter.
 	_recoverable_zero = false
 	_modify_value(amount, is_regen)
 	health_restored.emit()
-	return true
+	return restored
 
 func _modify_value(amount: float, is_regen: bool = false) -> bool:
 	# Consume stale capacity recovery before damage or payment can notify listeners.

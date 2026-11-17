@@ -1,8 +1,7 @@
 extends GameplayEffect
 class_name GE_ApplyHealing
 
-## 应用治疗效果
-## 恢复目标的生命值
+## Restores health and reports only the amount committed by this application.
 
 @export var healing_multiplier: float = 1.0 ## 治疗倍数
 @export var vital_id : StringName = &"health"
@@ -11,12 +10,13 @@ class_name GE_ApplyHealing
 @export var instigator_attribute_comp_name : StringName = &"GameplayAttributeComponent"
 
 func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
-	var vital_comp = GameplayAbilitySystem.get_component_by_interface(target, vital_comp_name)
+	context["final_healing"] = 0.0
+	var vital_comp: GameplayVitalAttributeComponent = GameplayAbilitySystem.get_component_by_interface(target, vital_comp_name) as GameplayVitalAttributeComponent
 	if not vital_comp:
 		push_error("GE_ApplyHealing: Target %s has no %s component" % [target.name, vital_comp_name])
 		return
 	
-	var health_vital : HealthVital = vital_comp.get_vital(vital_id)
+	var health_vital: HealthVital = vital_comp.get_vital(vital_id) as HealthVital
 	if not health_vital:
 		push_error("GE_ApplyHealing: Target %s has no %s vital" % [target.name, vital_id])
 		return
@@ -26,11 +26,10 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 		push_error("GE_ApplyHealing: Instigator %s has no %s component" % [instigator.name, instigator_attribute_comp_name])
 		return
 
-	var base_healing = attribute_comp.get_value(base_healing_attribute)
-	var final_healing = base_healing * healing_multiplier
-	
-	# 应用治疗
-	health_vital.heal(final_healing)
+	var base_healing: float = attribute_comp.get_value(base_healing_attribute)
+	var final_healing: float = health_vital.apply_healing(base_healing * healing_multiplier)
+	if final_healing <= 0.0:
+		return
 	
 	# 将最终治疗值添加到上下文，供 Cue 使用
 	context["final_healing"] = final_healing
