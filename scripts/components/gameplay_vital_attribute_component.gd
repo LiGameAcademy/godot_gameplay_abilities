@@ -191,7 +191,11 @@ func _publish_next_followup_notification() -> bool:
 func _on_vital_value_changed(current: float, max: float, percent: float, is_regen: bool, vital_id: StringName) -> void:
 	# A direct payment or damage can publish a newer snapshot while a maximum update is queued.
 	_pending_vital_changes.erase(vital_id)
+	var was_emitting: bool = _emitting_snapshot
+	_emitting_snapshot = true
 	vital_value_changed.emit(vital_id, current, max, percent, is_regen)
+	_emitting_snapshot = was_emitting
+	_publish_changes()
 
 ## Vital 耗尽回调
 ## [param] vital_id: StringName Vital ID

@@ -52,6 +52,8 @@ func _ready() -> void:
 func _run() -> void:
 	_test_snapshots()
 	_test_listener_write()
+	_test_vital_listener_write(false)
+	_test_vital_listener_write(true)
 	_test_listener_modifier_writes()
 	_test_cycle(false)
 	_test_cycle(true)
@@ -267,4 +269,32 @@ func _test_listener_modifier_writes() -> void:
 	]
 	_expect(first == expected and second == expected,
 		"modifier listener writes preserve ordered snapshots: %s / %s" % [first, second])
+	component.free()
+
+func _test_vital_listener_write(direct: bool) -> void:
+	var component: GameplayVitalAttributeComponent = _precision_component()
+	if direct:
+		component.set_base_value(&"root", 2.0)
+	var first: Array[Vector3] = []
+	var second: Array[Vector3] = []
+	var snapshot: Callable = func(maximum: float) -> Vector3:
+		return Vector3(maximum, component.get_value(&"max_health"), component.get_vital(&"health").get_max_value())
+	component.vital_value_changed.connect(func(id: StringName, _current: float, maximum: float, _percent: float, _regen: bool) -> void:
+		if id != &"health":
+			return
+		if maximum == 2.0:
+			component.set_base_value(&"root", 3.0)
+			component.set_base_value(&"root", 4.0)
+		first.append(snapshot.call(maximum))
+	)
+	component.vital_value_changed.connect(func(id: StringName, _current: float, maximum: float, _percent: float, _regen: bool) -> void:
+		if id == &"health":
+			second.append(snapshot.call(maximum))
+	)
+	if direct:
+		component.get_vital(&"health").modify_value(-0.5)
+	else:
+		component.set_base_value(&"root", 2.0)
+	var expected: Array[Vector3] = [Vector3(2, 2, 2), Vector3(3, 3, 3), Vector3(4, 4, 4)]
+	_expect(first == expected and second == expected, "Vital listener snapshots: %s / %s" % [first, second])
 	component.free()

@@ -13,7 +13,7 @@ var _pending_changes: Dictionary[StringName, float] = {}
 var _change_batch_depth: int = 0
 var _needs_notification_preparation: bool = false
 var _publishing_changes: bool = false
-var _emitting_attribute_change: bool = false
+var _emitting_snapshot: bool = false
 var _listener_writes: Array[Callable] = []
 
 ## Publishes every changed final value after synchronous dependencies have settled.
@@ -74,7 +74,7 @@ func get_attribute(id: StringName) -> GameplayAttributeInstance:
 ## 设置基础值
 ## [param] id: StringName 属性ID
 ## [param] val: float 新的基础值
-## Writes requested by attribute signal listeners commit after the current snapshot is published.
+## Writes requested by attribute or Vital signal listeners commit after the current snapshot is published.
 func set_base_value(id: StringName, val: float) -> bool:
 	if not is_finite(val):
 		push_warning("GameplayAttributeComponent: ignored non-finite base value for '%s'" % id)
@@ -83,7 +83,7 @@ func set_base_value(id: StringName, val: float) -> bool:
 		var instance: GameplayAttributeInstance = _attributes[id]
 		if instance.base_value != val and _is_dependency_cycle(id):
 			return false
-		if _emitting_attribute_change:
+		if _emitting_snapshot:
 			_listener_writes.append(set_base_value.bind(id, val))
 			return true
 		instance.base_value = val
@@ -100,7 +100,7 @@ func has_attribute(id: StringName) -> bool:
 ## 添加属性修改器
 ## [param] mod: GameplayAttributeModifier 修改器实例
 func add_modifier(mod: GameplayAttributeModifier) -> void:
-	if _emitting_attribute_change:
+	if _emitting_snapshot:
 		_listener_writes.append(add_modifier.bind(mod))
 		return
 	if is_instance_valid(mod) and _attributes.has(mod.attribute_id):
@@ -108,7 +108,7 @@ func add_modifier(mod: GameplayAttributeModifier) -> void:
 
 ## Applies the modifiers before publishing settled component notifications.
 func add_modifiers(modifiers: Array[GameplayAttributeModifier]) -> void:
-	if _emitting_attribute_change:
+	if _emitting_snapshot:
 		_listener_writes.append(add_modifiers.bind(modifiers.duplicate()))
 		return
 	_begin_change_batch()
@@ -119,7 +119,7 @@ func add_modifiers(modifiers: Array[GameplayAttributeModifier]) -> void:
 ## 移除属性修改器
 ## [param] mod: GameplayAttributeModifier 修改器实例
 func remove_modifier(mod: GameplayAttributeModifier) -> void:
-	if _emitting_attribute_change:
+	if _emitting_snapshot:
 		_listener_writes.append(remove_modifier.bind(mod))
 		return
 	for instance: GameplayAttributeInstance in _attributes.values():
@@ -128,7 +128,7 @@ func remove_modifier(mod: GameplayAttributeModifier) -> void:
 ## 根据 source_id 批量移除属性修改器
 ## [param] source_id: StringName 来源ID
 func remove_modifiers_by_source(source_id: StringName) -> void:
-	if _emitting_attribute_change:
+	if _emitting_snapshot:
 		_listener_writes.append(remove_modifiers_by_source.bind(source_id))
 		return
 	if source_id.is_empty():
@@ -192,7 +192,7 @@ func _prepare_pending_notifications() -> void:
 		_prepare_attribute_notifications(_pending_changes)
 
 func _publish_changes() -> void:
-	if _change_batch_depth > 0 or not _dependency_path.is_empty():
+	if _emitting_snapshot or _change_batch_depth > 0 or not _dependency_path.is_empty():
 		return
 	if _publishing_changes:
 		# Settle synchronous writes before the remaining listeners run.
@@ -217,9 +217,9 @@ func _publish_changes() -> void:
 		if is_instance_valid(instance):
 			var value: float = instance.get_value()
 			if old_value != value:
-				_emitting_attribute_change = true
+				_emitting_snapshot = true
 				attribute_value_changed.emit(id, value)
-				_emitting_attribute_change = false
+				_emitting_snapshot = false
 	_publishing_changes = false
 
 ## 处理依赖关系
