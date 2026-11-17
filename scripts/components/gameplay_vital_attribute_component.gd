@@ -90,13 +90,29 @@ func can_spend(vital_id: StringName, amount: float, allow_overdraft: bool = fals
 		return false
 	return vital.current_value >= amount or (allow_overdraft and vital.current_value > 0.0)
 
-## Commits a payment. An explicit overdraft spends the remaining balance.
+## Commits a payment synchronously. An explicit overdraft spends the remaining balance.
+## During a snapshot callback a nonzero payment requires request_spend().
 func try_spend(vital_id: StringName, amount: float, allow_overdraft: bool = false) -> bool:
+	if _emitting_snapshot and amount != 0.0:
+		return false
 	if not can_spend(vital_id, amount, allow_overdraft):
 		return false
 	if amount > 0.0:
 		get_vital(vital_id).modify_value(-amount)
 	return true
+
+## Reports the actual payment outcome. During a snapshot or queue drain, executes in write order
+## after the current notifications; otherwise completes in this call.
+func request_spend(vital_id: StringName, amount: float, completed: Callable, allow_overdraft: bool = false) -> void:
+	if _emitting_snapshot or _publishing_changes:
+		_listener_writes.append(_complete_spend.bind(vital_id, amount, completed, allow_overdraft))
+		return
+	_complete_spend(vital_id, amount, completed, allow_overdraft)
+
+func _complete_spend(vital_id: StringName, amount: float, completed: Callable, allow_overdraft: bool) -> void:
+	var paid: bool = try_spend(vital_id, amount, allow_overdraft)
+	if completed.is_valid():
+		completed.call(paid)
 
 ## 获取 Vital 百分比
 ## [param] vital_id: StringName Vital ID
