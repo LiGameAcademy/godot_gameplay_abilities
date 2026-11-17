@@ -303,13 +303,14 @@ func _test_disabled_cast() -> void:
 
 class ProbeStep extends BTNode:
 	@export var index: int = 0
+	@export var fails: bool = false
 
 	func _tick(instance: BTInstance, _delta: float) -> int:
 		var context: Dictionary = instance.blackboard.get_var("context", {})
 		var owner: Node = context["instigator"]
 		var steps: Array = owner.get_meta("steps")
 		steps.append(index)
-		return Status.SUCCESS
+		return Status.FAILURE if fails else Status.SUCCESS
 
 class ProbeModifier extends GameplayAbilityModifier:
 	func on_after_ability_commit(
@@ -329,7 +330,7 @@ class CancelDuringPayment extends WindupCost:
 		return paid
 
 func _test_combo_commit() -> void:
-	for scenario: String in ["full", "timeout", "late_cost_failure", "cancel_before_tick", "cancel_after_first", "cancel_on_commit", "cancel_during_payment", "no_cost", "no_cost_no_cooldown"]:
+	for scenario: String in ["full", "timeout", "step_failure", "second_step_failure", "late_cost_failure", "cancel_before_tick", "cancel_after_first", "cancel_on_commit", "cancel_during_payment", "no_cost", "no_cost_no_cooldown"]:
 		_test_combo_case(scenario)
 
 func _test_combo_case(scenario: String) -> void:
@@ -353,20 +354,38 @@ func _test_combo_case(scenario: String) -> void:
 	if not scenario.begins_with("no_cost"):
 		var cost: AbilityCostBase = CancelDuringPayment.new() if scenario == "cancel_during_payment" else WindupCost.new()
 		combo.costs = [cost]
-	for index: int in range(2):
+	var fail_step: int = 0
+	if scenario == "step_failure":
+		fail_step = 1
+	elif scenario == "second_step_failure":
+		fail_step = 2
+	for index: int in range(3 if fail_step == 2 else 2):
 		var step: ActiveAbilityDefinition = ActiveAbilityDefinition.new()
 		var node: ProbeStep = ProbeStep.new()
 		node.index = index + 1
+		node.fails = node.index == fail_step
 
 		step.execution_tree = node
 		combo.combo_steps.append(step)
 	component.learn_ability(combo)
+	var next: GameplayAbilityDefinition = GameplayAbilityDefinition.new()
+	next.ability_id = &"follow_up_cast"
+	next.execution_tree = BTWait.new()
+	component.learn_ability(next)
+	var completed: Array[GameplayAbilityInstance] = []
+	component.ability_completed.connect(func(finished: GameplayAbilityInstance) -> void: completed.append(finished))
 	var ability: GameplayAbilityInstance = component.get_ability_instance(combo.ability_id)
 	var cooldown: CooldownFeature = ability.get_feature("CooldownFeature") as CooldownFeature
 	var events: Array[StringName] = []
+	var failures: Array[Vector3] = []
 	var observe: Callable = func(event: StringName, context: Dictionary) -> void:
 		if context.get("ability_id") == combo.ability_id:
 			events.append(event)
+			if event == &"ability_combo_step_failed":
+				var step_number: int = context.get("step_number", 0)
+				failures.append(Vector3(step_number, owner.get_meta("balance"), cooldown.get_cooldown_remaining(ability)))
+				if scenario == "second_step_failure":
+					_check(component.try_activate_ability(next.ability_id), "failure observer starts follow-up cast")
 	AbilityEventBus.game_event_occurred.connect(observe)
 	var accepted: bool = component.try_activate_ability(combo.ability_id)
 	_check(accepted and owner.get_meta("balance") == 1 and events == [&"ability_activated"]
@@ -379,7 +398,7 @@ func _test_combo_case(scenario: String) -> void:
 	if scenario == "cancel_after_first":
 		component.cancel_ability(combo.ability_id)
 	var first_cd: float = cooldown.get_cooldown_remaining(ability) if cooldown != null else 0.0
-	if scenario == "full":
+	if scenario == "full" or fail_step == 2:
 		_check(component.can_activate_ability(combo.ability_id) and component.try_activate_ability(combo.ability_id),
 		"follow-up works after spending the last point")
 		ability.update(0.01)
@@ -405,9 +424,20 @@ func _test_combo_case(scenario: String) -> void:
 			and owner.get_meta("steps") == expected and not ability.is_active and first_cd == 1.0
 			and events == [&"ability_activated", &"ability_committed", &"ability_completed", &"ability_cancelled"],
 			scenario + ": retain payment and start cooldown without executing more steps")
+	elif fail_step > 0:
+		var executed: Array[int] = [1]
+		if fail_step == 2:
+			executed.append(2)
+		_check(owner.get_meta("steps") == executed and not ability.is_active
+			and failures == [Vector3(fail_step, 0, 1)]
+			and events == [&"ability_activated", &"ability_committed", &"ability_combo_step_failed", &"ability_completed"],
+			scenario + ": stop on the failed segment and report its number after starting cooldown")
+		if scenario == "second_step_failure":
+			_check(completed == [ability] and component.get_current_casting_ability() == component.get_ability_instance(next.ability_id),
+				"original combo completes once and the next cast remains current")
 	else:
 		var expected_steps: Array[int] = [1]
-		if scenario == "full":
+		if scenario == "full" or fail_step == 2:
 			expected_steps.append(2)
 		var expected_balance: int = 1 if scenario.begins_with("no_cost") else 0
 		_check(owner.get_meta("steps") == expected_steps and owner.get_meta("balance") == expected_balance
@@ -415,7 +445,7 @@ func _test_combo_case(scenario: String) -> void:
 			scenario + ": whole cost commits once before the first segment")
 		var final_cd: float = cooldown.get_cooldown_remaining(ability) if cooldown != null else 0.0
 		_check(first_cd == 0.0 and not ability.is_active
-			and final_cd == combo.cooldown_duration
+			and final_cd == combo.cooldown_duration and failures.is_empty()
 			and events == [&"ability_activated", &"ability_committed", &"ability_completed"],
 			scenario + ": no reactivation event and cooldown starts only on exit")
 	AbilityEventBus.game_event_occurred.disconnect(observe)

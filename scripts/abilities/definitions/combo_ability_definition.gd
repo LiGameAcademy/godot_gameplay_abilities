@@ -1,6 +1,18 @@
 extends GameplayAbilityDefinition
 class_name ComboAbilityDefinition
 
+## Records only failures from the segment body, before the input window runs.
+class ComboStepResult extends BTDecorator:
+	@export var step_number: int = 0
+
+	func _tick_decorator(instance: BTInstance, delta: float) -> int:
+		var result: int = child.tick(instance, delta)
+		if result == Status.FAILURE:
+			var ability: GameplayAbilityInstance = instance.blackboard.get_var("ability_instance") as GameplayAbilityInstance
+			if is_instance_valid(ability) and ability.is_active:
+				ability.combo_failed_step = step_number
+		return result
+
 @export_group("Combo Config")
 @export var combo_steps: Array[ActiveAbilityDefinition] = []  	## 连击段列表
 @export var window_duration: float = 0.8                     	## 连击窗口期（秒）
@@ -223,7 +235,10 @@ func _build_combo_tree() -> BTNode:
 			_remove_cooldown_nodes(duplicated_tree)
 			if duplicated_tree.node_id.is_empty():
 				duplicated_tree.node_id = "step_%d_execution_tree" % (i + 1)
-			wrapper.children.append(duplicated_tree)
+			var observed_step: ComboStepResult = ComboStepResult.new()
+			observed_step.step_number = i + 1
+			observed_step.child = duplicated_tree
+			wrapper.children.append(observed_step)
 
 		# C. 【关键】对于最后一段，执行完后直接结束，不等待输入
 		# 对于中间段，等待连击输入，如果收到输入则继续下一段，如果超时则结束连击

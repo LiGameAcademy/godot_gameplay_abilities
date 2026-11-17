@@ -15,6 +15,8 @@ var is_active: bool = false
 var combo_committed: bool = false
 var combo_payment_in_progress: bool = false
 var combo_cancel_pending: bool = false
+## One-based segment number, or zero if the current cast has no segment failure.
+var combo_failed_step: int = 0
 ## Runtime availability, initialized from the shared definition.
 var disabled: bool = false
 
@@ -210,6 +212,7 @@ func try_activate(context: Dictionary = {}) -> bool:
 	combo_committed = false
 	combo_payment_in_progress = false
 	combo_cancel_pending = false
+	combo_failed_step = 0
 
 	# 2. 注入初始黑板数据（在设置 is_active 之前）
 	if is_instance_valid(_blackboard):
