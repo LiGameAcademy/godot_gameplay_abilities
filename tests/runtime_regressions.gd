@@ -4,6 +4,7 @@ var _failed: int = 0
 func _ready() -> void:
 	call_deferred("_run")
 func _run() -> void:
+	_test_default_commit()
 	var debug_scene: PackedScene = load("res://addons/godot_gameplay_abilities/ui/bt_debug_panel.tscn") as PackedScene
 	var debug_window: Window = debug_scene.instantiate() as Window
 	_check(not debug_window.visible, "debug window is hidden before runtime ready and editor preview")
@@ -119,3 +120,63 @@ func _check(condition: bool, message: String) -> void:
 	if not condition:
 		_failed += 1
 		push_error("FAIL: " + message)
+
+class WindupCost extends AbilityCostBase:
+	func _can_pay(_ability_comp: Node, instigator: Node) -> bool:
+		return int(instigator.get_meta("balance")) >= 1
+
+	func _try_pay(_ability_comp: Node, instigator: Node) -> bool:
+		instigator.set_meta("balance", int(instigator.get_meta("balance")) - 1)
+		return true
+
+class CommitObserver extends GameplayAbilityModifier:
+	func on_after_ability_commit(
+		_ability_comp: GameplayAbilityComponent, ability: GameplayAbilityInstance, context: Dictionary
+	) -> void:
+		var owner: Node = context["instigator"]
+		var cooldown: CooldownFeature = ability.get_feature("CooldownFeature") as CooldownFeature
+		owner.set_meta("commit_hook", Vector2(float(owner.get_meta("balance")), cooldown.get_cooldown_remaining(ability)))
+
+func _test_default_commit() -> void:
+	var owner: Node = Node.new()
+	add_child(owner)
+	var component: GameplayAbilityComponent = GameplayAbilityComponent.new()
+	owner.add_child(component)
+	var modifiers: GameplayModifierComponent = GameplayModifierComponent.new()
+	owner.add_child(modifiers)
+	component.modifier_component = modifiers
+	modifiers.add_modifier(CommitObserver.new())
+	modifiers.add_modifier(CooldownReductionModifier.new())
+	var definition: ActiveAbilityDefinition = ActiveAbilityDefinition.new()
+	definition.ability_id = &"windup_commit"
+	definition.pre_cast_delay = 0.1
+	definition.cooldown_duration = 1.0
+	definition.costs = [WindupCost.new()]
+	component.learn_ability(definition)
+	var ability: GameplayAbilityInstance = component.get_ability_instance(definition.ability_id)
+	var cooldown: CooldownFeature = ability.get_feature("CooldownFeature") as CooldownFeature
+	var events: Array[StringName] = []
+	var observe: Callable = func(event: StringName, context: Dictionary) -> void:
+		if context.get("ability_id") == definition.ability_id:
+			events.append(event)
+	AbilityEventBus.game_event_occurred.connect(observe)
+	owner.set_meta("balance", 1)
+	_check(component.try_activate_ability(definition.ability_id), "accept windup before payment")
+	ability.update(0.05)
+	_check(ability.is_active and events == [&"ability_activated"] and not owner.has_meta("commit_hook"),
+		"acceptance and windup do not report a commit")
+	owner.set_meta("balance", 0)
+	ability.update(0.06)
+	_check(not ability.is_active and cooldown.get_cooldown_remaining(ability) == 0.0
+		and not owner.has_meta("commit_hook") and events == [&"ability_activated", &"ability_commit_failed", &"ability_completed"],
+		"failed payment ends the cast without cooldown or a success hook/event")
+	owner.set_meta("balance", 1)
+	events.clear()
+	_check(component.try_activate_ability(definition.ability_id), "retry after failed commit")
+	ability.update(0.05)
+	ability.update(0.06)
+	_check(events == [&"ability_activated", &"ability_committed", &"ability_completed"]
+		and owner.get_meta("commit_hook", Vector2(-1, -1)).is_equal_approx(Vector2(0, 0.8)),
+		"successful payment and reduced cooldown are visible to the commit hook")
+	AbilityEventBus.game_event_occurred.disconnect(observe)
+	owner.free()

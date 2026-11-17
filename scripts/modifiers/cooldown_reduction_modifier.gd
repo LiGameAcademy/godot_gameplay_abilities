@@ -14,8 +14,8 @@ class_name CooldownReductionModifier
 ## 多个修改器会累加（但不超过 100%）：0.2 + 0.3 = 0.5（最终冷却为 50%）
 @export_range(0.0, 1.0, 0.01) var cooldown_reduction: float = 0.2
 
-## 钩子：施法成功后（修改冷却时间）
-func on_after_ability_commit(
+## Prepare cooldown reduction before the tree starts the cooldown.
+func on_before_ability_cast(
 	ability_comp: GameplayAbilityComponent,
 	ability_instance: GameplayAbilityInstance,
 	context: Dictionary
