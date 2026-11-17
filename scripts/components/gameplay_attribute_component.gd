@@ -100,11 +100,17 @@ func has_attribute(id: StringName) -> bool:
 ## 添加属性修改器
 ## [param] mod: GameplayAttributeModifier 修改器实例
 func add_modifier(mod: GameplayAttributeModifier) -> void:
+	if _emitting_attribute_change:
+		_listener_writes.append(add_modifier.bind(mod))
+		return
 	if is_instance_valid(mod) and _attributes.has(mod.attribute_id):
 		_attributes[mod.attribute_id].add_modifier(mod)
 
 ## Applies the modifiers before publishing settled component notifications.
 func add_modifiers(modifiers: Array[GameplayAttributeModifier]) -> void:
+	if _emitting_attribute_change:
+		_listener_writes.append(add_modifiers.bind(modifiers.duplicate()))
+		return
 	_begin_change_batch()
 	for modifier: GameplayAttributeModifier in modifiers:
 		add_modifier(modifier)
@@ -113,12 +119,18 @@ func add_modifiers(modifiers: Array[GameplayAttributeModifier]) -> void:
 ## 移除属性修改器
 ## [param] mod: GameplayAttributeModifier 修改器实例
 func remove_modifier(mod: GameplayAttributeModifier) -> void:
+	if _emitting_attribute_change:
+		_listener_writes.append(remove_modifier.bind(mod))
+		return
 	for instance: GameplayAttributeInstance in _attributes.values():
 		instance.remove_modifier(mod)
 
 ## 根据 source_id 批量移除属性修改器
 ## [param] source_id: StringName 来源ID
 func remove_modifiers_by_source(source_id: StringName) -> void:
+	if _emitting_attribute_change:
+		_listener_writes.append(remove_modifiers_by_source.bind(source_id))
+		return
 	if source_id.is_empty():
 		return
 
