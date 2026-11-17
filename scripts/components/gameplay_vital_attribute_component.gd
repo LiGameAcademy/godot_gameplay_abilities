@@ -101,12 +101,15 @@ func try_spend(vital_id: StringName, amount: float, allow_overdraft: bool = fals
 		get_vital(vital_id).modify_value(-amount)
 	return true
 
-## Reports the actual payment outcome. During a snapshot, executes in write order
+## Reports the actual payment outcome. During a snapshot or queue drain, executes in write order
 ## after the current notifications; otherwise completes in this call.
 func request_spend(vital_id: StringName, amount: float, completed: Callable, allow_overdraft: bool = false) -> void:
-	if _emitting_snapshot:
-		_listener_writes.append(request_spend.bind(vital_id, amount, completed, allow_overdraft))
+	if _emitting_snapshot or _publishing_changes:
+		_listener_writes.append(_complete_spend.bind(vital_id, amount, completed, allow_overdraft))
 		return
+	_complete_spend(vital_id, amount, completed, allow_overdraft)
+
+func _complete_spend(vital_id: StringName, amount: float, completed: Callable, allow_overdraft: bool) -> void:
 	var paid: bool = try_spend(vital_id, amount, allow_overdraft)
 	if completed.is_valid():
 		completed.call(paid)

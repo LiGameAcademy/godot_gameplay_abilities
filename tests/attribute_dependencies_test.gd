@@ -331,15 +331,17 @@ func _test_vital_listener_spend() -> void:
 	var first: Array[Vector2] = []
 	var results: Array[bool] = []
 	var complete: Callable = func(paid: bool) -> void: results.append(paid)
+	var first_complete: Callable = func(paid: bool) -> void:
+		results.append(paid)
+		component.request_spend(&"health", 0.5, complete)
 	var second: Array[Vector2] = []
 	component.vital_value_changed.connect(func(id: StringName, current: float, _max: float, _fraction: float, _regen: bool) -> void:
 		if id != &"health":
 			return
 		if current == 0.75:
 			_expect(not component.try_spend(&"health", 0.125), "reentrant synchronous payment must fail")
-			component.request_spend(&"health", 0.125, complete)
+			component.request_spend(&"health", 0.125, first_complete)
 			component.request_spend(&"health", 0.25, complete)
-			component.request_spend(&"health", 0.5, complete)
 		first.append(Vector2(current, health.current_value))
 	)
 	component.vital_value_changed.connect(func(id: StringName, current: float, _max: float, _fraction: float, _regen: bool) -> void:
