@@ -274,12 +274,10 @@ func end_ability(final_status: int = BTNode.Status.SUCCESS, forced_cancel: bool 
 		if is_instance_valid(feature): 
 			feature.on_completed(self)
 			
-	# 发出信号
-	ability_completed.emit(self)
-
-	# (可选) 如果树还在跑但被强制结束，重置树
+	# Reset the outgoing tree before completion observers can advance a new cast.
 	if is_instance_valid(_bt_instance):
 		_bt_instance.reset_tree()
+	ability_completed.emit(self)
 
 ## 检查是否可以施法
 func can_activate(context: Dictionary = {}) -> bool:
