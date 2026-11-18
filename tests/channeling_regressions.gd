@@ -12,6 +12,9 @@ func _run() -> void:
 	_test_missing_execution_tree()
 	_test_first_tick_commit(false)
 	_test_first_tick_commit(true)
+	_test_tick_payment_batch(5.0, [])
+	_test_tick_payment_batch(10.0, [3.0])
+	_test_tick_payment_batch(14.0, [7.0, 0.0])
 	if _failed == 0:
 		print("PASS: GAS channeling tree and missing-tree guard")
 	get_tree().quit.call_deferred(0 if _failed == 0 else 1)
@@ -161,3 +164,58 @@ func _test_first_tick_commit(insufficient: bool) -> void:
 			"a later paid tick does not commit again or reset cooldown")
 	AbilityEventBus.game_event_occurred.disconnect(observe)
 	owner.free()
+
+func _make_payer(entity: Node, starting_balance: float) -> GameplayVitalAttributeComponent:
+	var attributes: GameplayVitalAttributeComponent = GameplayVitalAttributeComponent.new()
+	attributes.name = &"GameplayVitalAttributeComponent"
+	entity.add_child(attributes)
+	var max_mana: GameplayAttribute = GameplayAttribute.new()
+	max_mana.attribute_id = &"max_mana"
+	var definitions: GameplayAttributeSet = GameplayAttributeSet.new()
+	definitions.attributes[max_mana] = starting_balance
+	var mana: GameplayVital = GameplayVital.new()
+	mana.vital_id = &"mana"
+	mana.max_value_attribute = &"max_mana"
+	attributes.initialize([definitions], [mana])
+	return attributes
+
+func _test_tick_payment_batch(starting_balance: float, expected_balances: Array[float]) -> void:
+	var caster: Node = Node.new()
+	var target: Node = Node.new()
+	add_child(caster)
+	add_child(target)
+	var payer: GameplayVitalAttributeComponent = _make_payer(caster, starting_balance)
+	var recipient: GameplayVitalAttributeComponent = _make_payer(target, 30.0)
+	var component: GameplayAbilityComponent = GameplayAbilityComponent.new()
+	caster.add_child(component)
+	var definition: ChannelingAbilityDefinition = ChannelingAbilityDefinition.new()
+	definition.ability_id = &"channel_payment_batch"
+	definition.tick_interval = 0.25
+	definition.cooldown_duration = 2.0
+	definition.interrupt_tags = []
+	var first: VitalCost = VitalCost.new()
+	first.amount = 3.0
+	var second: VitalCost = VitalCost.new()
+	second.amount = 4.0
+	definition.tick_costs = [first, second]
+	var effect: GameplayEffect = (load("res://addons/godot_gameplay_abilities/tests/counting_effect.gd") as GDScript).new() as GameplayEffect
+	definition.tick_effects = [effect]
+	component.learn_ability(definition)
+	var balances: Array[float] = []
+	payer.vital_value_changed.connect(
+		func(_id: StringName, balance: float, _max: float, _fraction: float, _regen: bool) -> void:
+			balances.append(balance)
+	)
+	_check(component.try_activate_ability(definition.ability_id), "batch channel accepts before tick payment")
+	var ability: GameplayAbilityInstance = component.get_ability_instance(definition.ability_id)
+	ability.set_blackboard_var("targets", [target])
+	ability.update(0.01)
+	ability.update(0.26)
+	var expected_final: float = starting_balance if expected_balances.is_empty() else expected_balances.back()
+	_check(balances == expected_balances and payer.get_vital_value(&"mana") == expected_final,
+		"same-Vital costs commit in full with one notice per paid tick, or leave the balance untouched")
+	_check(recipient.get_vital_value(&"mana") == 30.0 and target.get_meta("effect_count", 0) == expected_balances.size(),
+		"target receives only fully paid ticks and never pays their costs")
+	_check(ability.is_active == (expected_balances.size() == 2), "an unaffordable tick ends the channel")
+	caster.free()
+	target.free()
