@@ -1,6 +1,6 @@
 # Runtime regression checks
 
-Run `python tests/run_runtime.py --godot /absolute/path/to/godot` with Godot 4.7.2 and Python 3.10+.
+Run `python tests/run_runtime.py --godot /absolute/path/to/godot` with Godot 4.5 or 4.7.2 and Python 3.10+.
 The runner creates a disposable host with the four GAS autoloads. It checks combo cost/cooldown construction, dictionary contexts, independent game-time waits, reparenting, forgetting and deletion through weak references.
 
 Vital regressions cover replacing attribute sets, disconnecting old attribute instances, maximum-only and clamped snapshots, atomic payments, shared cost resources, and lethal damage attribution.
@@ -21,7 +21,7 @@ Vital IDs must contain a non-whitespace character. The first valid template for 
 
 For mana assets, use a `GameplayVital` resource with `vital_id = &"mana"` and configure its maximum and regeneration attributes. Existing `ManaVital` resources remain loadable. Skill costs use `can_spend()` and `try_spend()`. Periodic damage can configure `GE_ApplyDamage.fixed_base_damage` and reuse the same damage strategy, immunity checks and death path as direct damage.
 
-Known baseline: Godot 4.7.2 retains the `GameplayEffect` and `GameplayFilterData` scripts at exit (three ObjectDB objects, two script resources). The same diagnostic reproduces with unmodified commit `34bc173` merely preloading `ActiveAbilityDefinition`, without creating any ability instances. The runner prints and allows only that exact resource set and count; other engine errors, script errors, extra retained resources and missing pass markers fail validation. This check does not claim that the baseline script-retention issue is fixed.
+Known baseline: Godot 4.7.2 retains the `GameplayEffect` and `GameplayFilterData` scripts at exit (three ObjectDB objects, two script resources). The same diagnostic reproduces with unmodified commit `34bc173` merely preloading `ActiveAbilityDefinition`, without creating any ability instances. Godot 4.5 omits the count from the warning summary. The runner checks the exact resource paths and the three verbose object entries on both versions; other engine errors, script errors, extra retained resources and missing pass markers fail validation. This check does not claim that the baseline script-retention issue is fixed.
 
 During attribute_value_changed or vital_value_changed, set_base_value() accepts valid writes and commits them in order after the current notifications finish. Both listeners see the same attribute and derived snapshot. The component also queues individual modifier additions/removals, batch additions and removal by source in the same order. Each batch is one queued operation. The list passed to add_modifiers() is copied when queued, and modifier resources are read when the operation commits. Use component APIs from public notification callbacks.
 

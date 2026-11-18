@@ -47,7 +47,7 @@ Open the host project and enable **li_gameplay_abilities** in **Project → Proj
 
 Add a `GameplayAbilityComponent` to the character, define the abilities it can use, and connect the host project's input or AI to ability activation. Configure attribute and status components on actors that need health, mana, buffs, or debuffs. The [ARPG Demo](https://github.com/LiGameAcademy/godot_simple_arpg_demo) shows a working integration with player abilities and enemies.
 
-The [runtime checks](tests/README.md) run with Godot 4.7.2 and Python 3.10+. The [docs directory](docs/) contains design proposals.
+The [runtime checks](tests/README.md) run with Godot 4.5 and 4.7.2 and Python 3.10+. The [docs directory](docs/) contains design proposals.
 
 ## License
 

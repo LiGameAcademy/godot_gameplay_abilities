@@ -46,7 +46,7 @@ def main():
             output = result.stdout + result.stderr
             diagnostics = [line for line in output.splitlines()
                            if "ERROR:" in line or "Parse Error" in line]
-            # Godot 4.7.2 retains these two script resources even in the unmodified
+            # Godot retains these two script resources even in the unmodified
             # 34bc173 host that only preloads ActiveAbilityDefinition (no instances).
             known = "ERROR: 2 resources still in use at exit."
             if any(not line.startswith(known) for line in diagnostics):
@@ -56,10 +56,12 @@ def main():
                 retained = set(re.findall(r"Resource still in use: (.*?) \(GDScript\)", output))
                 expected = {"res://addons/godot_gameplay_abilities/scripts/effects/gameplay_effect.gd",
                             "res://addons/godot_gameplay_abilities/scripts/filters/gameplay_filter_data.gd"}
-                if retained != expected or "WARNING: 3 ObjectDB instances were leaked" not in output:
+                # Godot 4.5 omits the count from the summary. Count the verbose entries.
+                leaked_types = sorted(re.findall(r"^Leaked instance: (\w+):", output, re.MULTILINE))
+                if retained != expected or leaked_types != ["GDScript", "GDScript", "GDScriptNativeClass"]:
                     print(output)
                     raise SystemExit(1)
-                print("KNOWN BASELINE: Godot 4.7.2 retains GameplayEffect/GameplayFilterData scripts at exit.")
+                print("KNOWN BASELINE: Godot retains GameplayEffect/GameplayFilterData scripts at exit.")
             if result.returncode or (expected_marker and expected_marker not in output):
                 print(output)
                 raise SystemExit(1)
