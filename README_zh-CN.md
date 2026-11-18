@@ -47,7 +47,7 @@ git submodule add https://github.com/LiGameAcademy/godot_gameplay_abilities.git 
 
 给角色添加 `GameplayAbilityComponent`，配置角色可用的技能，并在宿主工程中将输入或 AI 接到技能激活流程。需要生命值、法力值或增益和减益的角色可以配置对应的属性和状态组件。[ARPG 示例工程](https://github.com/LiGameAcademy/godot_simple_arpg_demo)展示了玩家技能与敌人的实际接入方式。
 
-[运行时检查](tests/README.md)使用 Godot 4.7.2 和 Python 3.10+。[docs 目录](docs/)收录了设计提案。
+[运行时检查](tests/README.md)使用 Godot 4.5、4.7.2 和 Python 3.10+。[docs 目录](docs/)收录了设计提案。
 
 ## 许可证
 
