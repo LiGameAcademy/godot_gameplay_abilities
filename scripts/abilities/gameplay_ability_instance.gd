@@ -170,7 +170,7 @@ func uses_default_combo() -> bool:
 
 ## 尝试激活技能 (由 Player/Component 调用)
 func try_activate(context: Dictionary = {}) -> bool:
-	if disabled:
+	if disabled or not is_instance_valid(_bt_instance):
 		return false
 	if is_active:
 		# 如果技能已激活，无论是否允许重新激活，都应该处理连击输入
@@ -275,7 +275,7 @@ func end_ability(final_status: int = BTNode.Status.SUCCESS, forced_cancel: bool 
 
 ## 检查是否可以施法
 func can_activate(context: Dictionary = {}) -> bool:
-	if disabled:
+	if disabled or not is_instance_valid(_bt_instance):
 		return false
 	if is_active and uses_default_combo():
 		return true

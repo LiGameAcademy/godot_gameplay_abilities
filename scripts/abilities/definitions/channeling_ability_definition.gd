@@ -231,7 +231,7 @@ func _build_default_behavior_tree() -> BTNode:
 	var parallel_children: Array[BTNode] = []
 	
 	# 5.1 周期性效果（如果配置了）
-	if tick_interval > 0.0 and not tick_effects.is_empty():
+	if tick_interval > 0.0 and (not tick_effects.is_empty() or not tick_self_effects.is_empty()):
 		var periodic_sequence = BTSequence.new()
 		periodic_sequence.node_id = "periodic_sequence"
 		
@@ -282,7 +282,7 @@ func _build_default_behavior_tree() -> BTNode:
 		
 		tick_sequence.children = tick_nodes
 		repeat_periodic.child = tick_sequence
-		periodic_sequence.children = [repeat_periodic]
+		periodic_sequence.children.append(repeat_periodic)
 		parallel_children.append(periodic_sequence)
 	
 	# 5.2 等待输入释放（或达到最大持续时间）
@@ -311,7 +311,8 @@ func _build_default_behavior_tree() -> BTNode:
 		wait_duration.duration_key = "channeling_max_duration"  # 优先从黑板读取
 		wait_duration.node_id = "wait_max_duration"
 		
-		wait_selector.children = [wait_input, wait_duration]
+		wait_selector.children.append(wait_input)
+		wait_selector.children.append(wait_duration)
 		wait_nodes.append(wait_selector)
 	else:
 		# 无最大持续时间，只等待输入释放（按键松开）
@@ -357,9 +358,10 @@ func _build_default_behavior_tree() -> BTNode:
 		check_var.node_id = "check_is_interrupted"
 		
 		# 如果被打断，返回 FAILURE（这会停止 BTRepeatPeriodic）
-		check_interrupt_sequence.children = [check_status, check_var]
+		check_interrupt_sequence.children.append(check_status)
+		check_interrupt_sequence.children.append(check_var)
 		check_interrupt_repeat.child = check_interrupt_sequence
-		interrupt_sequence.children = [check_interrupt_repeat]
+		interrupt_sequence.children.append(check_interrupt_repeat)
 		parallel_children.append(interrupt_sequence)
 	
 	channeling_parallel.children = parallel_children
