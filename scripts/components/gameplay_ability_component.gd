@@ -359,13 +359,20 @@ func _on_ability_completed(ability: GameplayAbilityInstance) -> void:
 	if not is_instance_valid(ability):
 		return
 		
-	# Failure observers may synchronously start a different cast.
+	# An end observer may synchronously start another cast, reusing this instance.
 	var was_current: bool = _current_casting_ability == ability
 	if ability.uses_default_combo() and ability.combo_failed_step > 0:
 		AbilityEventBus.trigger_game_event(&"ability_combo_step_failed", {
 			"entity": get_parent(),
 			"ability_id": ability.get_definition().ability_id,
 			"step_number": ability.combo_failed_step,
+		})
+
+	if ability.uses_default_channeling():
+		AbilityEventBus.trigger_game_event(&"ability_channel_ended", {
+			"entity": get_parent(),
+			"ability_id": ability.get_definition().ability_id,
+			"reason": ability.channel_end_reason,
 		})
 
 	# 只有当前正在执行的技能才需要结束
@@ -387,7 +394,7 @@ func _on_ability_completed(ability: GameplayAbilityInstance) -> void:
 		"entity": get_parent(),
 		"ability_id": ability_id
 	})
-	if _current_casting_ability == ability:
+	if _current_casting_ability == ability and not ability.is_active:
 		_current_casting_ability = null
 #endregion
 

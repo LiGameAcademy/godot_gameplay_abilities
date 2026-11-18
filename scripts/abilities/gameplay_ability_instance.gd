@@ -17,6 +17,7 @@ var combo_payment_in_progress: bool = false
 var combo_cancel_pending: bool = false
 ## One-based segment number, or zero if the current cast has no segment failure.
 var combo_failed_step: int = 0
+var channel_end_reason: StringName = &""
 ## Runtime availability, initialized from the shared definition.
 var disabled: bool = false
 
@@ -217,6 +218,7 @@ func try_activate(context: Dictionary = {}) -> bool:
 	combo_payment_in_progress = false
 	combo_cancel_pending = false
 	combo_failed_step = 0
+	channel_end_reason = &""
 
 	# 2. 注入初始黑板数据（在设置 is_active 之前）
 	if is_instance_valid(_blackboard):
@@ -258,6 +260,8 @@ func end_ability(final_status: int = BTNode.Status.SUCCESS, forced_cancel: bool 
 	if not is_active: return
 
 	is_active = false
+	if uses_default_channeling() and channel_end_reason.is_empty():
+		channel_end_reason = &"cancelled" if forced_cancel else &"execution_failed"
 	# Apply cooldown before completion observers can try to cast again.
 	if forced_cancel and uses_default_combo() and combo_committed:
 		var cooldown: CooldownFeature = get_feature("CooldownFeature") as CooldownFeature
@@ -270,12 +274,10 @@ func end_ability(final_status: int = BTNode.Status.SUCCESS, forced_cancel: bool 
 		if is_instance_valid(feature): 
 			feature.on_completed(self)
 			
-	# 发出信号
-	ability_completed.emit(self)
-
-	# (可选) 如果树还在跑但被强制结束，重置树
+	# Reset the outgoing tree before completion observers can advance a new cast.
 	if is_instance_valid(_bt_instance):
 		_bt_instance.reset_tree()
+	ability_completed.emit(self)
 
 ## 检查是否可以施法
 func can_activate(context: Dictionary = {}) -> bool:
