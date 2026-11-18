@@ -221,7 +221,7 @@ func try_activate_ability(ability_id: StringName, context: Dictionary = {}) -> b
 
 	if modifiers != null:
 		var active_definition: ActiveAbilityDefinition = ability_instance.get_definition() as ActiveAbilityDefinition
-		var uses_generated_commit: bool = ability_instance.uses_default_combo() or (
+		var uses_generated_commit: bool = ability_instance.uses_default_combo() or ability_instance.uses_default_channeling() or (
 			active_definition != null and active_definition.uses_default_commit())
 		if not uses_generated_commit:
 			modifiers.notify_after_ability_commit(self, ability_instance, context)
@@ -243,7 +243,7 @@ func try_activate_ability(ability_id: StringName, context: Dictionary = {}) -> b
 
 ## Reports the generated tree's payment outcome at its commit point.
 func report_default_commit(ability: GameplayAbilityInstance, context: Dictionary, committed: bool) -> void:
-	var report_before_hook: bool = committed and ability.uses_default_combo()
+	var report_before_hook: bool = committed and (ability.uses_default_combo() or ability.uses_default_channeling())
 	if committed and not report_before_hook and is_instance_valid(modifier_component):
 		modifier_component.notify_after_ability_commit(self, ability, context)
 	var event: StringName = &"ability_committed" if committed else &"ability_commit_failed"
@@ -251,7 +251,7 @@ func report_default_commit(ability: GameplayAbilityInstance, context: Dictionary
 		"entity": get_parent(),
 		"ability_id": ability.get_definition().ability_id,
 	})
-	# Combo commit observers can cancel the cast before the opening step.
+	# Commit observers can cancel a combo or channel before its opening effect.
 	if report_before_hook and ability.is_active and is_instance_valid(modifier_component):
 		modifier_component.notify_after_ability_commit(self, ability, context)
 
