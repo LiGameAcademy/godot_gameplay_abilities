@@ -13,7 +13,7 @@ class_name ChannelingAbilityDefinition
 ## - 完成效果：引导完成时可能有额外效果（可选）
 ## 
 ## 行为树结构：
-## 1. 开始引导：播放动画、应用初始效果、提交冷却
+## 1. Start channeling: play animation, pay the first tick, then commit cooldown.
 ## 2. 引导循环（并行）：
 ##    - 周期性效果：使用 BTRepeatPeriodic 周期性触发效果
 ##    - 等待输入释放：使用 BTWaitSignal 等待 event_input_received 信号
@@ -21,6 +21,48 @@ class_name ChannelingAbilityDefinition
 ## 3. 完成引导：应用完成效果（如果配置）
 ## 
 ## 如果需要更复杂的逻辑，请直接使用基类 GameplayAbilityDefinition 并手动配置 Execution Tree。
+
+## Runs the existing per-tick costs and commits the channel after the first success.
+class ChannelingPayment extends BTDecorator:
+	const COMMITTED_KEY: String = "channeling_committed"
+	@export var opening_cue: AbilityNodeExecuteCue
+	@export var starts_cooldown: bool = false
+
+	func _tick_decorator(instance: BTInstance, delta: float) -> int:
+		var ability: GameplayAbilityInstance = instance.blackboard.get_var("ability_instance") as GameplayAbilityInstance
+		if not is_instance_valid(ability) or not ability.is_active:
+			return Status.FAILURE
+		var committed: bool = instance.blackboard.get_var(COMMITTED_KEY, false)
+		var result: int = child.tick(instance, delta)
+		if not ability.is_active:
+			instance.blackboard.set_var(COMMITTED_KEY, false)
+			return Status.FAILURE
+		if committed or result == Status.RUNNING:
+			return result
+
+		var context: Dictionary = instance.blackboard.get_var("context", {})
+		var component: GameplayAbilityComponent = context.get("ability_component") as GameplayAbilityComponent
+		if result == Status.FAILURE:
+			if is_instance_valid(component):
+				component.report_default_commit(ability, context, false)
+			return Status.FAILURE
+
+		if starts_cooldown:
+			var cooldown: CooldownFeature = ability.get_feature("CooldownFeature") as CooldownFeature
+			if is_instance_valid(cooldown):
+				cooldown.start_cooldown(ability)
+		if not ability.is_active:
+			return Status.FAILURE
+		if is_instance_valid(component):
+			component.report_default_commit(ability, context, true)
+		if not ability.is_active:
+			return Status.FAILURE
+		if is_instance_valid(opening_cue) and opening_cue.tick(instance, delta) != Status.SUCCESS:
+			return Status.FAILURE
+		if not ability.is_active:
+			return Status.FAILURE
+		instance.blackboard.set_var(COMMITTED_KEY, true)
+		return Status.SUCCESS
 
 @export_group("Quick Config")
 @export var animation_name : StringName = &""
@@ -200,12 +242,6 @@ func _build_default_behavior_tree() -> BTNode:
 		wait.node_id = "pre_cast_delay"
 		nodes.append(wait)
 		
-	# 3. 提交冷却（前摇结束后进CD）
-	if cooldown_duration > 0.0:
-		var commit_cd = AbilityNodeCommitCooldown.new()
-		commit_cd.node_id = "commit_cooldown"
-		nodes.append(commit_cd)
-	
 	# 4. 查找目标（如果配置了目标策略）
 	if is_instance_valid(targeting_strategy):
 		var target_search_node = AbilityNodeTargetSearch.new()
@@ -214,14 +250,19 @@ func _build_default_behavior_tree() -> BTNode:
 		target_search_node.node_id = "target_search"
 		nodes.append(target_search_node)
 	
-	# 4.5 执行引导 Cue（如果配置了）
+	var payment: ChannelingPayment = ChannelingPayment.new()
+	payment.node_id = "channel_payment"
+	payment.starts_cooldown = cooldown_duration > 0.0
+	var costs_sequence: BTSequence = BTSequence.new()
+	costs_sequence.node_id = "channel_tick_costs"
+	payment.child = costs_sequence
 	if is_instance_valid(channeling_cue):
-		var execute_cue_node = AbilityNodeExecuteCue.new()
-		execute_cue_node.cue = channeling_cue
-		execute_cue_node.target_key = target_key
-		execute_cue_node.save_instance_key = "channeling_cue_instance"
-		execute_cue_node.node_id = "execute_channeling_cue"
-		nodes.append(execute_cue_node)
+		var execute_cue: AbilityNodeExecuteCue = AbilityNodeExecuteCue.new()
+		execute_cue.cue = channeling_cue
+		execute_cue.target_key = target_key
+		execute_cue.save_instance_key = "channeling_cue_instance"
+		execute_cue.node_id = "execute_channeling_cue"
+		payment.opening_cue = execute_cue
 
 	# 5. 引导循环（并行处理：周期性效果 + 等待输入释放 + 检查打断条件）
 	var channeling_parallel = BTParallel.new()
@@ -247,7 +288,7 @@ func _build_default_behavior_tree() -> BTNode:
 		var tick_sequence = BTSequence.new()
 		tick_sequence.node_id = "tick_sequence"
 		
-		var tick_nodes: Array[BTNode] = []
+		var tick_nodes: Array[BTNode] = [payment]
 		
 		# 检查周期性消耗（如果配置了）
 		if not tick_costs.is_empty():
@@ -261,7 +302,7 @@ func _build_default_behavior_tree() -> BTNode:
 				check_cost.check_only = false  # 检查并消耗
 				# 注意：AbilityNodeApplyCost 使用 _get_target_list，默认会使用 instigator 作为回退
 				check_cost.node_id = "check_tick_cost_%s" % cost.vital_id
-				tick_nodes.append(check_cost)
+				costs_sequence.children.append(check_cost)
 		
 		# 应用周期性效果（对目标）
 		if not tick_effects.is_empty():
@@ -284,6 +325,9 @@ func _build_default_behavior_tree() -> BTNode:
 		repeat_periodic.child = tick_sequence
 		periodic_sequence.children.append(repeat_periodic)
 		parallel_children.append(periodic_sequence)
+	else:
+		# Channels without periodic effects commit at the end of windup.
+		nodes.append(payment)
 	
 	# 5.2 等待输入释放（或达到最大持续时间）
 	var wait_sequence = BTSequence.new()
@@ -366,6 +410,14 @@ func _build_default_behavior_tree() -> BTNode:
 	
 	channeling_parallel.children = parallel_children
 	nodes.append(channeling_parallel)
+
+	# The parallel loop treats exhausted periodic work as a normal exit. A failed
+	# first payment must still stop before the channel's completion effects.
+	var require_commit: BTCheckVarAction = BTCheckVarAction.new()
+	require_commit.key = ChannelingPayment.COMMITTED_KEY
+	require_commit.value = true
+	require_commit.node_id = "require_channel_commit"
+	nodes.append(require_commit)
 	
 	# 5.5 停止引导 Cue（如果配置了）
 	if is_instance_valid(channeling_cue):

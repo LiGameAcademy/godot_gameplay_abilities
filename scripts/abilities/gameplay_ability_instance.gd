@@ -168,6 +168,10 @@ func get_definition() -> GameplayAbilityDefinition:
 func uses_default_combo() -> bool:
 	return _definition is ComboAbilityDefinition and _definition.execution_tree == null
 
+## Generated channeling trees report commit at their first successful payment.
+func uses_default_channeling() -> bool:
+	return _definition is ChannelingAbilityDefinition and _definition.execution_tree == null
+
 ## 尝试激活技能 (由 Player/Component 调用)
 func try_activate(context: Dictionary = {}) -> bool:
 	if disabled or not is_instance_valid(_bt_instance):
