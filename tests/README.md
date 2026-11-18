@@ -42,3 +42,5 @@ For a generated combo, forced cancellation before successful payment has no cost
 After a generated combo commits, a segment body returning FAILURE ends the combo, retains payment and starts the configured cooldown. The ability_combo_step_failed event includes a one-based step_number. The lifecycle still ends with ability_completed. A completed final step or an input-window timeout does not emit the segment failure event.
 
 A generated channel reports acceptance before windup. The first successful payment starts the configured cooldown and reports a commit before the first periodic effect. A rejected first payment emits ability_commit_failed and skips periodic and completion effects. Later payments do not announce another commit or restart cooldown.
+
+Each generated channel tick charges Vital fees atomically to the caster. The target only receives effects. If any fee cannot be paid, the tick leaves the caster's balance untouched and does not apply its periodic effects.

@@ -32,16 +32,28 @@ func _process_costs(context: Dictionary, pay: bool) -> bool:
 		var cost: AbilityCostBase = valid_costs[0]
 		return cost.try_pay(ability_comp, instigator) if pay else cost.can_pay(ability_comp, instigator)
 
-	var component: GameplayVitalAttributeComponent = GameplayAbilitySystem.get_component_by_interface(
-		instigator, "GameplayAttributeComponent", false) as GameplayVitalAttributeComponent
-	if not is_instance_valid(component):
-		return false
-	var remaining: Dictionary[StringName, float] = {}
+	var vital_costs: Array[VitalCost] = []
 	for cost: AbilityCostBase in valid_costs:
 		var vital_cost: VitalCost = cost as VitalCost
 		if vital_cost == null or vital_cost.get_script() != VitalCost:
 			return false
-		if not is_finite(vital_cost.amount) or vital_cost.amount < 0.0:
+		vital_costs.append(vital_cost)
+	return process_vital_costs(instigator, vital_costs, pay)
+
+## Checks or commits an ordered, atomic batch against the payer's own Vitals.
+static func process_vital_costs(instigator: Node, vital_costs: Array[VitalCost], pay: bool) -> bool:
+	if vital_costs.is_empty():
+		return true
+	var component: GameplayVitalAttributeComponent = GameplayAbilitySystem.get_component_by_interface(
+		instigator, "GameplayAttributeComponent", false) as GameplayVitalAttributeComponent
+	if not is_instance_valid(component):
+		component = GameplayAbilitySystem.get_component_by_interface(
+			instigator, "GameplayVitalAttributeComponent", false) as GameplayVitalAttributeComponent
+	if not is_instance_valid(component):
+		return false
+	var remaining: Dictionary[StringName, float] = {}
+	for vital_cost: VitalCost in vital_costs:
+		if not is_instance_valid(vital_cost) or not is_finite(vital_cost.amount) or vital_cost.amount < 0.0:
 			return false
 		var id: StringName = vital_cost.vital_id
 		if not component.has_vital(id):

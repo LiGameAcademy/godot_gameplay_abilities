@@ -23,26 +23,27 @@ class_name ChannelingAbilityDefinition
 ## 如果需要更复杂的逻辑，请直接使用基类 GameplayAbilityDefinition 并手动配置 Execution Tree。
 
 ## Runs the existing per-tick costs and commits the channel after the first success.
-class ChannelingPayment extends BTDecorator:
+class ChannelingPayment extends BTNode:
 	const COMMITTED_KEY: String = "channeling_committed"
 	@export var opening_cue: AbilityNodeExecuteCue
 	@export var starts_cooldown: bool = false
+	@export var costs: Array[VitalCost] = []
 
-	func _tick_decorator(instance: BTInstance, delta: float) -> int:
+	func _tick(instance: BTInstance, delta: float) -> int:
 		var ability: GameplayAbilityInstance = instance.blackboard.get_var("ability_instance") as GameplayAbilityInstance
 		if not is_instance_valid(ability) or not ability.is_active:
 			return Status.FAILURE
 		var committed: bool = instance.blackboard.get_var(COMMITTED_KEY, false)
-		var result: int = child.tick(instance, delta)
+		var context: Dictionary = instance.blackboard.get_var("context", {})
+		var payer: Node = context.get("instigator") as Node
+		var paid: bool = CostFeature.process_vital_costs(payer, costs, true)
 		if not ability.is_active:
 			instance.blackboard.set_var(COMMITTED_KEY, false)
 			return Status.FAILURE
-		if committed or result == Status.RUNNING:
-			return result
-
-		var context: Dictionary = instance.blackboard.get_var("context", {})
+		if committed:
+			return Status.SUCCESS if paid else Status.FAILURE
 		var component: GameplayAbilityComponent = context.get("ability_component") as GameplayAbilityComponent
-		if result == Status.FAILURE:
+		if not paid:
 			if is_instance_valid(component):
 				component.report_default_commit(ability, context, false)
 			return Status.FAILURE
@@ -253,9 +254,6 @@ func _build_default_behavior_tree() -> BTNode:
 	var payment: ChannelingPayment = ChannelingPayment.new()
 	payment.node_id = "channel_payment"
 	payment.starts_cooldown = cooldown_duration > 0.0
-	var costs_sequence: BTSequence = BTSequence.new()
-	costs_sequence.node_id = "channel_tick_costs"
-	payment.child = costs_sequence
 	if is_instance_valid(channeling_cue):
 		var execute_cue: AbilityNodeExecuteCue = AbilityNodeExecuteCue.new()
 		execute_cue.cue = channeling_cue
@@ -290,20 +288,10 @@ func _build_default_behavior_tree() -> BTNode:
 		
 		var tick_nodes: Array[BTNode] = [payment]
 		
-		# 检查周期性消耗（如果配置了）
-		if not tick_costs.is_empty():
-			for cost in tick_costs:
-				if not is_instance_valid(cost):
-					continue
-				var check_cost = AbilityNodeApplyCost.new()
-				check_cost.vital_id = cost.vital_id
-				check_cost.cost_amount = cost.amount
-				check_cost.allow_overdraft = cost.allow_overdraft
-				check_cost.check_only = false  # 检查并消耗
-				# 注意：AbilityNodeApplyCost 使用 _get_target_list，默认会使用 instigator 作为回退
-				check_cost.node_id = "check_tick_cost_%s" % cost.vital_id
-				costs_sequence.children.append(check_cost)
-		
+		for cost: VitalCost in tick_costs:
+			if is_instance_valid(cost):
+				payment.costs.append(cost)
+
 		# 应用周期性效果（对目标）
 		if not tick_effects.is_empty():
 			var apply_tick_effect = AbilityNodeApplyEffect.new()
