@@ -368,6 +368,13 @@ func _on_ability_completed(ability: GameplayAbilityInstance) -> void:
 			"step_number": ability.combo_failed_step,
 		})
 
+	if ability.uses_default_channeling():
+		AbilityEventBus.trigger_game_event(&"ability_channel_ended", {
+			"entity": get_parent(),
+			"ability_id": ability.get_definition().ability_id,
+			"reason": ability.channel_end_reason,
+		})
+
 	# 只有当前正在执行的技能才需要结束
 	if not was_current:
 		return
