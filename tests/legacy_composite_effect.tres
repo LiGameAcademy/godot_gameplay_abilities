@@ -1,0 +1,15 @@
+[gd_resource type="Resource" format=3]
+
+[ext_resource type="Script" path="res://addons/godot_gameplay_abilities/scripts/effects/gameplay_effect.gd" id="1_effect"]
+[ext_resource type="Script" path="res://addons/godot_gameplay_abilities/tests/counting_effect.gd" id="2_counter"]
+
+[sub_resource type="Resource" id="Resource_leaf"]
+script = ExtResource("2_counter")
+
+[sub_resource type="Resource" id="Resource_child"]
+script = ExtResource("2_counter")
+sub_effects = Array[ExtResource("1_effect")]([SubResource("Resource_leaf")])
+
+[resource]
+script = ExtResource("2_counter")
+sub_effects = Array[ExtResource("1_effect")]([SubResource("Resource_child")])

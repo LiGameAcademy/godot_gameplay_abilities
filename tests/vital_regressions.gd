@@ -321,6 +321,13 @@ func _test_nonfinite_vital_writes(failures: Array[String]) -> void:
 	target.free()
 
 func _test_damage(failures: Array[String]) -> void:
+	# Load the configured effect at runtime to avoid a GDScript shutdown cycle when
+	# the Vital fixture imports both concrete damage and filter scripts at compile time.
+	var effect: GameplayEffect = load(
+		"res://addons/godot_gameplay_abilities/tests/fixed_damage_effect.tres") as GameplayEffect
+	if effect == null:
+		_expect(false, "fixed damage resource loads", failures)
+		return
 	var target: Node = Node.new()
 	var source: Node = Node.new()
 	add_child(target)
@@ -333,9 +340,6 @@ func _test_damage(failures: Array[String]) -> void:
 	health.damage_applied.connect(func(info: DamageInfo, damage: float) -> void:
 		hits.append(Vector2(damage, float(info.source_component == source and info.instigator == source)))
 	)
-	var effect: GE_ApplyDamage = GE_ApplyDamage.new()
-	effect.fixed_base_damage = 3.0
-	effect.vital_comp_name = &"GameplayAttributeComponent"
 	for tick: int in range(3):
 		effect.apply(target, source, {"source_node": source})
 	_expect(health.current_value == 0.0 and deaths == [source] and target.is_in_group(&"death"),

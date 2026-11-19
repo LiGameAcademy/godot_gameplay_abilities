@@ -9,7 +9,8 @@ const _SUB_EFFECT_SOURCE_KEY: StringName = &"_gas_sub_effect_source"
 
 # --- 过滤与组合 ---
 @export var filters: Array[GameplayFilterData] = []  ## 过滤器，如果为空，则不过滤
-@export var sub_effects: Array[GameplayEffect] = []  ## 子效果，支持效果组合
+## Allocate per instance so Godot's exported defaults do not retain this script at shutdown.
+@export var sub_effects: Array[GameplayEffect] = _new_sub_effect_array()
 
 # --- 标签要求（标签系统集成）---
 @export_group("Tag Requirements")
@@ -28,6 +29,9 @@ const _SUB_EFFECT_SOURCE_KEY: StringName = &"_gas_sub_effect_source"
 ## 当效果应用成功时，会执行此 Cue 来播放表现（特效、音效、飘字等）
 ## 注意：Cue 系统将在 Day 15 详细讲解，这里先预留接口
 @export var cue: GameplayCue = null
+
+static func _new_sub_effect_array() -> Array[GameplayEffect]:
+	return []
 
 ## 应用效果（核心入口）
 ## [param] target: Node 目标节点
