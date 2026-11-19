@@ -1,5 +1,16 @@
 # 更新日志
 
+## v0.0.3
+
+- 修复 Godot 退出时 `GameplayEffect` 和 `GameplayFilterData` 脚本资源被保留的问题。组合效果的空子数组现在在创建实例时初始化。
+- `sub_effects` 继续导出为 `Array[GameplayEffect]`。现有 `.tres` 可直接加载，嵌套效果的应用、移除和来源隔离保持兼容。
+- 回归检查覆盖旧格式组合资源和独立的子数组，遇到退出资源保留会直接报错。
+
+### English summary
+
+- Fixed shutdown retention of the `GameplayEffect` and `GameplayFilterData` scripts by creating the default child array per effect instance.
+- The exported `Array[GameplayEffect]` and existing composite `.tres` resources remain compatible.
+
 ## v0.0.2
 
 ### 属性、Vital 与效果
