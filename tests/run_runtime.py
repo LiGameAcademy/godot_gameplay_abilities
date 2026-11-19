@@ -1,7 +1,6 @@
 """Run dependency contracts in a disposable Godot host (no ARPG required)."""
 import argparse
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import tempfile
@@ -26,7 +25,7 @@ def main():
         (host / "project.godot").write_text(config, encoding="utf-8")
         test_root = "res://addons/godot_gameplay_abilities/tests"
         commands = [
-            (["--editor", "--import"], None),
+            (["--verbose", "--editor", "--import"], None),
             (["--verbose", "--fixed-fps", "60", f"{test_root}/runtime_regressions.tscn", "--quit-after", "1800"],
              "PASS: GAS combo"),
             (["--verbose", "--fixed-fps", "60", f"{test_root}/channeling_regressions.tscn", "--quit-after", "1800"],
@@ -37,6 +36,8 @@ def main():
              "PASS: GAS actual healing events and reentrant recovery"),
             (["--verbose", "--fixed-fps", "60", f"{test_root}/attribute_regressions.tscn", "--quit-after", "1800"],
              "PASS: GAS attribute sources, snapshots and definitions"),
+            (["--verbose", "--fixed-fps", "60", f"{test_root}/composite_effect_regressions.tscn", "--quit-after", "1800"],
+             "PASS: GAS typed composite effect resources and independent defaults"),
             (["--verbose", "--fixed-fps", "60", f"{test_root}/attribute_dependencies_test.tscn", "--quit-after", "1800"],
              "PASS: GAS settled attribute snapshots and cycle diagnostics"),
         ]
@@ -44,26 +45,13 @@ def main():
             result = subprocess.run([args.godot, "--headless", "--path", str(host), *command],
                                     capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)
             output = result.stdout + result.stderr
-            diagnostics = [line for line in output.splitlines()
-                           if "ERROR:" in line or "Parse Error" in line]
-            # Godot retains these two script resources even in the unmodified
-            # 34bc173 host that only preloads ActiveAbilityDefinition (no instances).
-            known = "ERROR: 2 resources still in use at exit."
-            if any(not line.startswith(known) for line in diagnostics):
+            diagnostics = ("ERROR:", "Parse Error", "ObjectDB instances leaked at exit",
+                           "ObjectDB instances were leaked at exit", "Resource still in use:",
+                           "Leaked instance:")
+            if (result.returncode or any(diagnostic in output for diagnostic in diagnostics)
+                    or (expected_marker and expected_marker not in output)):
                 print(output)
-                raise SystemExit(1)
-            if diagnostics:
-                retained = set(re.findall(r"Resource still in use: (.*?) \(GDScript\)", output))
-                expected = {"res://addons/godot_gameplay_abilities/scripts/effects/gameplay_effect.gd",
-                            "res://addons/godot_gameplay_abilities/scripts/filters/gameplay_filter_data.gd"}
-                # Godot 4.5 omits the count from the summary. Count the verbose entries.
-                leaked_types = sorted(re.findall(r"^Leaked instance: (\w+):", output, re.MULTILINE))
-                if retained != expected or leaked_types != ["GDScript", "GDScript", "GDScriptNativeClass"]:
-                    print(output)
-                    raise SystemExit(1)
-                print("KNOWN BASELINE: Godot retains GameplayEffect/GameplayFilterData scripts at exit.")
-            if result.returncode or (expected_marker and expected_marker not in output):
-                print(output)
+                print(f"FAILED: {command} (Godot exit code {result.returncode})")
                 raise SystemExit(1)
             if expected_marker:
                 print(expected_marker)

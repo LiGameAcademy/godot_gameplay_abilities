@@ -1,0 +1,8 @@
+[gd_resource type="Resource" format=3]
+
+[ext_resource type="Script" path="res://addons/godot_gameplay_abilities/scripts/effects/ge_apply_damage.gd" id="1_damage"]
+
+[resource]
+script = ExtResource("1_damage")
+vital_comp_name = &"GameplayAttributeComponent"
+fixed_base_damage = 3.0
