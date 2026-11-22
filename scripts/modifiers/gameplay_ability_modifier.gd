@@ -45,8 +45,9 @@ func affects_ability(ability_instance: GameplayAbilityInstance, ability_comp: Ga
 		elif ability_instance.has_method("get_instigator"):
 			ability_entity = ability_instance.get_instigator()
 		
-		if is_instance_valid(ability_entity):
-			return TagManager.has_any_tag(ability_entity, affected_ability_tags)
+		var tags: GameplayServices.Tags = GameplayServices.tags_for_effect({})
+		if is_instance_valid(ability_entity) and is_instance_valid(tags):
+			return tags.has_any_tag(ability_entity, affected_ability_tags)
 	
 	return false
 

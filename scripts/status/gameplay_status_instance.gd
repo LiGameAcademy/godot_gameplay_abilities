@@ -180,6 +180,7 @@ func _apply_effects(effects: Array[GameplayEffect], context: Dictionary = {}) ->
 		return
 	
 	_cached_context.merge(context, true)
+	_cached_context[GameplayServices.CONTEXT_KEY] = owner_component.get_services()
 	# 在context中添加stacks信息
 	_cached_context["stacks"] = stacks
 	_cached_context["source_id"] = _get_source_instance_id()
@@ -208,6 +209,7 @@ func _remove_effects(effects: Array[GameplayEffect], context: Dictionary) -> voi
 	
 	# 在context中添加stacks信息
 	context["stacks"] = stacks
+	context[GameplayServices.CONTEXT_KEY] = owner_component.get_services()
 
 	# 应用所有的果
 	for effect_template in effects:
@@ -227,20 +229,24 @@ func _apply_status_tags() -> void:
 	if not is_instance_valid(owner_component) or not is_instance_valid(status_data):
 		return
 
-	# 应用状态的所有标签
+	var tags: GameplayServices.Tags = owner_component.get_services().tags
+	if not is_instance_valid(tags):
+		return
 	for tag_id in status_data.tags:
 		if tag_id != &"":
-			TagManager.add_tag(owner_component.get_parent(), tag_id)
+			tags.add_tag(owner_component.get_parent(), tag_id)
 
 ## 移除状态标签（标签系统集成）
 func _remove_status_tags() -> void:
 	if not is_instance_valid(owner_component) or not is_instance_valid(status_data):
 		return
 		
-	# 移除状态的所有标签
+	var tags: GameplayServices.Tags = owner_component.get_services().tags
+	if not is_instance_valid(tags):
+		return
 	for tag_id in status_data.tags:
 		if tag_id != &"":
-			TagManager.remove_tag(owner_component.get_parent(), tag_id)
+			tags.remove_tag(owner_component.get_parent(), tag_id)
 
 ## 移除互斥状态（状态系统层面的互斥处理）
 func _remove_mutually_exclusive_statuses() -> void:
@@ -250,6 +256,9 @@ func _remove_mutually_exclusive_statuses() -> void:
 	var target = owner_component.get_parent()
 	if not is_instance_valid(target):
 		return
+	var tags: GameplayServices.Tags = owner_component.get_services().tags
+	if not is_instance_valid(tags):
+		return
 
 	# 获取当前状态的所有标签的互斥标签
 	var tags_to_remove: Array[StringName] = []
@@ -257,7 +266,7 @@ func _remove_mutually_exclusive_statuses() -> void:
 		if tag_id == &"":
 			continue
 		# 获取该标签的所有互斥标签
-		var exclusions = TagManager.get_tag_exclusions(tag_id)
+		var exclusions: Array[StringName] = tags.get_tag_exclusions(tag_id)
 		tags_to_remove.append_array(exclusions)
 
 	# 移除所有带互斥标签的状态
@@ -271,6 +280,9 @@ func _execute_status_cue() -> void:
 		
 	if not is_instance_valid(status_data.cue):
 		return
+	var cues: GameplayServices.Cues = owner_component.get_services().cues
+	if not is_instance_valid(cues):
+		return
 	
 	# 【关键】克隆 Cue 实例（避免直接修改配置数据）
 	# 使用 deep 复制，确保所有 Cue 组件也被克隆
@@ -280,7 +292,7 @@ func _execute_status_cue() -> void:
 		return
 		
 	# 执行克隆的 Cue 实例（Manager 会处理挂点计算）
-	GameplayCueManager.execute_cue(_cue_instance, owner_component.get_parent(), {})
+	cues.execute_cue(_cue_instance, owner_component.get_parent(), {})
 	
 ## 停止状态 Cue（清理视觉反馈）
 func _stop_status_cue() -> void:
@@ -289,7 +301,11 @@ func _stop_status_cue() -> void:
 		return
 		
 	# 停止克隆的 Cue 实例（Manager 会处理挂点计算）
-	GameplayCueManager.stop_cue(_cue_instance, owner_component.get_parent(), {})
+	if is_instance_valid(owner_component):
+		var cues: GameplayServices.Cues = owner_component.get_services().cues
+		if is_instance_valid(cues):
+			cues.stop_cue(_cue_instance, owner_component.get_parent(), {})
+	_cue_instance = null
 
 func _get_source_instance_id() -> StringName:
 	return "status." + str(get_instance_id())

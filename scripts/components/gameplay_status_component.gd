@@ -6,15 +6,45 @@ class_name GameplayStatusComponent
 
 var _active_statuses: Dictionary[StringName, GameplayStatusInstance] = {}
 var _has_event_listening_statuses: bool = false  # 是否有需要监听事件的状态
+var _services: GameplayServices
+var _connected_events: GameplayServices.EventBus
 
 signal status_applied(status_id: StringName, instance: GameplayStatusInstance)
 signal status_removed(status_id: StringName)
 signal status_stacked(status_id: StringName, new_stacks: int)
 
 func _ready() -> void:
-	# 订阅事件总线的统一游戏事件（统一管理，只连接一次）
-	if not AbilityEventBus.game_event_occurred.is_connected(_on_game_event_occurred):
-		AbilityEventBus.game_event_occurred.connect(_on_game_event_occurred)
+	_connect_events()
+
+## Bind explicitly before applying statuses. An empty bundle disables all services.
+## Replacing services while statuses are active would lose their tag and Cue owner.
+func configure_services(services: GameplayServices) -> bool:
+	if not _active_statuses.is_empty():
+		return false
+	_services = services
+	if is_inside_tree():
+		_connect_events()
+	return true
+
+func get_services() -> GameplayServices:
+	if _services == null:
+		_services = GameplayServices.from_autoloads()
+	return _services
+
+func _connect_events() -> void:
+	var events: GameplayServices.EventBus = get_services().events
+	if _connected_events == events:
+		return
+	if is_instance_valid(_connected_events):
+		_connected_events.game_event_occurred.disconnect(_on_game_event_occurred)
+	_connected_events = events
+	if is_instance_valid(events):
+		events.game_event_occurred.connect(_on_game_event_occurred)
+
+func _publish_status_event(event_id: StringName, status_id: StringName) -> void:
+	var events: GameplayServices.EventBus = get_services().events
+	if is_instance_valid(events):
+		events.trigger_game_event(event_id, {"entity": get_parent(), "status_id": status_id})
 
 func _process(delta: float) -> void:
 	# 统一更新所有状态的计时器
@@ -68,10 +98,7 @@ func remove_status(status_id: StringName) -> void:
 	_update_event_listening_status()
 
 	# 触发统一游戏事件：status_removed
-	AbilityEventBus.trigger_game_event(&"status_removed", {
-		"entity": get_parent(),
-		"status_id": status_id
-	})
+	_publish_status_event(&"status_removed", status_id)
 	
 func remove_statuses_by_tags(tags_to_remove: Array[StringName]) -> void:
 	for status_id in _active_statuses.keys():
@@ -179,10 +206,7 @@ func _create_and_apply_new_status_instance(gsd: GameplayStatusData, instigator: 
 	status_applied.emit(status_id, instance)
 
 	# 触发统一游戏事件：status_applied
-	AbilityEventBus.trigger_game_event(&"status_applied", {
-		"entity": get_parent(),
-		"status_id": status_id
-	})
+	_publish_status_event(&"status_applied", status_id)
 	
 	return instance
 

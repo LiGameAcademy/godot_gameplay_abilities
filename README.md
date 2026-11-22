@@ -43,6 +43,8 @@ git submodule add https://github.com/LiGameAcademy/godot_gameplay_abilities.git 
 
 Open the host project and enable **li_gameplay_abilities** in **Project → Project Settings → Plugins**. The plugin registers the `GameplayAbilitySystem`, `GameplayCueManager`, `AbilityEventBus`, and `TagManager` autoloads.
 
+Use the [partial installation guide](MODULES.md) to install Attribute, Vital, Status, or the Ability runtime for custom execution trees.
+
 ## Using the plugin
 
 Add a `GameplayAbilityComponent` to the character, define the abilities it can use, and connect the host project's input or AI to ability activation. Configure attribute and status components on actors that need health, mana, buffs, or debuffs. The [ARPG Demo](https://github.com/LiGameAcademy/godot_simple_arpg_demo) shows a working integration with player abilities and enemies.
