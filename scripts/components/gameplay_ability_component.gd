@@ -118,7 +118,11 @@ func forget_ability(ability_id: StringName) -> void:
 	if not is_instance_valid(ability_instance):
 		push_warning("GameplayAbilityComponent: Ability %s not found." % ability_id)
 		return
-	
+
+	if ability_instance.is_committing():
+		forget_ability.call_deferred(ability_id)
+		return
+
 	if ability_instance.is_active:
 		ability_instance.end_ability(BTNode.Status.FAILURE)
 	if _current_targeting_ability == ability_instance:
@@ -269,7 +273,7 @@ func cancel_ability(ability_id: StringName = &"", context: Dictionary = {}) -> v
 		return
 
 	var ability_instance = get_ability_instance(target_id)
-	if not is_instance_valid(ability_instance):
+	if not is_instance_valid(ability_instance) or ability_instance.is_committing():
 		return
 
 	if ability_instance.uses_default_combo():
