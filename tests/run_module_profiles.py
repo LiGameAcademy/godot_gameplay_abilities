@@ -51,13 +51,7 @@ def run_godot(godot: str, host: Path, options: list[str], marker: str = "") -> N
         print(marker)
 
 
-def check_profile(godot: str, host: Path, profiles: tuple[str, ...]) -> None:
-    host.mkdir()
-    project = host / "project.godot"
-    project.write_text(PROJECT, encoding="utf-8")
-    for profile in profiles:
-        install(host, profile)
-
+def check_profile_sources(host: Path, profiles: tuple[str, ...]) -> None:
     status_vital = "status-vital" in profiles
     vital = "vital" in profiles or status_vital
     status_attribute = "status-attribute" in profiles or status_vital
@@ -93,6 +87,14 @@ def check_profile(godot: str, host: Path, profiles: tuple[str, ...]) -> None:
     if (host / ADDON / "examples").exists():
         raise SystemExit(f"Unexpected example source in {host.name}")
 
+
+def check_profile(godot: str, host: Path, profiles: tuple[str, ...]) -> None:
+    host.mkdir()
+    (host / "project.godot").write_text(PROJECT, encoding="utf-8")
+    for profile in profiles:
+        install(host, profile)
+    check_profile_sources(host, profiles)
+
     probes = {
         "attribute": ("attribute_only", "PASS: Attribute-only host"),
         "vital": ("vital_only", "PASS: Attribute + Vital host"),
@@ -102,16 +104,34 @@ def check_profile(godot: str, host: Path, profiles: tuple[str, ...]) -> None:
         "ability": ("ability_only", "PASS: Ability-only activation and cooldown"),
     }
     selected = [probes[profiles[-1]]]
-    if vital and status and not status_vital:
+    if "vital" in profiles and profiles[-1] == "status":
         selected.insert(0, probes["vital"])
     for script, _ in selected:
         copy_probe(host, script)
-    if status_attribute:
+    if profiles[-1] == "status-attribute":
         resource = "timed_attribute_bonus.tres"
         shutil.copyfile(SOURCE / "tests/module_profiles" / resource, host / resource)
     run_godot(godot, host, ["--editor", "--import"])
     for script, marker in selected:
         run_godot(godot, host, [f"res://{script}.tscn", "--quit-after", "300"], marker)
+
+
+def check_add_ability(godot: str, host: Path) -> None:
+    check_profile(godot, host, ("status-vital",))
+    existing = {path: path.read_bytes() for path in (host / ADDON).rglob("*") if path.is_file()}
+    for name in ("project.godot", "status_vital.gd", "status_vital.tscn"):
+        path = host / name
+        existing[path] = path.read_bytes()
+
+    install(host, "ability")
+    check_profile_sources(host, ("status-vital", "ability"))
+    copy_probe(host, "ability_status_vital")
+    run_godot(godot, host, ["--editor", "--import"])
+    run_godot(godot, host, ["res://status_vital.tscn", "--quit-after", "300"], "PASS: Status + Vital periodic damage")
+    run_godot(godot, host, ["res://ability_status_vital.tscn", "--quit-after", "300"],
+              "PASS: Ability applies periodic damage after incremental install")
+    if any(not path.is_file() or path.read_bytes() != content for path, content in existing.items()):
+        raise SystemExit("Adding Ability changed existing Status + Vital files")
 
 
 def check_full_install_migration(godot: str, host: Path) -> None:
@@ -161,6 +181,7 @@ def main() -> None:
         check_profile(args.godot, root / "status-attribute", ("status", "status-attribute"))
         check_profile(args.godot, root / "status-vital", ("vital", "status-vital"))
         check_profile(args.godot, root / "ability", ("ability",))
+        check_add_ability(args.godot, root / "add-ability")
         check_full_install_migration(args.godot, root / "migration")
 
 

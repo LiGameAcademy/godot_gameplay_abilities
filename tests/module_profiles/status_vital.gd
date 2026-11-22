@@ -59,15 +59,7 @@ func _ready() -> void:
 	add_child(b)
 	a.setup(8.0)
 	b.setup(20.0)
-	var damage: GE_ApplyDamage = GE_ApplyDamage.new()
-	damage.fixed_base_damage = 3.0
-	var periodic: FeaturePeriodicEffects = FeaturePeriodicEffects.new()
-	periodic.period = 0.5
-	periodic.periodic_effects = [damage]
-	var bleeding: GameplayStatusData = GameplayStatusData.new()
-	bleeding.status_id = &"bleeding"
-	bleeding.duration = 2.0
-	bleeding.features = [periodic]
+	var bleeding: GameplayStatusData = create_bleeding()
 	a.statuses.apply_status(bleeding, attacker)
 	b.statuses.apply_status(bleeding, attacker)
 
@@ -99,3 +91,15 @@ func _ready() -> void:
 		return
 	print("PASS: Status + Vital periodic damage")
 	get_tree().quit.call_deferred(0)
+
+static func create_bleeding() -> GameplayStatusData:
+	var damage: GE_ApplyDamage = GE_ApplyDamage.new()
+	damage.fixed_base_damage = 3.0
+	var periodic: FeaturePeriodicEffects = FeaturePeriodicEffects.new()
+	periodic.period = 0.5
+	periodic.periodic_effects = [damage]
+	var bleeding: GameplayStatusData = GameplayStatusData.new()
+	bleeding.status_id = &"bleeding"
+	bleeding.duration = 2.0
+	bleeding.features = [periodic]
+	return bleeding
