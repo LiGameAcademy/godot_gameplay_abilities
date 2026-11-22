@@ -32,6 +32,8 @@ def main():
              "PASS: GAS channeling tree and missing-tree guard"),
             (["--verbose", f"{test_root}/ability_template_compatibility.tscn", "--quit-after", "300"],
              "PASS: GAS legacy ability template resources and scenes"),
+            (["--verbose", f"{test_root}/targeted_status_cast.tscn", "--quit-after", "300"],
+             "PASS: GAS authoritative targeted status cast"),
             (["--verbose", "--fixed-fps", "60", f"{test_root}/vital_regressions.tscn", "--quit-after", "1800"],
              "PASS: GAS Vital lifecycle, payment and attributed damage"),
             (["--verbose", "--fixed-fps", "60", f"{test_root}/healing_regressions.tscn", "--quit-after", "1800"],

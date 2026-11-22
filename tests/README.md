@@ -1,5 +1,24 @@
 # Runtime regression checks
 
+## 权威指定目标技能
+
+使用完整插件，在主机或单机为施法者学习 `TargetedStatusAbilityDefinition`。配置前摇秒数、冷却秒数、Vital ID、费用和带 ID 的限时状态。这个模板组装自己的执行树和冷却特性。技能配置在学习后按只读资源使用。
+
+宿主接到请求时，先按连接身份解析施法者和其 Vital，再解析目标的 Status 组件。用这两个本地组件，以及可重复调用、无副作用的目标校验函数，创建一个 `TargetedStatusAbilityDefinition.Cast`。校验函数接收目标 Status 组件并返回是否仍可选，由宿主核对距离、阵营和存活条件。每次尝试传入新的 Cast。
+
+```gdscript
+var cast: TargetedStatusAbilityDefinition.Cast = TargetedStatusAbilityDefinition.Cast.new(
+    caster_vitals, target_status, validate_target)
+var accepted: bool = caster_abilities.try_activate_ability(
+    &"targeted_mark", {TargetedStatusAbilityDefinition.CAST_KEY: cast})
+```
+
+`accepted` 为 true 表示进入前摇。宿主可监听 `ability_completed`，通过保留的 Cast 读取 `result`。支付失败、目标失效或前摇取消时，技能不启动冷却，也不施加状态。成功扣费后启动冷却。此时同步回调中的取消请求不会中断结算，目标已离场或已有同 ID 状态时返回 `STATUS_NOT_APPLIED`，费用及冷却保留。角色在结算回调中需要移除时应使用延迟删除。
+
+运行下方的完整回归命令，查找 `PASS: GAS authoritative targeted status cast`。该用例检查一次扣费和状态施加、冷却拦截、状态到期、余额变化后支付失败、前摇目标失效、取消清理和支付通知中的重入取消。连接、请求去重和客户端快照由宿主接入。
+
+## Running the suite
+
 Run `python tests/run_runtime.py --godot /absolute/path/to/godot` with Godot 4.5 or 4.7.2 and Python 3.10+.
 The runner creates a disposable host with the four GAS autoloads. It checks combo cost/cooldown construction, dictionary contexts, independent game-time waits, reparenting, forgetting and deletion through weak references.
 

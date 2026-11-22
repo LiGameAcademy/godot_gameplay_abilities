@@ -24,13 +24,14 @@ var disabled: bool = false
 var _indicator_instance: Node3D = null
 var _is_targeting: bool = false
 var _runtime_cues: Array[Dictionary] = []
+var _committing: bool = false
 
 ## 技能完成信号
 signal ability_completed(ability: GameplayAbilityInstance)
 ## 技能数据改变
 signal ability_data_changed(ability: GameplayAbilityInstance)
 
-func _init(owner: Node, definition: GameplayAbilityDefinition) -> void:
+func _init(owner: Node, definition: GameplayAbilityDefinition, tree: BTNode = null) -> void:
 	_owner = owner
 	_definition = definition
 	disabled = definition.disabled
@@ -38,8 +39,9 @@ func _init(owner: Node, definition: GameplayAbilityDefinition) -> void:
 	_blackboard = BTBlackboard.new()
 	_blackboard.value_changed.connect(_on_blackboard_value_changed)
 	_blackboard.set_var("ability_instance", self)
-	if is_instance_valid(_definition.execution_tree):
-		_bt_instance = BTInstance.new(_owner, _definition.execution_tree, _blackboard)
+	var execution_root: BTNode = tree if is_instance_valid(tree) else _definition.execution_tree
+	if is_instance_valid(execution_root):
+		_bt_instance = BTInstance.new(_owner, execution_root, _blackboard)
 	else:
 		push_warning("AbilityInstance: execution_tree is not valid!")
 
@@ -242,6 +244,8 @@ func try_activate(context: Dictionary = {}) -> bool:
 
 # 每帧更新（用于需要持续更新的技能，如连击计时器、引导技能）
 func update(delta: float) -> void:
+	if _committing:
+		return
 	# 调用所有特性的 update（通用钩子，对所有技能类型有效）
 	for feature in _features.values():
 		if not is_instance_valid(feature):
@@ -255,7 +259,8 @@ func update(delta: float) -> void:
 
 ## 结束技能
 func end_ability(final_status: int = BTNode.Status.SUCCESS, forced_cancel: bool = false) -> void:
-	if not is_active: return
+	if not is_active or _committing:
+		return
 
 	is_active = false
 	if uses_default_channeling() and channel_end_reason.is_empty():
@@ -276,6 +281,17 @@ func end_ability(final_status: int = BTNode.Status.SUCCESS, forced_cancel: bool 
 	if is_instance_valid(_bt_instance):
 		_bt_instance.reset_tree()
 	ability_completed.emit(self)
+
+## Resolves a synchronous commit. Its terminal tree node completes the cast after this call returns.
+func resolve_commit(action: Callable) -> void:
+	if not is_active or _committing:
+		return
+	_committing = true
+	action.call()
+	_committing = false
+
+func is_committing() -> bool:
+	return _committing
 
 ## 检查是否可以施法
 func can_activate(context: Dictionary = {}) -> bool:
