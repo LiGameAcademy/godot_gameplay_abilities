@@ -31,6 +31,13 @@ var _event_log: Array[Dictionary] = []
 ## 最大日志条数
 const MAX_LOG_ENTRIES: int = 100
 
+## Resolves the legacy project event bus when the host has registered it.
+static func get_default() -> Node:
+	if not ProjectSettings.has_setting("autoload/AbilityEventBus"):
+		return null
+	var tree: SceneTree = Engine.get_main_loop() as SceneTree
+	return tree.root.get_node_or_null(^"AbilityEventBus") if tree != null else null
+
 # ========== 公共API ==========
 
 ## 触发游戏事件（统一接口）

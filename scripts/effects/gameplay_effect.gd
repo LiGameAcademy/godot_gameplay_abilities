@@ -45,9 +45,11 @@ func apply(target: Node, instigator: Node, context: Dictionary = {}) -> void:
 	# Each application owns modifier context, so multi-target effects do not compound it.
 	context = context.duplicate()
 	if is_instance_valid(instigator):
-		var modifiers: GameplayModifierComponent = instigator.get_node_or_null("GameplayModifierComponent") as GameplayModifierComponent
-		if modifiers != null:
-			_notify_effect_modifiers(modifiers, target, instigator, context)
+		var modifiers: Node = instigator.get_node_or_null("GameplayModifierComponent")
+		# The host may provide this hook without making Ability a dependency of Effect.
+		if is_instance_valid(modifiers) and modifiers.has_method(&"notify_effect_applied"):
+			var notify: Callable = Callable(modifiers, &"notify_effect_applied")
+			_notify_effect_modifiers(notify, target, instigator, context)
 	# 2. 执行具体逻辑（子类实现）
 	_apply(target, instigator, context)
 
@@ -69,17 +71,18 @@ func remove(target: Node, instigator: Node, context: Dictionary = {}) -> void:
 	# 2. 递归移除子效果
 	_remove_sub_effects(target, instigator, context)
 
-func _notify_effect_modifiers(modifiers: GameplayModifierComponent, target: Node, instigator: Node,
+func _notify_effect_modifiers(notify: Callable, target: Node, instigator: Node,
 		context: Dictionary) -> void:
-	# Removal uses the caller's context. Hooks can tune the effect but cannot change its source.
-	var source_context: Dictionary = {}
-	for key: StringName in [&"source_id", _SUB_EFFECT_SOURCE_KEY]:
+	# Hooks can tune the effect while preserving its source and service scope.
+	var protected_keys: Array[StringName] = [&"source_id", _SUB_EFFECT_SOURCE_KEY, GameplayServices.CONTEXT_KEY]
+	var protected_context: Dictionary = {}
+	for key: StringName in protected_keys:
 		if context.has(key):
-			source_context[key] = context[key]
-	modifiers.notify_effect_applied(self, target, instigator, context)
-	for key: StringName in [&"source_id", _SUB_EFFECT_SOURCE_KEY]:
-		if source_context.has(key):
-			context[key] = source_context[key]
+			protected_context[key] = context[key]
+	notify.call(self, target, instigator, context)
+	for key: StringName in protected_keys:
+		if protected_context.has(key):
+			context[key] = protected_context[key]
 		else:
 			context.erase(key)
 
@@ -90,16 +93,22 @@ func _check_filters(target: Node, instigator: Node, context: Dictionary) -> bool
 		if not filter.check(target, instigator, context):
 			return false
 
+	if target_blocked_tags.is_empty() and target_required_tags.is_empty():
+		return true
+	var tags: GameplayServices.Tags = GameplayServices.tags_for_effect(context)
+	if not is_instance_valid(tags):
+		return false
+
 	# 2. 检查标签要求（标签系统集成）
 	# 检查阻止标签（免疫检查）
 	if not target_blocked_tags.is_empty():
-		if TagManager.has_any_tag(target, target_blocked_tags):
+		if tags.has_any_tag(target, target_blocked_tags):
 			print("GameplayEffect: Target blocked tags found for effect %s" % get_path())
 			return false
 			
 	# 检查必须标签（连携检查）
 	if not target_required_tags.is_empty():
-		if not TagManager.has_all_tags(target, target_required_tags):
+		if not tags.has_all_tags(target, target_required_tags):
 			print("GameplayEffect: Target required tags not found for effect %s" % get_path())
 			return false
 
@@ -110,7 +119,9 @@ func _execute_cue(target: Node, context: Dictionary) -> void:
 	if not is_instance_valid(cue):
 		return
 	
-	GameplayCueManager.execute_cue(cue, target, context)
+	var cues: GameplayServices.Cues = GameplayServices.cues_for_effect(context)
+	if is_instance_valid(cues):
+		cues.execute_cue(cue, target, context)
 
 func _apply_sub_effects(target: Node, instigator: Node, context: Dictionary) -> void:
 	# 注意：子效果也需要克隆，避免运行时状态共享

@@ -6,14 +6,11 @@ class_name GE_AttributeModifier
 ## A composed child uses its position under the root source to isolate each use.
 ## Without either source, standalone application and removal must use the same instance.
 @export var source_id: StringName = &""
-@export var attribute_component_name : StringName = "GameplayVitalAttributeComponent"
+@export var attribute_component_name: StringName = &"GameplayVitalAttributeComponent"
 
 func _apply(target: Node, _instigator: Node, context: Dictionary) -> void:
-	var attr_comp: GameplayAttributeComponent = GameplayAbilitySystem.get_component_by_interface(
-		target, attribute_component_name) as GameplayAttributeComponent
+	var attr_comp: GameplayAttributeComponent = _get_attribute_component(target)
 	if not is_instance_valid(attr_comp):
-		# 如果没有 AttributeComponent，静默失败（不是所有实体都需要属性）
-		push_error("GE_AttributeModifier: attr comp is not valid!")
 		return
 
 	# 确定 source_id
@@ -51,10 +48,8 @@ func _remove(target: Node, instigator: Node, context: Dictionary) -> void:
 
 ## 移除修改器的核心逻辑（供 _apply 和 _remove 共用）
 func _remove_modifiers(target: Node, context: Dictionary) -> void:
-	var attr_comp = GameplayAbilitySystem.get_component_by_interface(target, attribute_component_name)
+	var attr_comp: GameplayAttributeComponent = _get_attribute_component(target)
 	if not is_instance_valid(attr_comp):
-		# 如果没有 AttributeComponent，静默失败（不是所有实体都需要属性）
-		push_error("GE_AttributeModifier: attr comp is not valid!")
 		return
 		
 	# 确定 source_id
@@ -62,6 +57,13 @@ func _remove_modifiers(target: Node, context: Dictionary) -> void:
 
 	# 批量移除修改器（通过 source_id）
 	attr_comp.remove_modifiers_by_source(final_source_id)
+
+func _get_attribute_component(target: Node) -> GameplayAttributeComponent:
+	var component: GameplayAttributeComponent = GameplayComponentLookup.find(
+		target, attribute_component_name, false) as GameplayAttributeComponent
+	if not is_instance_valid(component):
+		push_error("GE_AttributeModifier: target has no attribute component named '%s'" % attribute_component_name)
+	return component
 
 func _resolve_source_id(context: Dictionary) -> StringName:
 	var context_source: StringName = context.get("source_id", &"")

@@ -1,0 +1,16 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://addons/godot_gameplay_abilities/tests/ability_template_compatibility.gd" id="1_test"]
+[ext_resource type="Resource" path="res://addons/godot_gameplay_abilities/tests/legacy_combo_template.tres" id="2_combo"]
+[ext_resource type="Script" path="res://addons/godot_gameplay_abilities/scripts/abilities/definitions/channeling_ability_definition.gd" id="3_channel"]
+
+[sub_resource type="Resource" id="Channel_legacy"]
+script = ExtResource("3_channel")
+ability_id = &"legacy_channel"
+max_duration = 0.75
+tick_interval = 0.25
+
+[node name="AbilityTemplateCompatibility" type="Node"]
+script = ExtResource("1_test")
+combo = ExtResource("2_combo")
+channeling = SubResource("Channel_legacy")

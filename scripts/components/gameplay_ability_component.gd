@@ -102,7 +102,7 @@ func learn_ability(ability_data: GameplayAbilityDefinition) -> void:
 	learned_ability.handle_learned(self)
 	
 	ability_learned.emit(learned_ability)
-	AbilityEventBus.trigger_game_event(&"ability_learned", {
+	_emit_ability_event(&"ability_learned", {
 		"entity": get_parent(),
 		"ability_id": ability_id
 	})
@@ -131,7 +131,7 @@ func forget_ability(ability_id: StringName) -> void:
 	_learned_abilities.erase(ability_id)
 
 	ability_forgotten.emit(ability_id)
-	AbilityEventBus.trigger_game_event(&"ability_forgotten", {
+	_emit_ability_event(&"ability_forgotten", {
 		"entity": get_parent(),
 		"ability_id": ability_id
 	})
@@ -216,13 +216,11 @@ func try_activate_ability(ability_id: StringName, context: Dictionary = {}) -> b
 		modifiers.notify_before_ability_cast(self, ability_instance, context)
 	# Activation accepts the cast. The generated active tree commits after windup.
 	if not ability_instance.try_activate(context):
-		push_error("GameplayAbilityComponent: Ability %s try activate failed." % ability_instance.get_definition().ability_id)
 		return false
 
 	if modifiers != null:
-		var active_definition: ActiveAbilityDefinition = ability_instance.get_definition() as ActiveAbilityDefinition
-		var uses_generated_commit: bool = ability_instance.uses_default_combo() or ability_instance.uses_default_channeling() or (
-			active_definition != null and active_definition.uses_default_commit())
+		var uses_generated_commit: bool = ability_instance.uses_default_combo() or ability_instance.uses_default_channeling() \
+			or ability_instance.get_definition().uses_default_commit()
 		if not uses_generated_commit:
 			modifiers.notify_after_ability_commit(self, ability_instance, context)
 		modifiers.notify_before_apply_ability(self, ability_instance, context.get("target_unit"), context)
@@ -230,7 +228,7 @@ func try_activate_ability(ability_id: StringName, context: Dictionary = {}) -> b
 	_current_casting_ability = ability_instance
 
 	ability_activated.emit(ability_instance)
-	AbilityEventBus.trigger_game_event(&"ability_activated", {
+	_emit_ability_event(&"ability_activated", {
 		"entity": get_parent(),
 		"ability_id": ability_instance.get_definition().ability_id,
 	})
@@ -247,7 +245,7 @@ func report_default_commit(ability: GameplayAbilityInstance, context: Dictionary
 	if committed and not report_before_hook and is_instance_valid(modifier_component):
 		modifier_component.notify_after_ability_commit(self, ability, context)
 	var event: StringName = &"ability_committed" if committed else &"ability_commit_failed"
-	AbilityEventBus.trigger_game_event(event, {
+	_emit_ability_event(event, {
 		"entity": get_parent(),
 		"ability_id": ability.get_definition().ability_id,
 	})
@@ -282,7 +280,7 @@ func cancel_ability(ability_id: StringName = &"", context: Dictionary = {}) -> v
 			return
 
 	ability_instance.end_ability(BTNode.Status.FAILURE, true)
-	AbilityEventBus.trigger_game_event(&"ability_cancelled", {
+	_emit_ability_event(&"ability_cancelled", {
 		"entity": get_parent(),
 		"ability_id": target_id
 	})
@@ -353,6 +351,11 @@ func get_current_targeting_ability() -> GameplayAbilityInstance:
 #endregion
 
 #region ========== 私有方法 - 事件回调 ==========
+func _emit_ability_event(event: StringName, context: Dictionary) -> void:
+	var events: GameplayServices.EventBus = GameplayServices.events_for_effect({})
+	if is_instance_valid(events):
+		events.trigger_game_event(event, context)
+
 ## 处理技能完成信号（由 Ability 发出）
 ## [param] ability: GameplayAbilityInstance 完成的技能实例
 func _on_ability_completed(ability: GameplayAbilityInstance) -> void:
@@ -362,14 +365,14 @@ func _on_ability_completed(ability: GameplayAbilityInstance) -> void:
 	# An end observer may synchronously start another cast, reusing this instance.
 	var was_current: bool = _current_casting_ability == ability
 	if ability.uses_default_combo() and ability.combo_failed_step > 0:
-		AbilityEventBus.trigger_game_event(&"ability_combo_step_failed", {
+		_emit_ability_event(&"ability_combo_step_failed", {
 			"entity": get_parent(),
 			"ability_id": ability.get_definition().ability_id,
 			"step_number": ability.combo_failed_step,
 		})
 
 	if ability.uses_default_channeling():
-		AbilityEventBus.trigger_game_event(&"ability_channel_ended", {
+		_emit_ability_event(&"ability_channel_ended", {
 			"entity": get_parent(),
 			"ability_id": ability.get_definition().ability_id,
 			"reason": ability.channel_end_reason,
@@ -390,7 +393,7 @@ func _on_ability_completed(ability: GameplayAbilityInstance) -> void:
 
 	# Finish the original cast even if a failure observer started another one.
 	ability_completed.emit(ability)
-	AbilityEventBus.trigger_game_event(&"ability_completed", {
+	_emit_ability_event(&"ability_completed", {
 		"entity": get_parent(),
 		"ability_id": ability_id
 	})

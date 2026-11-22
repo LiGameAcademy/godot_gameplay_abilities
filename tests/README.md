@@ -3,6 +3,10 @@
 Run `python tests/run_runtime.py --godot /absolute/path/to/godot` with Godot 4.5 or 4.7.2 and Python 3.10+.
 The runner creates a disposable host with the four GAS autoloads. It checks combo cost/cooldown construction, dictionary contexts, independent game-time waits, reparenting, forgetting and deletion through weak references.
 
+Run `python tests/run_module_profiles.py --godot /absolute/path/to/godot` to validate [partial installs](../MODULES.md). The runner imports seven projects without Autoloads and checks their script boundaries. The Status + Attribute host checks source-specific expiration of a serialized modifier effect. The Status + Vital host checks periodic damage, immunity, expiration, attributed death, and event isolation across two battle scopes. The Ability host runs a custom action without the example templates and checks the activation and cooldown lifecycle for two casters sharing one definition.
+
+`ability_template_compatibility.tscn` checks the full installation. It loads a legacy combo `.tres` with a typed array of active steps, loads a channeling definition embedded in the scene, and builds both generated trees through the original resource scripts.
+
 Vital regressions cover replacing attribute sets, disconnecting old attribute instances, maximum-only and clamped snapshots, atomic payments, shared cost resources, and lethal damage attribution.
 
 Healing regressions exercise the public effect path and Cue context: ordinary and capped recovery, full health, zero capacity, restored capacity, actual death, invalid amounts, and reentrant healing/damage listeners. `HealthVital.heal()` still returns a boolean; `apply_healing()` returns the amount committed by that write before listeners run. `GE_ApplyHealing` publishes `healing_applied` only for positive recovery and writes that same amount to its local `final_healing` context (zero on rejection). This is an intentional correction for consumers that previously treated requested healing as actual recovery; generic effect Cue execution remains unchanged.

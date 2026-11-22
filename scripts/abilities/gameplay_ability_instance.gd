@@ -109,8 +109,6 @@ func has_targeting() -> bool:
 
 ## 检查是否应该智能施法
 func should_smart_cast() -> bool:
-	if GameplayAbilitySystem.smart_cast:
-		return true
 	return _definition.smart_cast
 
 ## [API] 开始预览模式
@@ -167,11 +165,11 @@ func get_definition() -> GameplayAbilityDefinition:
 
 ## Generated combos treat reactivation as input for the running execution tree.
 func uses_default_combo() -> bool:
-	return _definition is ComboAbilityDefinition and _definition.execution_tree == null
+	return _definition.uses_default_combo()
 
 ## Generated channeling trees report commit at their first successful payment.
 func uses_default_channeling() -> bool:
-	return _definition is ChannelingAbilityDefinition and _definition.execution_tree == null
+	return _definition.uses_default_channeling()
 
 ## 尝试激活技能 (由 Player/Component 调用)
 func try_activate(context: Dictionary = {}) -> bool:
@@ -351,8 +349,10 @@ func register_runtime_cue(cue: GameplayCue, target: Node) -> void:
 	_runtime_cues.append({"cue": cue, "target": target})
 
 func _stop_runtime_cues() -> void:
-	for entry: Dictionary in _runtime_cues:
-		var target: Node = entry["target"] as Node
-		if is_instance_valid(target):
-			GameplayCueManager.stop_cue(entry["cue"] as GameplayCue, target)
+	var cues: GameplayServices.Cues = GameplayServices.cues_for_effect({})
+	if is_instance_valid(cues):
+		for entry: Dictionary in _runtime_cues:
+			var target: Node = entry["target"] as Node
+			if is_instance_valid(target):
+				cues.stop_cue(entry["cue"] as GameplayCue, target)
 	_runtime_cues.clear()

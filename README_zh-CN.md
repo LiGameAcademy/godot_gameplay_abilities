@@ -43,6 +43,8 @@ git submodule add https://github.com/LiGameAcademy/godot_gameplay_abilities.git 
 
 打开宿主工程，在 **项目 → 项目设置 → 插件**中启用 **li_gameplay_abilities**。插件会注册 `GameplayAbilitySystem`、`GameplayCueManager`、`AbilityEventBus` 和 `TagManager` 四个自动加载项。
 
+可以按[模块安装指南](MODULES.md)选择安装 Attribute、Vital、Status，或为自定义技能执行树安装 Ability 运行时。
+
 ## 使用
 
 给角色添加 `GameplayAbilityComponent`，配置角色可用的技能，并在宿主工程中将输入或 AI 接到技能激活流程。需要生命值、法力值或增益和减益的角色可以配置对应的属性和状态组件。[ARPG 示例工程](https://github.com/LiGameAcademy/godot_simple_arpg_demo)展示了玩家技能与敌人的实际接入方式。

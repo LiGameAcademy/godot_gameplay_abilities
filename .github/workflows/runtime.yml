@@ -42,3 +42,5 @@ jobs:
           echo "GODOT_BIN=$godot_bin" >> "$GITHUB_ENV"
       - name: Validate runtime contracts
         run: python tests/run_runtime.py --godot "$GODOT_BIN"
+      - name: Validate partial module installs
+        run: python tests/run_module_profiles.py --godot "$GODOT_BIN"

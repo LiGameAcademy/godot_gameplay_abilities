@@ -31,6 +31,16 @@ class_name GameplayAbilityDefinition
 ## 用途：配置 伤害范围、投射物速度、BUFF持续时间 等
 @export var blackboard_defaults: Dictionary = {}
 
+## Generated definitions opt in to special activation and commit handling.
+func uses_default_commit() -> bool:
+	return false
+
+func uses_default_combo() -> bool:
+	return false
+
+func uses_default_channeling() -> bool:
+	return false
+
 ## [核心] 创建运行时实例
 ## 这将把静态的 Definition 转化为动态的 Instance
 func create_instance(owner: Node) -> GameplayAbilityInstance:

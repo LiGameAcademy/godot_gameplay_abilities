@@ -5,6 +5,7 @@ class_name HealthVital
 ## 处理伤害、治疗、死亡等逻辑
 
 const DEATH_GROUP_NAME: String = "death"
+const EventBus = preload("../../singletons/ability_event_bus.gd")
 
 var _recoverable_zero: bool = false
 
@@ -44,6 +45,10 @@ func modify_value(amount: float, is_regen: bool = false) -> void:
 ## [param] owner_entity: Node 拥有者实体
 ## [return] float 最终伤害值（用于 Cue 系统）
 func apply_damage(damage_info: DamageInfo, owner_entity: Node) -> float:
+	return apply_damage_with_events(damage_info, owner_entity, EventBus.get_default() as EventBus)
+
+## Uses the supplied event bus. A null bus keeps the local damage and death signals.
+func apply_damage_with_events(damage_info: DamageInfo, owner_entity: Node, events: EventBus) -> float:
 	if not _can_receive_damage():
 		return 0.0
 	
@@ -58,10 +63,11 @@ func apply_damage(damage_info: DamageInfo, owner_entity: Node) -> float:
 	# A synchronous listener may replace this Vital before the hit is committed.
 	if not _can_receive_damage() or not is_finite(damage_info.final_damage):
 		return 0.0
-	AbilityEventBus.trigger_game_event(&"damage_received", {
-		"damage_info": damage_info,
-		"target": owner_entity
-	})
+	if is_instance_valid(events):
+		events.trigger_game_event(&"damage_received", {
+			"damage_info": damage_info,
+			"target": owner_entity
+		})
 	if not _can_receive_damage() or not is_finite(damage_info.final_damage):
 		return 0.0
 	
@@ -77,10 +83,11 @@ func apply_damage(damage_info: DamageInfo, owner_entity: Node) -> float:
 	damage_applied.emit(damage_info, final_damage)
 	if not is_instance_valid(_owner_comp):
 		return final_damage
-	AbilityEventBus.trigger_game_event(&"damage_applied", {
-		"damage_info": damage_info,
-		"target": owner_entity
-	})
+	if is_instance_valid(events):
+		events.trigger_game_event(&"damage_applied", {
+			"damage_info": damage_info,
+			"target": owner_entity
+		})
 
 	# 处理死亡
 	if lethal_hit and is_instance_valid(_owner_comp):

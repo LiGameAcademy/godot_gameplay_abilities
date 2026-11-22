@@ -20,12 +20,13 @@ func _init() -> void:
 
 func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 	# 1. 获取组件
-	var vital_comp = GameplayAbilitySystem.get_component_by_interface(target, vital_comp_name)
-	if not vital_comp:
-		push_error("GE_ApplyDamage: Target %s has no %s component" % [target.name, vital_comp_name])
+	var vital_comp: GameplayVitalAttributeComponent = GameplayComponentLookup.find(
+		target, vital_comp_name, false) as GameplayVitalAttributeComponent
+	if not is_instance_valid(vital_comp):
+		push_error("GE_ApplyDamage: Target %s has no %s component" % [target, vital_comp_name])
 		return
 	
-	var health_vital: HealthVital = vital_comp.get_vital(vital_id)
+	var health_vital: HealthVital = vital_comp.get_vital(vital_id) as HealthVital
 	if not health_vital:
 		push_error("GE_ApplyDamage: Target %s has no %s vital" % [target.name, vital_id])
 		return
@@ -34,7 +35,8 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 	var base_damage: float = 0.0
 	if not base_damage_attribute.is_empty() and is_instance_valid(instigator):
 		# 从攻击者属性中获取基础伤害
-		var instigator_attr_comp = GameplayAbilitySystem.get_component_by_interface(instigator, &"GameplayAttributeComponent")
+		var instigator_attr_comp: GameplayAttributeComponent = GameplayComponentLookup.find(
+			instigator, "GameplayAttributeComponent", false) as GameplayAttributeComponent
 		if instigator_attr_comp:
 			base_damage = instigator_attr_comp.get_value(base_damage_attribute, 0.0)
 		else:
@@ -63,7 +65,8 @@ func _apply(target: Node, instigator: Node, context: Dictionary) -> void:
 	damage_info.final_damage = strategy.calculate(damage_info, target, instigator, context)
 	
 	# 6. 应用伤害（由 HealthVital 负责）
-	var applied_damage = health_vital.apply_damage(damage_info, target)
+	var applied_damage: float = health_vital.apply_damage_with_events(
+		damage_info, target, GameplayServices.events_for_effect(context))
 	
 	# 7. 保存到上下文
 	context["final_damage"] = applied_damage

@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ComboAbilityDefinition" format=3]
+
+[ext_resource type="Script" path="res://addons/godot_gameplay_abilities/scripts/abilities/definitions/active_ability_definition.gd" id="1_active"]
+[ext_resource type="Script" uid="uid://cj4h1fnurw1lv" path="res://addons/godot_gameplay_abilities/scripts/abilities/definitions/combo_ability_definition.gd" id="2_combo"]
+[ext_resource type="Script" path="res://addons/godot_gameplay_abilities/scripts/behavior_tree/core/bt_node.gd" id="3_node"]
+
+[sub_resource type="Resource" id="Tree_step"]
+script = ExtResource("3_node")
+
+[sub_resource type="Resource" id="Active_step"]
+script = ExtResource("1_active")
+ability_id = &"legacy_active"
+execution_tree = SubResource("Tree_step")
+
+[resource]
+script = ExtResource("2_combo")
+ability_id = &"legacy_combo"
+combo_steps = Array[ExtResource("1_active")]([SubResource("Active_step")])
+window_duration = 0.75
