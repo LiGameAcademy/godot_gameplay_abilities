@@ -7,6 +7,9 @@ Run `python tests/run_module_profiles.py --godot /absolute/path/to/godot` to val
 
 `ability_template_compatibility.tscn` checks the full installation. It loads a legacy combo `.tres` with a typed array of active steps, loads a channeling definition embedded in the scene, and builds both generated trees through the original resource scripts.
 
+The module runner also migrates a disposable full installation to the Status + Attribute profile and checks that the original scene, script, and serialized effect behave the same after a clean import.
+It adds Ability to an existing Status + Vital fixture project, verifies the original files are preserved, and runs a custom skill that applies periodic damage and starts cooldown.
+
 Vital regressions cover replacing attribute sets, disconnecting old attribute instances, maximum-only and clamped snapshots, atomic payments, shared cost resources, and lethal damage attribution.
 
 Healing regressions exercise the public effect path and Cue context: ordinary and capped recovery, full health, zero capacity, restored capacity, actual death, invalid amounts, and reentrant healing/damage listeners. `HealthVital.heal()` still returns a boolean; `apply_healing()` returns the amount committed by that write before listeners run. `GE_ApplyHealing` publishes `healing_applied` only for positive recovery and writes that same amount to its local `final_healing` context (zero on rejection). This is an intentional correction for consumers that previously treated requested healing as actual recovery; generic effect Cue execution remains unchanged.

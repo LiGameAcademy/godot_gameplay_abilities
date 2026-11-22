@@ -84,9 +84,26 @@ python tools/install_modules.py ability --project "/path/to/my-godot-project"
 
 安装工具保留已有的相同文件，发现同路径内容有差异会在复制前提示。宿主的 `project.godot` 和 Autoload 配置由你管理。已有完整插件的项目，继续使用 README 中的完整安装方式。
 
+### 从 Status + Vital 加装 Ability
+
+如果宿主已经按需安装了 `status-vital`，用同一版本的插件对同一宿主执行上面的 `ability` 安装命令，然后重新导入工程。安装器会复用两个选项共有的脚本。角色原有的状态组件、Vital 和战斗服务继续提供状态结算。
+
+自定义动作可以把目标的状态组件作为施放上下文传入。执行时调用 `apply_status()`，成功施加流血后启动技能冷却。后续扣血和状态到期由 Status 与 Vital 处理。 [组合回归](tests/module_profiles/ability_status_vital.gd)
+
 ### 阅读内置行为树模板
 
 主动、连击和引导的行为树实现在 [`examples/ability_templates`](examples/ability_templates/)。使用完整插件时，仍可用 `ActiveAbilityDefinition`、`ComboAbilityDefinition` 和 `ChannelingAbilityDefinition` 创建资源。原来的脚本路径、UID、类名和导出字段继续由资源入口提供，已有 `.tres` 和 `.tscn` 可以直接加载。
+
+## 把完整安装迁移到按需安装
+
+先在宿主的独立副本中迁移，并使用原安装对应的插件版本运行安装工具。如果当前版本没有安装工具，先在副本中升级完整插件并验证。检查项目脚本、场景和资源使用的组件、效果、技能模板及 Autoload，根据这些依赖选择安装选项。仍使用内置主动、连击或引导模板的项目需要完整插件。
+
+下面以仅使用限时属性加成的宿主为例。
+
+1. 关闭 Godot。把完整的 `addons/godot_gameplay_abilities` 目录及 `.godot` 导入缓存移到项目副本外，以便回退和验证全量导入。
+2. 在副本中移除完整插件对应的编辑器启用项和宿主已不需要的 GAS Autoload。保留其他插件和 Autoload 设置。
+3. 从插件检出运行 `python tools/install_modules.py status-attribute --project "/path/to/project-copy"`。安装器会拒绝覆盖仍存在的完整插件。
+4. 用 Godot 重新导入项目副本，打开原场景，验证状态叠层、到期和修饰器清理。回归用例在两种安装中运行同一份场景、脚本和 `.tres`，并核对文件内容。
 
 ## 验证安装边界
 
@@ -97,3 +114,6 @@ python tests/run_module_profiles.py --godot "/path/to/godot"
 ```
 
 运行器建立七份零 Autoload 临时工程。属性、生命和状态宿主省略 Ability 和行为树。Ability 宿主省略 Attribute、Vital、Status 和内置技能模板，验证激活、完成、冷却拒绝、冷却缩减和两名角色的冷却隔离。
+
+迁移用例另外构建一个完整安装的宿主，在切换为 `status-attribute` 后重新导入相同资源并检查结果。
+加装用例先运行 `status-vital`，原地加装 `ability` 后复跑原有周期伤害，再验证自定义技能、冷却和状态到期的组合路径。
